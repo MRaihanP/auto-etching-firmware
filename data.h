@@ -68,7 +68,7 @@ bool perluGambar = true;
 // State scroll Detail Preset
 int presetDetailScroll = 0;
 const int DETAIL_SCROLL_STEP = 5;
-const int DETAIL_CONTENT_H   = 78;   // tinggi total konten (virtual)
+const int DETAIL_CONTENT_H   = 90;   // tinggi total konten (virtual)
 
 // State Konfigurasi Preset
 enum DialogCfg { DLG_NONE, DLG_SIMPAN, DLG_HAPUS };
