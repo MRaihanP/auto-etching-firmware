@@ -11,11 +11,15 @@
   
   LED RGB NeoPixel: GPIO48
   
+  Data kalibrasi awal (sentuhan langsung):
+    Idle (tidak disentuh): ~110,000 - 116,000
+    Touched (disentuh):   ~152,000 - 161,000
+    Threshold: 135,000 (midpoint)
+  
   Cara pakai:
     1. Upload sketch ini
-    2. Buka Serial Plotter (Tools > Serial Plotter)
-    3. Sentuh strip nikel → lihat nilai touch turun + LED menyala
-    4. Catat nilai saat kosong vs terisi air untuk kalibrasi nanti
+    2. Buka Serial Plotter (Tools → Serial Plotter)
+    3. Sentuh strip nikel → lihat nilai naik + LED menyala
 */
 
 #include <Adafruit_NeoPixel.h>
@@ -23,7 +27,7 @@
 // ================= KONFIGURASI =================
 #define PIN_NEOPIXEL    48
 #define NUM_PIXELS      5
-#define TOUCH_THRESHOLD 50    // sementara, akan dikalibrasi nanti
+#define TOUCH_THRESHOLD 135000  // midpoint antara idle (~113k) dan touched (~156k)
 
 // Pin sensor
 const int PIN_SENSOR[5] = { 11, 12, 13, 14, 3 };
@@ -47,6 +51,7 @@ void setup() {
   Serial.println(F("=== Pilot Touch Sensor ==="));
   Serial.println(F("Sentuh strip nikel untuk melihat perubahan nilai"));
   Serial.println(F("Format: HCl | H2O2 | Air | Sabun | Limbah"));
+  Serial.println(F(""));
   
   pixels.begin();
   pixels.clear();
@@ -79,11 +84,11 @@ void loop() {
   
   // Update LED berdasarkan threshold
   for (int i = 0; i < 5; i++) {
-    if (nilaiTouch[i] < TOUCH_THRESHOLD) {
-      // Strip terdetect (sentuhan/cairan) → LED menyala
+    if (nilaiTouch[i] > TOUCH_THRESHOLD) {
+      // Strip disentuh → LED menyala dengan warna sesuai sensor
       pixels.setPixelColor(i, WARNA_SENSOR[i]);
     } else {
-      // Tidak terdetect → LED mati
+      // Tidak disentuh → LED mati
       pixels.setPixelColor(i, 0x000000);
     }
   }
