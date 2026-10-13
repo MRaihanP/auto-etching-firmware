@@ -9,7 +9,7 @@
     GPIO14 = Air Sabun → LED Hijau
     GPIO3  = Limbah    → LED Putih
   
-  LED RGB NeoPixel: GPIO48
+  LED RGB NeoPixel: GPIO48 (1 LED onboard ESP32-S3 DevKitC-1)
   
   Data kalibrasi awal (sentuhan langsung):
     Idle (tidak disentuh): ~110,000 - 116,000
@@ -19,16 +19,16 @@
   Cara pakai:
     1. Upload sketch ini
     2. Buka Serial Plotter (Tools → Serial Plotter)
-    3. Sentuh strip nikel → lihat nilai naik + LED menyala
+    3. Sentuh strip nikel → lihat nilai naik + LED menyala warna sesuai sensor
 */
 
 #include <Adafruit_NeoPixel.h>
 
 // ================= KONFIGURASI =================
 #define PIN_NEOPIXEL    48
-#define NUM_PIXELS      5
+#define NUM_PIXELS      1
 #define BRIGHTNESS      50
-#define TOUCH_THRESHOLD 135000  // midpoint antara idle (~113k) dan touched (~156k)
+#define TOUCH_THRESHOLD 135000
 
 // Pin sensor
 const int PIN_SENSOR[5] = { 11, 12, 13, 14, 3 };
@@ -50,7 +50,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println(F("=== Pilot Touch Sensor ==="));
-  Serial.println(F("Sentuh strip nikel untuk melihat perubahan nilai"));
+  Serial.println(F("Sentuh strip nikel → LED menyala warna sesuai sensor"));
   Serial.println(F("Format: HCl | H2O2 | Air | Sabun | Limbah"));
   Serial.println(F(""));
   
@@ -59,10 +59,8 @@ void setup() {
   pixels.clear();
   pixels.show();
   
-  // Test LED: semua menyala putih 500ms
-  for (int i = 0; i < NUM_PIXELS; i++) {
-    pixels.setPixelColor(i, 0xFFFFFF);
-  }
+  // Test LED: putih 500ms
+  pixels.setPixelColor(0, 0xFFFFFF);
   pixels.show();
   delay(500);
   pixels.clear();
@@ -71,30 +69,40 @@ void setup() {
 
 // ================= LOOP =================
 void loop() {
-  // Baca semua sensor secara bergantian
+  // Baca semua sensor
   int nilaiTouch[5];
   for (int i = 0; i < 5; i++) {
     nilaiTouch[i] = touchRead(PIN_SENSOR[i]);
   }
   
-  // Print ke Serial Plotter (format: nilai1 nilai2 nilai3 nilai4 nilai5)
+  // Print ke Serial Plotter
   for (int i = 0; i < 5; i++) {
     Serial.print(nilaiTouch[i]);
     if (i < 4) Serial.print(F(" "));
   }
   Serial.println();
   
-  // Update LED berdasarkan threshold
+  // Cari sensor yang disentuh (prioritas: yang pertama terdeteksi)
+  int sensorAktif = -1;
   for (int i = 0; i < 5; i++) {
     if (nilaiTouch[i] > TOUCH_THRESHOLD) {
-      // Strip disentuh → LED menyala dengan warna sesuai sensor
-      pixels.setPixelColor(i, WARNA_SENSOR[i]);
-    } else {
-      // Tidak disentuh → LED mati
-      pixels.setPixelColor(i, 0x000000);
+      sensorAktif = i;
+      break;
     }
+  }
+  
+  // Update LED
+  if (sensorAktif >= 0) {
+    // Ada sensor disentuh → LED warna sesuai sensor
+    pixels.setPixelColor(0, WARNA_SENSOR[sensorAktif]);
+    Serial.print(F("→ "));
+    Serial.print(NAMA_SENSOR[sensorAktif]);
+    Serial.println(F(" disentuh!"));
+  } else {
+    // Tidak ada yang disentuh → LED mati
+    pixels.setPixelColor(0, 0x000000);
   }
   pixels.show();
   
-  delay(50);  // ~20Hz sampling rate
+  delay(50);
 }
