@@ -185,7 +185,7 @@ void formatMMSS(int totalDetik, char* buf) {
 }
 
 bool terlihat(int yPos, int tinggi) {
-  return (yPos + tinggi > HEADER_H) && (yPos < SCREEN_HEIGHT);
+  return (yPos + tinggi > HEADER_H) && (yPos < AREA_BAWAH);
 }
 
 void gambarIndikatorScroll(int scroll, int maxScroll) {
@@ -194,7 +194,7 @@ void gambarIndikatorScroll(int scroll, int maxScroll) {
     oled.fillTriangle(x - 3, HEADER_H + 4, x + 3, HEADER_H + 4, x, HEADER_H + 1, WHITE);
   }
   if (scroll < maxScroll) {
-    oled.fillTriangle(x - 3, SCREEN_HEIGHT - 4, x + 3, SCREEN_HEIGHT - 4, x, SCREEN_HEIGHT - 1, WHITE);
+    oled.fillTriangle(x - 3, AREA_BAWAH - 4, x + 3, AREA_BAWAH - 4, x, AREA_BAWAH - 1, WHITE);
   }
 }
 
@@ -206,7 +206,7 @@ void gambarPresetDetail() {
   oled.setTextColor(WHITE);
   oled.setTextSize(1);
 
-  int maxScroll = max(0, DETAIL_CONTENT_H - (SCREEN_HEIGHT - HEADER_H));
+  int maxScroll = max(0, DETAIL_CONTENT_H - (AREA_BAWAH - HEADER_H));
   if (presetDetailScroll > maxScroll) presetDetailScroll = maxScroll;
 
   int y = HEADER_H + 3 - presetDetailScroll;
