@@ -37,4 +37,4 @@ Lihat [`LOG.md`](./LOG.md) untuk riwayat perubahan versi.
 
 ## License
 
-Property of MRaihanP. All rights reserved.
+Property of PCB Express. All rights reserved.
