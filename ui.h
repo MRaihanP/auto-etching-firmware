@@ -363,8 +363,8 @@ void gambarCfgAksi() {
   gambarList(itemAksi, 3, L_AKSI, HEADER_H, 16);
 }
 
-const int EDIT_ROW_H   = 10;
-const int EDIT_VISIBLE = 5;
+const int EDIT_ROW_H   = 9;
+const int EDIT_VISIBLE = 4;
 
 void formatField(const Preset &p, int f, char* buf) {
   switch (f) {
@@ -421,9 +421,9 @@ void gambarLevel() {
 
   oled.setTextSize(1);
   for (int i = 0; i < JUMLAH_SENSOR; i++) {
-    int y = HEADER_H + 1 + i * 10;
+    int y = HEADER_H + 1 + i * 7;
     bool sel = (i == levelSel);
-    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 7, WHITE);
     oled.setTextColor(sel ? BLACK : WHITE);
     oled.setCursor(1, y);
     oled.print(namaSensor[i]);
