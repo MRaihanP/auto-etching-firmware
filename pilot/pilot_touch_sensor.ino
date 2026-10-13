@@ -18,14 +18,17 @@
     3 = Air only
     4 = Sabun only
     5 = Limbah only
-    c = mode kalibrasi (set 0% dan 100%)
+    c = enter/exit mode kalibrasi (untuk sensor yang dipilih)
+    e = set 0% (saat jerican kosong) — hanya aktif di mode kalibrasi
+    f = set 100% (saat jerican penuh) — hanya aktif di mode kalibrasi
   
-  Cara pakai:
-    1. Upload sketch ini
-    2. Buka Serial Monitor (115200 baud)
-    3. Ketik 0 untuk lihat semua sensor
-    4. Ketik 1-5 untuk lihat sensor tertentu
-    5. LED brightness = persentase level cairan
+  Alur kalibrasi per jerican:
+    1. Ketik 1 (pilih HCl)
+    2. Ketik c (enter calib mode)
+    3. Kosongkan jerican → tekan e (set 0%)
+    4. Isi jerican penuh → tekan f (set 100%)
+    5. Ketik c (exit calib mode)
+    6. Ketik 2 (pilih H2O2) → ulangi langkah 2-5
 */
 
 #include <Adafruit_NeoPixel.h>
@@ -49,7 +52,6 @@ const uint32_t WARNA_SENSOR[5] = {
 };
 
 // Kalibrasi: nilai touch saat 0% (kosong) dan 100% (penuh)
-// Default: idle ~113k, touched ~156k (dari data pengujian)
 int kalibKosong[5] = { 113000, 113000, 113000, 116000, 110000 };
 int kalibPenuh[5]  = { 156000, 161000, 161000, 157000, 152000 };
 
@@ -57,7 +59,6 @@ Adafruit_NeoPixel pixels(NUM_PIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 int sensorPilih = 0;  // 0 = semua, 1-5 = sensor tertentu
 bool modeKalibrasi = false;
-int kalibStep = 0;    // 0 = set 0%, 1 = set 100%
 
 // ================= SETUP =================
 void setup() {
@@ -70,7 +71,6 @@ void setup() {
   pixels.show();
   
   Serial.println(F("=== Pilot Touch Sensor Phase 2 ==="));
-  Serial.println(F("Commands: 0=semua, 1-5=sensor, c=kalibrasi"));
   Serial.println(F(""));
   printMenu();
 }
@@ -78,12 +78,11 @@ void setup() {
 void printMenu() {
   Serial.println(F("--- Menu ---"));
   Serial.println(F("0 = tampilkan semua sensor"));
-  Serial.println(F("1 = HCl only"));
-  Serial.println(F("2 = H2O2 only"));
-  Serial.println(F("3 = Air only"));
-  Serial.println(F("4 = Sabun only"));
-  Serial.println(F("5 = Limbah only"));
-  Serial.println(F("c = mode kalibrasi"));
+  Serial.println(F("1 = HCl    2 = H2O2   3 = Air"));
+  Serial.println(F("4 = Sabun  5 = Limbah"));
+  Serial.println(F("c = enter/exit kalibrasi (sensor terpilih)"));
+  Serial.println(F("e = set 0% (kosong) — di mode kalibrasi"));
+  Serial.println(F("f = set 100% (penuh) — di mode kalibrasi"));
   Serial.println(F("-------------"));
 }
 
@@ -107,38 +106,53 @@ void loop() {
   // Handle serial command
   if (Serial.available()) {
     char cmd = Serial.read();
+    
     if (cmd >= '0' && cmd <= '5') {
       sensorPilih = cmd - '0';
       modeKalibrasi = false;
       Serial.print(F("→ Sensor: "));
-      if (sensorPilih == 0) Serial.println(F("Semua"));
-      else Serial.println(NAMA_SENSOR[sensorPilih - 1]);
+      if (sensorPilih == 0) {
+        Serial.println(F("Semua"));
+      } else {
+        Serial.print(NAMA_SENSOR[sensorPilih - 1]);
+        Serial.print(F("  [0%="));
+        Serial.print(kalibKosong[sensorPilih - 1]);
+        Serial.print(F("  100%="));
+        Serial.print(kalibPenuh[sensorPilih - 1]);
+        Serial.println(F("]"));
+      }
     }
     else if (cmd == 'c' || cmd == 'C') {
-      modeKalibrasi = true;
-      kalibStep = 0;
-      Serial.println(F("=== Mode Kalibrasi ==="));
-      Serial.println(F("1. Kosongkan jerican, lalu tekan 'k' untuk set 0%"));
-    }
-    else if (cmd == 'k' || cmd == 'K') {
-      if (modeKalibrasi) {
-        if (kalibStep == 0) {
-          for (int i = 0; i < 5; i++) kalibKosong[i] = nilaiTouch[i];
-          Serial.println(F("✓ 0% tersimpan. Isi jerican penuh, lalu tekan 'k' untuk set 100%"));
-          kalibStep = 1;
+      if (!modeKalibrasi) {
+        if (sensorPilih == 0) {
+          Serial.println(F("Pilih sensor dulu (1-5) sebelum kalibrasi!"));
         } else {
-          for (int i = 0; i < 5; i++) kalibPenuh[i] = nilaiTouch[i];
-          Serial.println(F("✓ 100% tersimpan. Kalibrasi selesai!"));
-          modeKalibrasi = false;
-          Serial.println(F("Nilai kalibrasi:"));
-          for (int i = 0; i < 5; i++) {
-            Serial.print(NAMA_SENSOR[i]);
-            Serial.print(F(": 0%="));
-            Serial.print(kalibKosong[i]);
-            Serial.print(F("  100%="));
-            Serial.println(kalibPenuh[i]);
-          }
+          modeKalibrasi = true;
+          Serial.print(F("→ Mode kalibrasi: "));
+          Serial.println(NAMA_SENSOR[sensorPilih - 1]);
+          Serial.println(F("  Kosongkan jerican → tekan 'e' untuk set 0%"));
         }
+      } else {
+        modeKalibrasi = false;
+        Serial.println(F("→ Exit mode kalibrasi"));
+      }
+    }
+    else if (cmd == 'e' || cmd == 'E') {
+      if (modeKalibrasi && sensorPilih > 0) {
+        int idx = sensorPilih - 1;
+        kalibKosong[idx] = nilaiTouch[idx];
+        Serial.print(F("✓ 0% tersimpan: "));
+        Serial.println(kalibKosong[idx]);
+        Serial.println(F("  Isi jerican penuh → tekan 'f' untuk set 100%"));
+      }
+    }
+    else if (cmd == 'f' || cmd == 'F') {
+      if (modeKalibrasi && sensorPilih > 0) {
+        int idx = sensorPilih - 1;
+        kalibPenuh[idx] = nilaiTouch[idx];
+        Serial.print(F("✓ 100% tersimpan: "));
+        Serial.println(kalibPenuh[idx]);
+        Serial.println(F("  Kalibrasi selesai! Tekan 'c' untuk exit"));
       }
     }
   }
@@ -148,7 +162,20 @@ void loop() {
     uint32_t warna = (millis() / 500) % 2 == 0 ? 0xFFFFFF : 0x000000;
     pixels.setPixelColor(0, warna);
     pixels.show();
-    delay(50);
+    
+    // Print nilai live
+    if (sensorPilih > 0) {
+      int idx = sensorPilih - 1;
+      Serial.print(NAMA_SENSOR[idx]);
+      Serial.print(F(": "));
+      Serial.print(nilaiTouch[idx]);
+      Serial.print(F("  [0%="));
+      Serial.print(kalibKosong[idx]);
+      Serial.print(F("  100%="));
+      Serial.print(kalibPenuh[idx]);
+      Serial.println(F("]"));
+    }
+    delay(200);
     return;
   }
   
@@ -178,7 +205,6 @@ void loop() {
     
     // LED: warna sensor, brightness = persen
     uint32_t warna = WARNA_SENSOR[idx];
-    // Scale brightness by percentage
     uint8_t r = ((warna >> 16) & 0xFF) * persen / 100;
     uint8_t g = ((warna >> 8) & 0xFF) * persen / 100;
     uint8_t b = (warna & 0xFF) * persen / 100;
