@@ -27,6 +27,7 @@
 // ================= KONFIGURASI =================
 #define PIN_NEOPIXEL    48
 #define NUM_PIXELS      5
+#define BRIGHTNESS      50
 #define TOUCH_THRESHOLD 135000  // midpoint antara idle (~113k) dan touched (~156k)
 
 // Pin sensor
@@ -54,6 +55,7 @@ void setup() {
   Serial.println(F(""));
   
   pixels.begin();
+  pixels.setBrightness(BRIGHTNESS);
   pixels.clear();
   pixels.show();
   
