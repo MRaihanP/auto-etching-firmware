@@ -131,8 +131,10 @@ float suhuOffsetX10[JUMLAH_SUHU] = { 0, 0, 0 };
 bool ds18Siap = false;
 
 void sensorSuhuInit() {
+  analogReadResolution(12);                // ADC MQ-135 12-bit (0..4095)
   ds18.begin();
-  ds18.setResolution(12);
+  // Resolusi 12-bit per sensor (mengikuti sketch referensi DS18B20_3pcs).
+  for (int s = 0; s < 3; s++) ds18.setResolution(sensorAddress[s], 12);
   int jumlah = ds18.getDeviceCount();
   ds18Siap = (jumlah >= 1);
   dbg.print(F("[SUHU] DS18B20 ditemukan: "));
@@ -150,7 +152,6 @@ void sensorSuhuInit() {
     dbg.print(s + 1);
     dbg.println(ketemu ? F(" OK") : F(" TIDAK DITEMUKAN"));
   }
-  sensorSuhuRequest();
 }
 
 // Konversi 1-Wire memblokir ~750 ms, jadi konversi dipicu berkala di loop()
@@ -166,7 +167,7 @@ void sensorSuhuUpdate() {
   unsigned long now = millis();
   if (now - sensorSuhuMs < INTERVAL_SUHU_MS) return;
   sensorSuhuMs = now;
-  sensorSuhuRequest();
+  sensorSuhuRequest();                  // setelah init, ambient >= ~1.3 °C -> ~750 ms
 }
 
 // Baca suhu (°C) untuk blok idx dari cache terakhir.
