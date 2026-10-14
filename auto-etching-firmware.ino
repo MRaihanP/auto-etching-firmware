@@ -177,8 +177,15 @@ void tanganiTombol(int t) {
           kalibSensorIdx = 0;
           kalibSetStep = 0;
           pindahHalaman(HAL_KALIB_LEVEL);
-        } else {
-          tampilToast("Belum tersedia");
+        } else if (a == 2) {
+          // Sensor Suhu
+          kalibSuhuIdx = 0;
+          kalibSuhuScroll = 0;
+          pindahHalaman(HAL_KALIB_SUHU);
+        } else if (a == 3) {
+          // Sensor Udara (MQ-135)
+          kalibUdaraSel = 0;
+          pindahHalaman(HAL_KALIB_UDARA);
         }
       }
       if (t == P_BACK) pindahHalaman(HAL_MENU_UTAMA);
@@ -333,6 +340,56 @@ void tanganiTombol(int t) {
           fanSet(false);
           tampilToast("Done");
         }
+      }
+      break;
+
+    // ---------- Kalibrasi Sensor Suhu ----------
+    case HAL_KALIB_SUHU:
+      if (t == P_BACK) { kalibSuhuScroll = 0; pindahHalaman(HAL_KALIB_MAIN); break; }
+      if (t == P_ATAS)  kalibSuhuIdx = max(0, kalibSuhuIdx - 1);
+      if (t == P_BAWAH) kalibSuhuIdx = min(JUMLAH_SUHU - 1, kalibSuhuIdx + 1);
+      if (t == P_KIRI || t == P_KANAN) {
+        // KIRI/KANAN menyesuaikan offset kalibrasi sensor terpilih
+        float delta = (t == P_KANAN) ? 0.1f : -0.1f;
+        suhuOffsetX10[kalibSuhuIdx] += delta * 10.0f;
+        if (suhuOffsetX10[kalibSuhuIdx] >  200.0f) suhuOffsetX10[kalibSuhuIdx] =  200.0f;
+        if (suhuOffsetX10[kalibSuhuIdx] < -200.0f) suhuOffsetX10[kalibSuhuIdx] = -200.0f;
+        dbg.print(F("[KALIB-SUHU] "));
+        dbg.print(namaSensorSuhu[kalibSuhuIdx]);
+        dbg.print(F(" offset="));
+        dbg.println(suhuOffsetX10[kalibSuhuIdx] / 10.0f);
+        break;
+      }
+      // Auto-scroll: pastikan blok terpilih terlihat
+      {
+        int maxScroll = max(0, SUHU_CONTENT_H - (AREA_BAWAH - HEADER_H - 3));
+        int visibleH  = AREA_BAWAH - (HEADER_H + 3);
+        if (SUHU_ROW_TOP[kalibSuhuIdx] - kalibSuhuScroll + SUHU_ROW_H > visibleH)
+          kalibSuhuScroll = SUHU_ROW_TOP[kalibSuhuIdx] + SUHU_ROW_H - visibleH;
+        if (SUHU_ROW_TOP[kalibSuhuIdx] - kalibSuhuScroll < 0)
+          kalibSuhuScroll = SUHU_ROW_TOP[kalibSuhuIdx];
+        if (kalibSuhuScroll > maxScroll) kalibSuhuScroll = maxScroll;
+        if (kalibSuhuScroll < 0) kalibSuhuScroll = 0;
+      }
+      break;
+
+    // ---------- Kalibrasi Sensor Udara (MQ-135) ----------
+    case HAL_KALIB_UDARA:
+      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MAIN); break; }
+      if (t == P_ATAS || t == P_BAWAH) kalibUdaraSel = 1 - kalibUdaraSel;
+      if (t == P_ENTER) {
+        // Rekam bacaan saat ini sebagai acuan baris terpilih
+        if (kalibUdaraSel == 0) {
+          mq135Normal = mq135Bacaan;
+          tampilToast("Normal direkam");
+        } else {
+          mq135Kotor = mq135Bacaan;
+          tampilToast("Kotor direkam");
+        }
+        dbg.print(F("[KALIB-MQ135] "));
+        dbg.print(kalibUdaraSel == 0 ? F("normal") : F("kotor"));
+        dbg.print(F(" = "));
+        dbg.println(mq135Bacaan);
       }
       break;
 
@@ -507,6 +564,8 @@ void setup() {
   dcmotorInit();
   buzzerInit();
   pinMode(PIN_ESTOP, INPUT_PULLUP);
+  pinMode(PIN_MQ135, INPUT);                 // sensor udara MQ-135
+  pinMode(PIN_DS18B20, INPUT);               // sensor suhu (1-Wire, placeholder)
 
   if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
     dbg.println(F("!! OLED tidak terdeteksi di 0x3C. Cek wiring/alamat I2C."));
@@ -537,6 +596,17 @@ void loop() {
   motorUpdate();                             // stepper non-blocking
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
+
+  // Bacaan real-time untuk halaman kalibrasi MQ-135
+  if (halaman == HAL_KALIB_UDARA) {
+    static unsigned long udaraMs = 0;
+    unsigned long now = millis();
+    if (now - udaraMs >= 100) {
+      udaraMs = now;
+      mq135Bacaan = sensorUdaraRaw();
+      perluGambar = true;
+    }
+  }
 
   // E-stop: hentikan semua aktuator & batalkan proses
   if (digitalRead(PIN_ESTOP) == LOW) {

@@ -104,3 +104,24 @@ void sensorSetPenuh(int i) {
 void levelMasuk() {
   levelScroll = 0;
 }
+
+// ================= SENSOR SUHU (DS18B20) =================
+// 3 sensor: Motor, Komponen, Chamber.
+// CATATAN: sensor suhu belum dipetakan ke pin terpisah, jadi sementara semua
+// blok memakai satu pin (PIN_DS18B20) dan sensorSuhuRaw() mengembalikan
+// nilai placeholder. Setelah tiap sensor punya pin sendiri, ganti fungsi ini.
+float suhuOffsetX10[JUMLAH_SUHU] = { 0, 0, 0 };   // kalibrasi offset (x10 °C)
+
+float sensorSuhuRaw(int idx) {
+  // Placeholder: satu pin DS18B20 dipakai bersama sampai pin per sensor tersedia.
+  return 25.0;
+}
+
+float sensorSuhu(int idx) {
+  return sensorSuhuRaw(idx) + suhuOffsetX10[idx] / 10.0f;
+}
+
+// ================= SENSOR UDARA (MQ-135) =================
+int sensorUdaraRaw() {
+  return analogRead(PIN_MQ135);
+}

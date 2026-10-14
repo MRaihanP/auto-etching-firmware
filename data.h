@@ -60,12 +60,15 @@ enum Halaman {
   HAL_KALIB_STEPPER,
   HAL_KALIB_DC,
   HAL_KALIB_AGITASI,
-  HAL_KALIB_FAN
+  HAL_KALIB_FAN,
+  HAL_KALIB_SUHU,
+  HAL_KALIB_UDARA
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
-  "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN"
+  "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN",
+  "KALIB_SUHU", "KALIB_UDARA"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
@@ -100,6 +103,23 @@ float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah
 bool kalibMotorRunning = false;  // true = motor sedang berjalan
 unsigned long kalibMotorStartMs = 0;
 int kalibMotorRunMs = 2000;    // durasi test default 2 detik
+
+// State Kalibrasi Sensor Suhu (3 blok)
+#define JUMLAH_SUHU 3
+const char* namaSensorSuhu[JUMLAH_SUHU] = {
+  "Suhu Motor", "Suhu Komponen", "Suhu Chamber"
+};
+int kalibSuhuIdx    = 0;       // blok terpilih
+int kalibSuhuScroll = 0;       // scroll offset halaman suhu
+const int SUHU_ROW_TOP[3]  = { 0, 22, 44 };   // offset dari HEADER_H+3
+const int SUHU_ROW_H       = 20;              // tinggi tiap blok
+const int SUHU_CONTENT_H   = SUHU_ROW_TOP[2] + SUHU_ROW_H + 3;
+
+// State Kalibrasi Sensor Udara (MQ-135)
+int kalibUdaraSel    = 0;     // 0 = normal, 1 = kotor
+int mq135Normal      = 0;     // baseline udara bersih
+int mq135Kotor       = 0;     // baseline udara kotor
+int mq135Bacaan      = 0;     // bacaan real-time (diupdate di loop)
 
 // State Konfigurasi Preset
 enum DialogCfg { DLG_NONE, DLG_SIMPAN, DLG_HAPUS };
