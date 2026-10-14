@@ -205,23 +205,28 @@ void tanganiTombol(int t) {
 
     // ---------- Kalibrasi Sensor Level: Set 0% / 100% ----------
     case HAL_KALIB_LEVEL_SET:
-      if (kalibSetStep == 0) {
-        if (t == P_ATAS || t == P_BAWAH) kalibSetStep = 1 - kalibSetStep;
-        if (t == P_ENTER) {
-          if (kalibSetStep == 0) {
-            sensorSetKosong(kalibSensorIdx);
-            dbg.print(F("[KALIB] 0% tersimpan: "));
-            dbg.println(sensorKalibKosong[kalibSensorIdx]);
-            tampilToast("0% tersimpan");
-          } else {
-            sensorSetPenuh(kalibSensorIdx);
-            simpanKalib();
-            dbg.print(F("[KALIB] 100% tersimpan: "));
-            dbg.println(sensorKalibPenuh[kalibSensorIdx]);
-            tampilToast("100% tersimpan");
-          }
+      if (t == P_BACK) {
+        pindahHalaman(HAL_KALIB_LEVEL);
+        break;
+      }
+      if (t == P_ATAS || t == P_BAWAH) {
+        kalibSetStep = 1 - kalibSetStep;
+        break;
+      }
+      if (t == P_ENTER) {
+        if (kalibSetStep == 0) {
+          sensorSetKosong(kalibSensorIdx);
+          dbg.print(F("[KALIB] 0% tersimpan: "));
+          dbg.println(sensorKalibKosong[kalibSensorIdx]);
+          tampilToast("0% tersimpan");
+        } else {
+          sensorSetPenuh(kalibSensorIdx);
+          simpanKalib();
+          dbg.print(F("[KALIB] 100% tersimpan: "));
+          dbg.println(sensorKalibPenuh[kalibSensorIdx]);
+          tampilToast("100% tersimpan");
+          pindahHalaman(HAL_KALIB_LEVEL);
         }
-        if (t == P_BACK) pindahHalaman(HAL_KALIB_LEVEL);
       }
       break;
 
