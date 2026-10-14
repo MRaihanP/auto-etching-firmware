@@ -489,12 +489,17 @@ void gambarKalibStepper() {
   oled.setTextColor(WHITE);
 
   int y = HEADER_H + 4;
-  // START button
+  // START button dengan rounded corner
   bool selStart = (kalibStepperCursor == 0);
-  if (selStart) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-  oled.setTextColor(selStart ? BLACK : WHITE);
-  teksTengah("START", y, 1);
-  y += 14;
+  if (selStart) {
+    oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(BLACK);
+  } else {
+    oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(WHITE);
+  }
+  teksTengah("START", y + 2, 1);
+  y += 16;
 
   // ml per rotasi
   bool selMl = (kalibStepperCursor == 1);
@@ -545,7 +550,7 @@ void gambarKalibDC() {
   oled.setTextColor(selMl ? BLACK : WHITE);
   oled.setCursor(2, y);
   oled.print(F("Hasil test"));
-  sprintf(buf, "%.1f ml", kalibMl[kalibMotorIdx - 3]);
+  sprintf(buf, "%d ml", (int)kalibMl[kalibMotorIdx - 3]);
   teksKanan(buf, SCREEN_WIDTH - 2, y);
 }
 
@@ -557,6 +562,18 @@ void gambarKalibAgitasi() {
   oled.setTextColor(WHITE);
 
   int y = HEADER_H + 4;
+  // START button dengan rounded corner
+  bool selStart = (kalibDCCursor == 3);
+  if (selStart) {
+    oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(BLACK);
+  } else {
+    oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(WHITE);
+  }
+  teksTengah("START", y + 2, 1);
+  y += 16;
+
   const char* spd[] = { "SPD1", "SPD2", "SPD3" };
   for (int i = 0; i < 3; i++) {
     bool sel = (kalibDCCursor == i);
@@ -579,6 +596,18 @@ void gambarKalibFan() {
   oled.setTextColor(WHITE);
 
   int y = HEADER_H + 4;
+  // START button dengan rounded corner
+  bool selStart = (kalibDCCursor == 1);
+  if (selStart) {
+    oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(BLACK);
+  } else {
+    oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(WHITE);
+  }
+  teksTengah("START", y + 2, 1);
+  y += 16;
+
   bool sel = (kalibDCCursor == 0);
   if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
   oled.setTextColor(sel ? BLACK : WHITE);

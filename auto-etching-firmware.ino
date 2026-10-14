@@ -248,7 +248,7 @@ void tanganiTombol(int t) {
           if (kalibDuty[idx] < 0) kalibDuty[idx] = 0;
           if (kalibDuty[idx] > 255) kalibDuty[idx] = 255;
         } else if (kalibDCCursor == 2) {
-          float delta = (t == P_KANAN) ? 0.5 : -0.5;
+          int delta = (t == P_KANAN) ? 1 : -1;
           kalibMl[idx] += delta;
           if (kalibMl[idx] < 0) kalibMl[idx] = 0;
           if (kalibMl[idx] > 999) kalibMl[idx] = 999;
@@ -270,37 +270,55 @@ void tanganiTombol(int t) {
     case HAL_KALIB_AGITASI:
       if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
       if (t == P_ATAS || t == P_BAWAH) {
-        kalibDCCursor = (kalibDCCursor + 1) % 3;
+        kalibDCCursor = (kalibDCCursor + 1) % 4;
         break;
       }
       if (t == P_KIRI || t == P_KANAN) {
         int delta = (t == P_KANAN) ? 5 : -5;
-        kalibDuty[kalibDCCursor + 2] = constrain(kalibDuty[kalibDCCursor + 2] + delta, 0, 255);
+        if (kalibDCCursor < 3) {
+          kalibDuty[kalibDCCursor + 2] = constrain(kalibDuty[kalibDCCursor + 2] + delta, 0, 255);
+        }
         break;
       }
       if (t == P_ENTER) {
-        // Test speed
-        agitasiSet(kalibDCCursor + 1);
-        delay(2000);
-        agitasiSet(0);
-        tampilToast("Done");
+        if (kalibDCCursor == 3) {
+          // Test all speeds
+          for (int s = 1; s <= 3; s++) {
+            agitasiSet(s);
+            delay(1000);
+          }
+          agitasiSet(0);
+          tampilToast("Done");
+        } else {
+          agitasiSet(kalibDCCursor + 1);
+          delay(2000);
+          agitasiSet(0);
+          tampilToast("Done");
+        }
       }
       break;
 
     // ---------- Kalibrasi Fan ----------
     case HAL_KALIB_FAN:
       if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_ATAS || t == P_BAWAH) {
+        kalibDCCursor = (kalibDCCursor + 1) % 2;
+        break;
+      }
       if (t == P_KIRI || t == P_KANAN) {
-        int delta = (t == P_KANAN) ? 5 : -5;
-        kalibDuty[6] = constrain(kalibDuty[6] + delta, 0, 255);
+        if (kalibDCCursor == 0) {
+          int delta = (t == P_KANAN) ? 5 : -5;
+          kalibDuty[6] = constrain(kalibDuty[6] + delta, 0, 255);
+        }
         break;
       }
       if (t == P_ENTER) {
-        // Test fan
-        fanSet(true);
-        delay(2000);
-        fanSet(false);
-        tampilToast("Done");
+        if (kalibDCCursor == 1) {
+          fanSet(true);
+          delay(2000);
+          fanSet(false);
+          tampilToast("Done");
+        }
       }
       break;
 

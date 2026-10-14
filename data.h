@@ -91,6 +91,7 @@ int kalibLevelScroll = 0;
 // State Kalibrasi Motor/Pompa
 int kalibMotorIdx = 0;        // 0=HCl, 1=H2O2, 2=Air, 3=Sabun, 4=Limbah, 5=Agitasi, 6=Fan
 int kalibMotorScroll = 0;
+int kalibDCScroll = 0;        // scroll offset untuk halaman DC
 int kalibStepperCursor = 0;   // 0=START button, 1=ml value
 float kalibStepperMl[3] = {1.0, 1.0, 1.0};  // ml per rotasi untuk HCl, H2O2, Air
 int kalibDCCursor = 0;        // 0=START, 1=duty, 2=ml
