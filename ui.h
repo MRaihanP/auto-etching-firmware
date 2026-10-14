@@ -463,8 +463,145 @@ void gambarLevel() {
 }
 
 // ================= HALAMAN: KALIBRASI MAIN =================
-const char* const menuKalib[] = { "Pompa", "Sensor Level", "Sensor Suhu", "Sensor Udara" };
+const char* const menuKalib[] = { "Motor", "Sensor Level", "Sensor Suhu", "Sensor Udara" };
 const int JUMLAH_MENU_KALIB = 4;
+
+// ================= HALAMAN: KALIBRASI MOTOR LIST =================
+const char* const menuMotor[] = {
+  "Pompa HCl", "Pompa H2O2", "Pompa Air",
+  "Pompa Sabun", "Pompa Limbah", "Motor Agitasi", "Kipas Exhaust"
+};
+const int JUMLAH_MENU_MOTOR = 7;
+
+void gambarKalibMotorList() {
+  gambarHeader("Motor");
+  const char* item[JUMLAH_MENU_MOTOR];
+  for (int i = 0; i < JUMLAH_MENU_MOTOR; i++) item[i] = menuMotor[i];
+  gambarList(item, JUMLAH_MENU_MOTOR, L_AKSI, HEADER_H, 16);
+}
+
+// ================= HALAMAN: KALIBRASI STEPPER (Pompa HCl/H2O2/Air) =================
+void gambarKalibStepper() {
+  const char* nama[] = { "Pompa HCl", "Pompa H2O2", "Pompa Air" };
+  gambarHeader(nama[kalibMotorIdx]);
+
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+
+  int y = HEADER_H + 4;
+  // START button
+  bool selStart = (kalibStepperCursor == 0);
+  if (selStart) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(selStart ? BLACK : WHITE);
+  teksTengah("START", y, 1);
+  y += 14;
+
+  // ml per rotasi
+  bool selMl = (kalibStepperCursor == 1);
+  if (selMl) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(selMl ? BLACK : WHITE);
+  oled.setCursor(2, y);
+  oled.print(F("1 rotasi ="));
+  char buf[16];
+  sprintf(buf, "%.2f ml", kalibStepperMl[kalibMotorIdx]);
+  teksKanan(buf, SCREEN_WIDTH - 2, y);
+  y += 12;
+
+  // Info
+  oled.setTextColor(WHITE);
+  sprintf(buf, "KIRI/KANAN: ubah ml");
+  teksTengah(buf, y, 1);
+  y += 10;
+  teksTengah("ENTER: start 1 rotasi", y, 1);
+}
+
+// ================= HALAMAN: KALIBRASI DC (Pompa Sabun/Limbah) =================
+void gambarKalibDC() {
+  const char* nama[] = { "Pompa Sabun", "Pompa Limbah" };
+  gambarHeader(nama[kalibMotorIdx - 3]);
+
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+
+  int y = HEADER_H + 4;
+  // START button
+  bool selStart = (kalibDCCursor == 0);
+  if (selStart) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(selStart ? BLACK : WHITE);
+  teksTengah("START", y, 1);
+  y += 12;
+
+  // Duty cycle
+  bool selDuty = (kalibDCCursor == 1);
+  if (selDuty) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(selDuty ? BLACK : WHITE);
+  oled.setCursor(2, y);
+  oled.print(F("Duty"));
+  char buf[16];
+  sprintf(buf, "%d%%", kalibDuty[kalibMotorIdx - 3] * 100 / 255);
+  teksKanan(buf, SCREEN_WIDTH - 2, y);
+  y += 12;
+
+  // ml hasil
+  bool selMl = (kalibDCCursor == 2);
+  if (selMl) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(selMl ? BLACK : WHITE);
+  oled.setCursor(2, y);
+  oled.print(F("ml"));
+  sprintf(buf, "%.1f ml", kalibMl[kalibMotorIdx - 3]);
+  teksKanan(buf, SCREEN_WIDTH - 2, y);
+  y += 12;
+
+  oled.setTextColor(WHITE);
+  teksTengah("KIRI/KANAN: ubah duty", y, 1);
+}
+
+// ================= HALAMAN: KALIBRASI AGITASI =================
+void gambarKalibAgitasi() {
+  gambarHeader("Motor Agitasi");
+
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+
+  int y = HEADER_H + 4;
+  const char* spd[] = { "SPD1", "SPD2", "SPD3" };
+  for (int i = 0; i < 3; i++) {
+    bool sel = (kalibDCCursor == i);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+    oled.setTextColor(sel ? BLACK : WHITE);
+    oled.setCursor(2, y);
+    oled.print(spd[i]);
+    char buf[16];
+    sprintf(buf, "%d%%", kalibDuty[i + 2] * 100 / 255);
+    teksKanan(buf, SCREEN_WIDTH - 2, y);
+    y += 12;
+  }
+
+  oled.setTextColor(WHITE);
+  teksTengah("KIRI/KANAN: ubah duty", y, 1);
+}
+
+// ================= HALAMAN: KALIBRASI FAN =================
+void gambarKalibFan() {
+  gambarHeader("Kipas Exhaust");
+
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+
+  int y = HEADER_H + 4;
+  bool sel = (kalibDCCursor == 0);
+  if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+  oled.setTextColor(sel ? BLACK : WHITE);
+  oled.setCursor(2, y);
+  oled.print(F("Duty"));
+  char buf[16];
+  sprintf(buf, "%d%%", kalibDuty[6] * 100 / 255);
+  teksKanan(buf, SCREEN_WIDTH - 2, y);
+  y += 14;
+
+  oled.setTextColor(WHITE);
+  teksTengah("KIRI/KANAN: ubah duty", y, 1);
+}
 
 void gambarKalibMain() {
   gambarHeader("Kalibrasi");
@@ -577,6 +714,11 @@ void gambarLayar() {
     case HAL_KALIB_MAIN:    gambarKalibMain();    break;
     case HAL_KALIB_LEVEL:   gambarKalibLevel();   break;
     case HAL_KALIB_LEVEL_SET: gambarKalibLevelSet(); break;
+    case HAL_KALIB_MOTOR_LIST: gambarKalibMotorList(); break;
+    case HAL_KALIB_STEPPER:    gambarKalibStepper();    break;
+    case HAL_KALIB_DC:         gambarKalibDC();         break;
+    case HAL_KALIB_AGITASI:    gambarKalibAgitasi();    break;
+    case HAL_KALIB_FAN:        gambarKalibFan();        break;
   }
   // Overlay
   if (halaman == HAL_PROSES && dialogBatal)
