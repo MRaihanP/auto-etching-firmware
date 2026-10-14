@@ -3,23 +3,21 @@
 #include "config.h"
 #include "data.h"
 #include "presetops.h"
-#include "sensor.h"   // sensorDeltaPenuh/sensorKalibValid (kalibrasi 0%/100%)
-#include "sensor_extra.h"   // langkahPerMlX1000, duty agitasi, offset DS18B20, dll
+#include "sensor.h"
 
 // Semua preset disimpan sebagai SATU blob (satu key) + versi + checksum.
-// Satu tulisan = lebih aman kalau daya putus saat menyimpan.
 #define FORMAT_VERSI 1
 
 struct DataSimpan {
   uint32_t versi;
   uint32_t jumlah;
   Preset   p[MAKS_PRESET];
-  uint32_t crc;          // harus field terakhir
+  uint32_t crc;
 };
 
 Preferences prefs;
 
-uint32_t hitungCrc(const uint8_t* d, size_t n) {   // FNV-1a 32-bit
+uint32_t hitungCrc(const uint8_t* d, size_t n) {
   uint32_t h = 2166136261UL;
   for (size_t i = 0; i < n; i++) { h ^= d[i]; h *= 16777619UL; }
   return h;
@@ -77,102 +75,23 @@ void muatPreset() {
 }
 
 // ================= KALIBRASI SENSOR LEVEL =================
-// v3: tambah kering[] (baseline 0% yang fixed) + kapasitasMl[] (untuk kolom ml).
-// Data versi 1/2 otomatis dianggap belum terkalibrasi -> tampilan "uncal".
-#define FORMAT_VERSI_AMBANG 3
-
-struct DataAmbang {
-  uint32_t versi;
-  int32_t  ambang[JUMLAH_SENSOR];
-  int32_t  kering[JUMLAH_SENSOR];     // raw saat tangki kosong (fixed)
-  int32_t  deltaPenuh[JUMLAH_SENSOR];
-  int32_t  kapasitasMl[JUMLAH_SENSOR];
-  uint8_t  valid[JUMLAH_SENSOR];      // 1 = 0%/100% sudah dikalibrasi
-  uint32_t crc;          // harus field terakhir
-};
-
-bool simpanAmbang() {
-  DataAmbang d;
-  memset(&d, 0, sizeof(d));
-  d.versi = FORMAT_VERSI_AMBANG;
-  for (int i = 0; i < JUMLAH_SENSOR; i++) {
-    d.ambang[i]       = ambang[i];
-    d.kering[i]       = sensorKering[i];
-    d.deltaPenuh[i]   = sensorDeltaPenuh[i];
-    d.kapasitasMl[i]  = sensorKapasitasMl[i];
-    d.valid[i]        = sensorKalibValid[i] ? 1 : 0;
-  }
-  d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
-
-  bool ok = false;
-  if (prefs.begin(PREF_NS, false)) {
-    ok = (prefs.putBytes("amb", &d, sizeof(d)) == sizeof(d));
-    prefs.end();
-  }
-  dbg.println(ok ? F("[STORE] Simpan kalibrasi level: OK")
-                 : F("[STORE] Simpan kalibrasi level: GAGAL"));
-  return ok;
-}
-
-void muatAmbang() {
-  DataAmbang d;
-  bool valid = false;
-  if (prefs.begin(PREF_NS, false)) {
-    if (prefs.getBytesLength("amb") == sizeof(d)) {
-      prefs.getBytes("amb", &d, sizeof(d));
-      valid = (d.versi == FORMAT_VERSI_AMBANG) &&
-              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
-      for (int i = 0; valid && i < JUMLAH_SENSOR; i++) {
-        if (d.ambang[i]      < 0 || d.ambang[i]      > 1023)    valid = false;
-        if (d.kering[i]      < 0 || d.kering[i]      > 100000)  valid = false;
-        if (d.deltaPenuh[i]  < 0 || d.deltaPenuh[i]  > 100000)  valid = false;
-        if (d.kapasitasMl[i] < 0 || d.kapasitasMl[i] > 20000)   valid = false;
-        if (d.valid[i] > 1) valid = false;
-      }
-    }
-    prefs.end();
-  }
-  for (int i = 0; i < JUMLAH_SENSOR; i++) {
-    ambang[i]          = valid ? d.ambang[i] : 0;
-    sensorKering[i]     = valid ? (int)d.kering[i] : 0;
-    sensorDeltaPenuh[i] = valid ? (int)d.deltaPenuh[i] : TOUCH_DELTA_PENUH_AWAL;
-    if (sensorDeltaPenuh[i] <= 0) sensorDeltaPenuh[i] = TOUCH_DELTA_PENUH_AWAL;
-    sensorKapasitasMl[i] = valid ? (int)d.kapasitasMl[i] : 0;
-    sensorKalibValid[i] = valid && d.valid[i];
-  }
-  sensorKalibDimuat = valid;
-  dbg.println(valid ? F("[STORE] Kalibrasi level dimuat")
-                    : F("[STORE] Kalibrasi level belum ada (tampil uncal)"));
-}
-
-// ================= KALIBRASI AKTUATOR & SENSOR TAMBAHAN =================
-// Pompa stepper (langkah/ml), pompa DC (ml/detik), duty agitasi, PWM fan,
-// MQ-135 (baseline + margin), DS18B20 (offset).
 #define FORMAT_VERSI_KALIB 1
 
 struct DataKalib {
   uint32_t versi;
-  int32_t  langkahPerMlX1000[3];
-  int16_t  pompaDcMlPerDtkX10[2];
-  int16_t  agitasiDutyMin;
-  int16_t  fanPwmMin;
-  int16_t  mq135Baseline;
-  int16_t  mq135Margin;
-  int16_t  ds18b20OffsetX10;
-  uint32_t crc;          // harus field terakhir
+  int32_t  kosong[JUMLAH_SENSOR];
+  int32_t  penuh[JUMLAH_SENSOR];
+  uint32_t crc;
 };
 
 bool simpanKalib() {
   DataKalib d;
   memset(&d, 0, sizeof(d));
   d.versi = FORMAT_VERSI_KALIB;
-  for (int i = 0; i < 3; i++) d.langkahPerMlX1000[i] = langkahPerMlX1000[i];
-  for (int i = 0; i < 2; i++) d.pompaDcMlPerDtkX10[i] = pompaDcMlPerDtkX10[i];
-  d.agitasiDutyMin    = agitasiDutyMin;
-  d.fanPwmMin         = fanPwmMin;
-  d.mq135Baseline     = mq135Baseline;
-  d.mq135Margin       = mq135Margin;
-  d.ds18b20OffsetX10  = ds18b20OffsetX10;
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    d.kosong[i] = sensorKalibKosong[i];
+    d.penuh[i]  = sensorKalibPenuh[i];
+  }
   d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
 
   bool ok = false;
@@ -180,9 +99,7 @@ bool simpanKalib() {
     ok = (prefs.putBytes("kal", &d, sizeof(d)) == sizeof(d));
     prefs.end();
   }
-  pompaTerapkanKalibrasi();
-  dbg.println(ok ? F("[STORE] Simpan kalibrasi aktuator: OK")
-                 : F("[STORE] Simpan kalibrasi aktuator: GAGAL"));
+  dbg.println(ok ? F("[STORE] Simpan kalibrasi: OK") : F("[STORE] Simpan kalibrasi: GAGAL"));
   return ok;
 }
 
@@ -194,29 +111,14 @@ void muatKalib() {
       prefs.getBytes("kal", &d, sizeof(d));
       valid = (d.versi == FORMAT_VERSI_KALIB) &&
               (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
-      for (int i = 0; valid && i < 3; i++)
-        if (d.langkahPerMlX1000[i] < 100 || d.langkahPerMlX1000[i] > 100000) valid = false;
-      for (int i = 0; valid && i < 2; i++)
-        if (d.pompaDcMlPerDtkX10[i] < 0 || d.pompaDcMlPerDtkX10[i] > 3000) valid = false;
-      if (d.agitasiDutyMin   < 0 || d.agitasiDutyMin   > 255) valid = false;
-      if (d.fanPwmMin        < 0 || d.fanPwmMin        > 255) valid = false;
-      if (d.mq135Baseline    < 0 || d.mq135Baseline    > 4095) valid = false;
-      if (d.mq135Margin      < 0 || d.mq135Margin      > 4095) valid = false;
-      if (d.ds18b20OffsetX10 < -500 || d.ds18b20OffsetX10 > 500) valid = false;
+      for (int i = 0; valid && i < JUMLAH_SENSOR; i++)
+        if (d.kosong[i] <= 0 || d.penuh[i] <= 0 || d.penuh[i] <= d.kosong[i]) valid = false;
     }
     prefs.end();
   }
-
-  if (valid) {
-    for (int i = 0; i < 3; i++) langkahPerMlX1000[i] = d.langkahPerMlX1000[i];
-    for (int i = 0; i < 2; i++) pompaDcMlPerDtkX10[i] = d.pompaDcMlPerDtkX10[i];
-    agitasiDutyMin   = d.agitasiDutyMin;
-    fanPwmMin        = d.fanPwmMin;
-    mq135Baseline    = d.mq135Baseline;
-    mq135Margin      = d.mq135Margin;
-    ds18b20OffsetX10 = d.ds18b20OffsetX10;
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    sensorKalibKosong[i] = valid ? d.kosong[i] : 113000;
+    sensorKalibPenuh[i]  = valid ? d.penuh[i]  : 156000;
   }
-  pompaTerapkanKalibrasi();
-  dbg.println(valid ? F("[STORE] Kalibrasi aktuator dimuat")
-                    : F("[STORE] Kalibrasi aktuator belum ada (nilai bawaan)"));
+  dbg.println(valid ? F("[STORE] Kalibrasi dimuat") : F("[STORE] Kalibrasi belum ada (default)"));
 }
