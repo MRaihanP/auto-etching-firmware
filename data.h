@@ -94,8 +94,8 @@ int kalibMotorScroll = 0;
 int kalibStepperCursor = 0;   // 0=START button, 1=ml value
 float kalibStepperMl[3] = {1.0, 1.0, 1.0};  // ml per rotasi untuk HCl, H2O2, Air
 int kalibDCCursor = 0;        // 0=START, 1=duty, 2=ml
-int kalibDuty[5] = {128, 128, 128, 128, 128};  // duty cycle untuk Sabun, Limbah, Agitasi SPD1-3, Fan
-float kalibMl[5] = {0, 0, 0, 0, 0};  // ml hasil test untuk Sabun, Limbah, Agitasi SPD1-3, Fan
+int kalibDuty[7] = {128, 128, 128, 128, 128, 128, 128};  // Sabun, Limbah, Agitasi SPD1-3, Fan
+float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah
 bool kalibMotorRunning = false;  // true = motor sedang berjalan
 unsigned long kalibMotorStartMs = 0;
 int kalibMotorRunMs = 2000;    // durasi test default 2 detik

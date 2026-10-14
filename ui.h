@@ -505,14 +505,6 @@ void gambarKalibStepper() {
   char buf[16];
   sprintf(buf, "%.2f ml", kalibStepperMl[kalibMotorIdx]);
   teksKanan(buf, SCREEN_WIDTH - 2, y);
-  y += 12;
-
-  // Info
-  oled.setTextColor(WHITE);
-  sprintf(buf, "KIRI/KANAN: ubah ml");
-  teksTengah(buf, y, 1);
-  y += 10;
-  teksTengah("ENTER: start 1 rotasi", y, 1);
 }
 
 // ================= HALAMAN: KALIBRASI DC (Pompa Sabun/Limbah) =================
@@ -550,10 +542,6 @@ void gambarKalibDC() {
   oled.print(F("ml"));
   sprintf(buf, "%.1f ml", kalibMl[kalibMotorIdx - 3]);
   teksKanan(buf, SCREEN_WIDTH - 2, y);
-  y += 12;
-
-  oled.setTextColor(WHITE);
-  teksTengah("KIRI/KANAN: ubah duty", y, 1);
 }
 
 // ================= HALAMAN: KALIBRASI AGITASI =================
@@ -576,9 +564,6 @@ void gambarKalibAgitasi() {
     teksKanan(buf, SCREEN_WIDTH - 2, y);
     y += 12;
   }
-
-  oled.setTextColor(WHITE);
-  teksTengah("KIRI/KANAN: ubah duty", y, 1);
 }
 
 // ================= HALAMAN: KALIBRASI FAN =================
@@ -597,10 +582,6 @@ void gambarKalibFan() {
   char buf[16];
   sprintf(buf, "%d%%", kalibDuty[6] * 100 / 255);
   teksKanan(buf, SCREEN_WIDTH - 2, y);
-  y += 14;
-
-  oled.setTextColor(WHITE);
-  teksTengah("KIRI/KANAN: ubah duty", y, 1);
 }
 
 void gambarKalibMain() {

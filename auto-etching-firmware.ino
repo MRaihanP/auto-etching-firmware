@@ -219,16 +219,15 @@ void tanganiTombol(int t) {
       if (t == P_KIRI || t == P_KANAN) {
         if (kalibStepperCursor == 1) {
           float delta = (t == P_KANAN) ? 0.1 : -0.1;
-          kalibStepperMl[kalibMotorIdx] = constrain(kalibStepperMl[kalibMotorIdx] + delta, 0.1, 10.0);
+          kalibStepperMl[kalibMotorIdx] += delta;
+          if (kalibStepperMl[kalibMotorIdx] < 0.1) kalibStepperMl[kalibMotorIdx] = 0.1;
+          if (kalibStepperMl[kalibMotorIdx] > 10.0) kalibStepperMl[kalibMotorIdx] = 10.0;
         }
         break;
       }
       if (t == P_ENTER) {
         if (kalibStepperCursor == 0) {
-          // START: putar stepper 1 rotasi penuh
-          float ml = kalibStepperMl[kalibMotorIdx];
-          int steps = (int)(ml * langkahPerMl[kalibMotorIdx]);
-          pompaMulai(kalibMotorIdx, ml);
+          pompaMulai(kalibMotorIdx, 1);
           tampilToast("Running...");
         }
       }
@@ -243,15 +242,17 @@ void tanganiTombol(int t) {
       }
       if (t == P_KIRI || t == P_KANAN) {
         int delta = (t == P_KANAN) ? 5 : -5;
-        int idx = kalibMotorIdx - 3;  // 0=Sabun, 1=Limbah
-        kalibDuty[idx] = constrain(kalibDuty[idx] + delta, 0, 255);
+        int idx = kalibMotorIdx - 3;
+        if (kalibDCCursor == 1) {
+          kalibDuty[idx] += delta;
+          if (kalibDuty[idx] < 0) kalibDuty[idx] = 0;
+          if (kalibDuty[idx] > 255) kalibDuty[idx] = 255;
+        }
         break;
       }
       if (t == P_ENTER) {
         if (kalibDCCursor == 0) {
-          // START: aktifkan motor DC
-          int idx = kalibMotorIdx - 3;
-          if (idx == 0) pompaSabunSet(true);
+          if (kalibMotorIdx == 3) pompaSabunSet(true);
           else pompaLimbahSet(true);
           kalibMotorRunning = true;
           kalibMotorStartMs = millis();
