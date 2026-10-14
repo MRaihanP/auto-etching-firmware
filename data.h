@@ -42,6 +42,16 @@ const char* menuUtama[JUMLAH_MENU] = {
   "Kalibrasi"
 };
 
+// ================= MENU KALIBRASI =================
+// Pusat kalibrasi semua: sensor (level/suhu/udara) + aktuator (pompa & motor).
+// Placeholder "X" (belum ada sub-halaman) ditandai di judul halaman tersebut.
+#define JUMLAH_MENU_KALIB 10
+const char* menuKalibrasi[JUMLAH_MENU_KALIB] = {
+  "Sensor Level", "Sensor Suhu", "Sensor Udara",
+  "Motor HCl", "Motor H2O2", "Motor Air",
+  "Motor Air Sabun", "Motor Limbah", "Motor Agitasi", "Exhaust Fan"
+};
+
 // ================= HALAMAN & STATE =================
 enum Halaman {
   HAL_MENU_UTAMA,
@@ -52,15 +62,45 @@ enum Halaman {
   HAL_CFG_LIST,
   HAL_CFG_AKSI,
   HAL_CFG_EDIT,
-  HAL_LEVEL
+  HAL_LEVEL,
+  HAL_KALIB_LIST,
+  HAL_KALIB_SENSOR_LIST,
+  HAL_KALIB_SENSOR,
+  HAL_KALIB_POMPA_LIST,
+  HAL_KALIB_POMPA,
+  HAL_KALIB_DC_LIST,
+  HAL_KALIB_DC,
+  HAL_KALIB_AGITASI,
+  HAL_KALIB_FAN,
+  HAL_KALIB_UDARA,
+  HAL_KALIB_SUHU
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
-  "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL"
+  "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_LIST",
+  "KALIB_SENSOR_LIST", "KALIB_SENSOR", "KALIB_POMPA_LIST", "KALIB_POMPA",
+  "KALIB_DC_LIST", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN",
+  "KALIB_UDARA", "KALIB_SUHU"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
 int presetTerpilih = 0;
+
+// State menu Kalibrasi
+int kalibIdx = 0;             // item menu Kalibrasi yang dipilih
+int kalibSensorIdx = 0;       // tangki yang dikalibrasi di HAL_KALIB_SENSOR
+int kalibBaris = 0;           // baris parameter yang dipilih
+bool kalibBerubah = false;    // ada nilai yang belum disimpan
+int kalibPompaIdx = 0;        // 0=HCl, 1=H2O2, 2=Air (pompa stepper)
+int kalibPompaBaris = 0;
+int kalibDcIdx = 0;           // 0=Air Sabun, 1=Limbah (pompa DC)
+int kalibDcBaris = 0;
+int kalibAgitasiBaris = 0;
+int kalibFanBaris = 0;
+int kalibUdaraBaris = 0;
+int kalibSuhuBaris = 0;
+// Judul untuk HAL_PLACEHOLDER (item kalibrasi yang belum punya sub-halaman)
+const char* placeholderJudul = "";
 
 // Dirty flag: layar hanya digambar ulang kalau true
 bool perluGambar = true;

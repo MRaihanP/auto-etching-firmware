@@ -5,6 +5,187 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
+
+Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya
+halaman asli (tidak ada lagi "Halaman ini belum tersedia"), nilainya bisa
+diedit dan tersimpan. **Logika test/auto-kalibrasi belum ada** — itu tahap
+berikutnya.
+
+**File baru `sensor_extra.h`**
+- DS18B20 (GPIO10) via OneWire + DallasTemperature: `suhuInit()`, `suhuBaca()`.
+  `requestTemperatures()` blocking ~750ms → **hanya dipanggil dari halaman
+  Kalib Sensor Suhu** (1x per 2.5 detik), tidak pernah di `loop()`.
+- MQ-135 (GPIO9) via `analogRead`: `udaraInit()`, `udaraBaca()`.
+- Nilai kalibrasi aktuator: `langkahPerMlX1000[3]`, `pompaDcMlPerDtkX10[2]`,
+  `agitasiDutyMin`, `fanPwmMin`, `mq135Baseline`, `mq135Margin`,
+  `ds18b20OffsetX10` + status nyala `kalibAgitasiNyala` / `kalibFanNyala`.
+- `pompaTerapkanKalibrasi()` menyalin `langkahPerMlX1000` → `motor.h` (dipakai
+  `pompaMulai`), jadi angka yang diedit **langsung dipakai proses dosing**.
+
+**Halaman baru (8, untuk 9 item menu)**
+| Item | Halaman |
+|---|---|
+| Motor HCl / H2O2 / Air | `Pilih Pompa` → `Kalib Pompa` (Langkah/ml per pompa) |
+| Motor Air Sabun / Limbah | `Pilih Pompa DC` → `Kalib Pompa DC` (ml per detik) |
+| Motor Agitasi | Duty PWM + status nyala/mati |
+| Exhaust Fan | PWM + status nyala/mati |
+| Sensor Udara | Baseline / Margin / bacaan ADC / status NORMAL |
+| Sensor Suhu | Offset / bacaan / suhu terapkan |
+
+- `L_KALIB_POMPA` + `L_KALIB_DC` ditambahkan, `JUMLAH_LIST` 6 → 8.
+- `ui.h`: helper `kalibBaris()` + `kalibFooter()` supaya semua halaman
+  parameter punya tampilan sama.
+
+**Tombol**
+- Pompa / Pompa DC: `KIRI/KANAN` ubah nilai, `ENTER` = toast "Test: belum"
+- Agitasi & Fan: `KIRI/KANAN` ubah, `ENTER` = **nyala/mati** motor saat itu
+  (langsung ada feedback, selalu dimatikan lagi saat `BACK`)
+- MQ-135: `ENTER` di baris Baseline = tetapkan bacaan sekarang jadi acuan
+- DS18B20: `KIRI/KANAN` geser offset ±0.1 °C
+- Semua halaman: `BACK` + dialog simpan (`simpanKalib()` / `muatKalib()`)
+
+**Penyimpanan (`storage.h`)**
+- Blob baru `"kal"` (`DataKalib`, versi 1 + CRC) berisi semua nilai di atas
+  dengan validasi rentang; data rusak/versi beda → nilai bawaan.
+
+**`dcmotor.h`**
+- Tambah `agitasiSetDuty(duty 0..255)` dan `fanSetAt(pwm 0..255)` — sebelumnya
+  hanya ada `agitasiSet(speed 1..5)` dan `fanSet(bool)` yang tidak bisa dipakai
+  untuk slider kalibrasi.
+
+**Belum dikerjakan (tahap berikutnya)**
+- Pompa stepper & pompa DC: tombol test (jalan 50 ml / 10 detik, hitung
+  langkah otomatis, auto-stop 10 detik, E-stop, batal via BACK)
+- DS18B20: kalibrasi cepat dengan termometer pembanding
+- MQ-135: pengingat preheat 60 detik sebelum set baseline
+
+---
+
+## [2026-10-14] v0.5.3 — Level Cairan murni monitoring + halaman pilih tangki
+
+**Level Cairan benar-benar read-only (`.ino`)**
+- `ENTER` **tidak lagi** membuka Kalibrasi Sensor Level. Halaman ini khusus
+  monitoring isi jerigen, jadi tidak ada tombol yang bisa mengubah data
+  (%)/ml saat sedang memantau.
+- `ENTER` sekarang hanya menampilkan toast info `raw <n>  d<n>` (angka mentah
+  untuk troubleshooting), tanpa pindah halaman.
+- Tombol: ATAS/BAWAH pindah baris · BACK keluar · ENTER info.
+
+**Halaman baru: pilih tangki (`data.h`, `ui.h`, `.ino`)**
+- `HAL_KALIB_SENSOR_LIST`: sebelum mengedit parameter, user memilih tangki.
+  Sebelumnya menu Kalibrasi -> Sensor Level langsung membuka tangki yang
+  terakhir dilihat, sehingga tidak ada cara memilih tangki dari menu itu.
+- Tampilan memakai `gambarList()` yang sama dengan menu lain (terpilih di
+  tengah, scroll sendiri), isi baris `HCl    72% 1800ml` / `uncal`.
+- `L_KALIB_SENSOR` ditambahkan, `JUMLAH_LIST` 5 → 6.
+
+**Alur & berlaku-nya data**
+```
+Menu Utama -> Level Cairan              (monitoring % + ml, live)
+Menu Utama -> Kalibrasi -> Sensor Level -> pilih tangki -> parameter
+```
+- Setelah disimpan, nilai langsung dipakai di RAM; Level Cairan sudah
+  menampilkan angka baru karena refresh tiap 50ms — tidak perlu tombol
+  "terapkan"/muat ulang.
+- `HAL_KALIB_SENSOR_LIST` ikut live-refresh (baris % ikut bergerak).
+
+---
+
+## [2026-10-14] v0.5.2 — Menu Kalibrasi (10 item) + Kalib Sensor Level, Level Cairan jadi read-only
+
+**Menu Kalibrasi (`data.h`, `ui.h`, `.ino`)**
+- Menu utama item 4 tidak lagi `HAL_PLACEHOLDER`, tapi halaman `HAL_KALIB_LIST`
+  berisi 10 item: Sensor Level, Sensor Suhu, Sensor Udara, Motor HCl, Motor H2O2,
+  Motor Air, Motor Air Sabun, Motor Limbah, Motor Agitasi, Exhaust Fan.
+- Scroll gratis dari `gambarList()` yang sudah ada: item terpilih selalu di
+  tengah, item lain bergeser sendiri (pola sama dengan menu Konfigurasi).
+  `L_KALIB` ditambah, `JUMLAH_LIST` 4 → 5.
+- Tombol seragam di semua item: ATAS/BAWAH pindah, KIRI/KANAN ubah nilai,
+  ENTER jalankan aksi, BACK keluar + dialog simpan.
+- Item selain "Sensor Level" → `HAL_PLACEHOLDER` dengan judul item tersebut
+  (Fase 3 & 4 belum dikerjakan).
+
+**Kalib Sensor Level (`sensor.h`, `ui.h`, `.ino`)**
+- Halaman baru `HAL_KALIB_SENSOR`, 3 baris nilai + footer petunjuk tombol:
+  `Kapasitas` (ml) · `Baseline 0%` · `Delta 100%`.
+  `KIRI/KANAN` ubah Kapasitas (±50 ml) dan Delta 100% (±10, koreksi manual),
+  `ENTER` pada baris Baseline/Delta memulai pengambilan sampel.
+- **Kalibrasi pakai rata-rata 40 sampel (~2 detik)**, bukan 1 sampel momentan.
+  Selama sampel diambil, halaman menampilkan progress bar di footer dan
+  progres di header; tombol lain diabaikan (BACK = batal).
+- KANAN/100% ditolak kalau delta penuh < `TOUCH_DELTA_MIN*2` (tangki kemungkinan
+  belum penuh) — dicatat di Serial, tidak disimpan.
+
+**Persen tidak lagi merayap sendiri (`sensor.h`)**
+- Ditambah `sensorKering[]`: baseline 0% yang **fixed** (diisi saat kalibrasi).
+  Persen dihitung dari `sensorKering`, bukan dari baseline adaptif. Inilah
+  akar masalah angka yang berganti-ganti sendiri: baseline adaptif mengejar
+  noise (k=8 saat dekat), jadi `delta` jadi noise ganda.
+- `sensorBaseline[]` (adaptif) tetap dipakai untuk deteksi biner AKTIF/tidak.
+- `sensorKapasitasMl[]` → kolom ml: `ml = persen × kapasitas / 100`.
+
+**Fix bar baris terpilih (`ui.h`)**
+- Pita putih baris terpilih sekarang setinggi **1 baris penuh** (teks + bar = 12px),
+  bukan cuma 8px baris teks. Sebelumnya bar progress baris terpilih digambar
+  **hitam di atas background hitam** → tidak kelihatan, dan karena baris
+  terpilih-lah yang bergeser saat scroll, gejalanya "bar hilang saat discroll".
+- Lebar pita diperlebar `x=0..115` → `x=0..122` supaya seluruh bar di atas pita.
+- Efek sampingnya bagus: pada baris terpilih, bagian bar yang kosong tetap putih
+  dan yang terisi hitam → progress-nya kelihatan pembedaannya.
+
+**Level Cairan jadi read-only (`ui.h`, `.ino`)**
+- Kolom kanan jadi `72% 1800 ml` (ml hanya kalau Kapasitas sudah diisi).
+- Tombol KIRI/KANAN (set 0%/100% langsung) **dihapus** dari sini supaya tidak
+  salah pakai saat monitoring; `ENTER` sekarang membuka Kalib Sensor Level
+  untuk tangki yang sedang dipilih.
+
+**Penyimpanan (`storage.h`)**
+- `FORMAT_VERSI_AMBANG` 2 → 3: `DataAmbang` tambah `kering[5]` + `kapasitasMl[5]`.
+  Data versi lama otomatis dianggap belum terkalibrasi → tampil `uncal`.
+
+---
+
+## [2026-10-14] v0.5.1 — Halaman "Level Cairan": nama + persen, bar progress, scroll
+
+**Tampilan (`ui.h` `gambarLevel`):**
+- Tabel debug (P11/raw/delta/AKTIF/counter) diganti: satu baris per tangki dengan
+  **nama (kiri) + persentase (kanan) sejajar**, lalu **bar progress 3px** di
+  bawahnya (x=2..121). Baris terpilih dibalik (latar putih, teks hitam,
+  pita selebar x=0..115 supaya tidak menempel scrollbar).
+- `BARIS_LVL = 12` = teks 8 + bar 3 + **jeda 1** → **3 baris utuh** muat di area
+  konten 37px, DAN antar baris ada 1px pemisah. Tanpa jeda, pita putih baris
+  terpilih menempel di bar milik baris tetangga dan saat halaman di-scroll
+  terlihat seperti "bar tertutup putih".
+- Baris yang terpotong di tepi layar di-culling, jadi tidak ada teks/bar separuh.
+- Scrollbar tipis di x=126 + auto-scroll supaya baris terpilih selalu terlihat.
+- Tangki yang belum dikalibrasi tampil `uncal` + bar kosong (bukan `0%`).
+
+**Persen & kalibrasi (`sensor.h`, `config.h`):**
+- `sensorPersen[]` = `|raw - baseline| / deltaPenuh * 100`, difilter
+  (rata-rata bergerak /4) supaya bar tidak bergetar.
+- `sensorDeltaPenuh[]` + `sensorKalibValid[]`: penuh dikalibrasi user, bukan
+  asumsi. Default `TOUCH_DELTA_PENUH_AWAL 600` hanya sampai tangki dikalibrasi.
+- `levelSetNol(i)` / `levelSetPenuh(i)`: `deltaPenuh` minimal `TOUCH_DELTA_MIN*2`
+  supaya persen tidak meloncat.
+- Mode digital (`SENSOR_TOUCH_READ=0`): persen hanya 0 atau 100.
+- `sensorUpdate()` sekarang refresh tampilan tiap 50ms selama halaman ini aktif
+  (bar ikut bergerak), bukan hanya saat state aktif/tidak berubah.
+
+**Tombol (`.ino` `HAL_LEVEL`):**
+- `ATAS/BAWAH` pindah baris terpilih (scroll mengikuti)
+- `KIRI` = tangki terpilih 0% (harus kosong), `KANAN` = 100% (harus penuh)
+- `ENTER` = tampilkan `nama raw delta` lewat toast + reset counter
+- `BACK` = keluar; kalau ada perubahan, dialog simpan → ENTER simpan ke NVS,
+  BACK buang (kembali ke nilai tersimpan lewat `muatAmbang()`)
+
+**Penyimpanan (`storage.h`):**
+- `FORMAT_VERSI_AMBANG` 1 → 2, `DataAmbang` tambah `deltaPenuh[5]` + `valid[5]`
+  (data versi 1 otomatis dianggap belum terkalibrasi → tampil `uncal`).
+- `sensorKalibDimuat` mencegah `sensorInit()` menimpa kalibrasi dari NVS.
+
+---
+
 ## [2026-10-13] v0.8.3 — Fix critical bugs, non-blocking buzzer, dua tone baru
 
 **Perbaikan Kritis:**

@@ -5,6 +5,47 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-13] v0.8.3 — Redesign Level Cairan: nama + % sejajar, bar progresif, scroll per baris
+
+**Perubahan:**
+- `ui.h` (`gambarCadangan`): halaman "Cadangan Senyawa" → **"Level Cairan"**.
+  Satu baris per cairan berisi nama (kiri, `x=2`) + persentase (kanan,
+  `x=SCREEN_WIDTH-6`, **sejajar** di baris yang sama), lalu **bar progress**
+  4px di bawahnya (lebar 120px, `x=2..122`). Baris terpilih dibalik
+  (baris putih, teks hitam). Culling hanya menggambar baris yang utuh,
+  jadi tidak ada bar/teks terpotong di tepi layar.
+- Kolom `ml` dihapus dari tampilan. Untuk tangki Limbah, bar sekarang
+  berarti "seberapa penuh tangki" (sebelumnya `sisa X ml`).
+- Tangki yang belum terkalibrasi (`kalibrasiSensorValid[i] == false`)
+  menampilkan `uncal` di kanan dan bar kosong — bukan `0%`, supaya tidak
+  disalahartikan sebagai tangki kosong.
+- `ui.h`: `BARIS_LVL = 13` (teks 8px + jeda 1px + bar 4px). 5 baris =
+  65px, melebihi area konten 38px, jadi halaman wajib di-scroll.
+  Nilai 13px dipilih (bukan 14px) supaya baris ke-3 tidak terpotong 1px.
+- `ui.h` (`uiScrollSet/uiScrollAtur/uiScrollKe`): tambah parameter
+  `langkah` dengan default `BARIS_H`, sehingga halaman dengan tinggi
+  baris sendiri bisa melompat 1 baris utuh per tombol. Halaman lain
+  (MQ-135, DS18B20, Agitasi, Kalibrasi Sensor) tidak berubah karena
+  memakai nilai default.
+- `oled_pcb_baruuu.ino` (`HAL_CADANGAN`): `ATAS/BAWAH` =
+  `uiScrollAtur(±1, BARIS_LVL)` — scroll bebas per 1 baris cairan.
+  `KIRI/KANAN` tetap pindah baris terpilih, dan `uiScrollKe()` menarik
+  scroll supaya baris terpilih selalu terlihat.
+- `data.h`: label menu utama index 2 `"Cadangan Senyawa"` →
+  `"Level Cairan"`, agar sama dengan judul header.
+- `config.h`: `FW_VERSI` → v0.8.3
+
+**Tidak berubah:** `sensor.h` — `sensorPersen[]` sudah dihitung tiap
+50ms dari `hitungMl()` + kalibrasi 5 titik, dan `sensor.h` sudah memicu
+`perluGambar` selama halaman ini aktif, jadi tampilan ikut live refresh.
+
+**Catatan:** persentase hanya muncul setelah tiap tangki dikalibrasi di
+Kalibrasi → Sensor Level (titik 0/25/50/75/100% + kapasitas tangki).
+
+**Backup sebelum perubahan:** folder ini (`v0.8.2_2026-10-12`).
+
+---
+
 ## [2026-10-12] v0.8.2 — "Durasi total" dikembalikan dan berfungsi
 
 **Perubahan:**

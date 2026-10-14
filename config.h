@@ -70,6 +70,9 @@
 #define TOUCH_ADAPT_CEPAT   8      // adaptasi baseline saat nilai dekat
 #define TOUCH_ADAPT_LAMBAT  512    // adaptasi baseline saat nilai jauh (jangan serap sentuhan)
 #define TOUTH_KALIB_SAMPEL  40     // jumlah sampel awal untuk mencari baseline (kering)
+// Nilai |delta| touch yang dianggap 100% level (hanya sampai tangki dikalibrasi
+// di halaman Level Cairan; nilai ini hanya nilai awal saat belum dikalibrasi).
+#define TOUCH_DELTA_PENUH_AWAL 600
 #define SENSOR_LOG_PERIOD_MS 1000  // cetak diagnostik raw semua sensor (0 = mati)
 
 // Driver TB6612FNG x2 (1 arah: INA->3.3V, INB->GND)
@@ -96,4 +99,4 @@
 #define PIN_MQ135       9     // analog (kualitas udara)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.0"
+#define FW_VERSI  "v0.5.4"

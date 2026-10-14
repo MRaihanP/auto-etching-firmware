@@ -24,9 +24,17 @@ void agitasiSet(int speed) {
   analogWrite(PIN_PWA_D1, pwm);
 }
 
+// Duty langsung 0..255 (dipakai halaman Kalibrasi Agitasi + test manual)
+void agitasiSetDuty(int duty) {
+  analogWrite(PIN_PWA_D1, constrain(duty, 0, 255));
+}
+
 void pompaSabunSet(bool on) { analogWrite(PIN_PWB_D1, on ? 255 : 0); }
 void pompaLimbahSet(bool on) { analogWrite(PIN_PWA_D2, on ? 255 : 0); }
 void fanSet(bool on) { analogWrite(PIN_PWB_D2, on ? 255 : 0); }
+
+// PWM langsung 0..255 (dipakai halaman Kalibrasi Exhaust Fan)
+void fanSetAt(int pwm) { analogWrite(PIN_PWB_D2, constrain(pwm, 0, 255)); }
 
 void dcmotorStopAll() {
   analogWrite(PIN_PWA_D1, 0);

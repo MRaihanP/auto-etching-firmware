@@ -30,6 +30,25 @@ unsigned long sensorTerakhirMs = 0;
 int  levelSel = 0;
 bool sensorKalibrasi = true;            // true = masih mencari baseline
 
+// ----- level dalam persen & ml (untuk tampilan bar) -----
+// persen = |raw - kering| / deltaPenuh * 100, difilter supaya tidak bergetar.
+// PENTING: sensorKering (baseline 0%) TIDAK adaptif. Baseline adaptif
+// (sensorBaseline) hanya untuk deteksi biner AKTIF/tidak - kalau dipakai
+// untuk persen, baseline akan "mengejar" noise dan persen merayap sendiri.
+int  sensorKering[JUMLAH_SENSOR];     // raw saat tangki kosong (fixed)
+int  sensorDeltaPenuh[JUMLAH_SENSOR]; // |raw - kering| saat tangki penuh
+int  sensorKapasitasMl[JUMLAH_SENSOR];// kapasitas tangki (untuk kolom ml)
+bool sensorKalibValid[JUMLAH_SENSOR];
+int  sensorPersen[JUMLAH_SENSOR];
+int  sensorMl[JUMLAH_SENSOR];
+// true setelah muatAmbang() membaca NVS, supaya sensorInit() tidak menimpa
+// kalibrasi yang sudah tersimpan dengan nilai awal.
+bool sensorKalibDimuat = false;
+
+// Definisi lengkap ada di bawah (setelah sensorUpdate) - deklarasi di sini
+// supaya sensorUpdate() bisa memanggilnya.
+void sensorKalibTick();
+
 // Variabel level lama ( dipakai minimal agar UI kompatibel )
 int  ambang[JUMLAH_SENSOR]        = { 0, 0, 0, 0, 0 };
 int  ambangCadangan[JUMLAH_SENSOR];
@@ -46,6 +65,14 @@ bool sensorInit() {
     sensorCnt[i]      = 0;
     sensorSentuh[i]   = 0;
     sensorIsi[i]      = false;
+    sensorPersen[i]       = 0;
+    sensorMl[i]           = 0;
+    if (!sensorKalibDimuat) {
+      sensorKering[i]      = 0;
+      sensorDeltaPenuh[i]  = TOUCH_DELTA_PENUH_AWAL;
+      sensorKapasitasMl[i] = 0;
+      sensorKalibValid[i]  = false;
+    }
   }
   sensorKalibrasi = true;
   sensorOk = true;
@@ -97,6 +124,28 @@ void sensorAdaptBaseline(int i, int raw) {
 
 unsigned long sensorLogMs = 0;
 
+// ----- persen & ml level (dengan filter supaya bar tidak bergetar) -----
+void sensorHitungPersen(int i) {
+  if (!sensorKalibValid[i] || sensorDeltaPenuh[i] <= 0 || sensorKering[i] <= 0) {
+    sensorPersen[i] = 0;
+    sensorMl[i]     = 0;
+    return;
+  }
+  long refs = sensorKering[i] > 0 ? sensorKering[i] : sensorBaseline[i];
+  long d = (long)sensorRaw[i] - refs;
+  if (d < 0) d = -d;
+  long t = d * 100L / sensorDeltaPenuh[i];
+  if (t > 100) t = 100;
+  int target = (int)t;
+  sensorPersen[i] += (target - sensorPersen[i]) / 4;   // rata-rata bergerak
+  if (sensorPersen[i] < 0) sensorPersen[i] = 0;
+  if (sensorPersen[i] > 100) sensorPersen[i] = 100;
+
+  long ml = (long)sensorPersen[i] * sensorKapasitasMl[i] / 100;
+  sensorMl[i] += ((int)ml - sensorMl[i]) / 4;
+  if (sensorMl[i] < 0) sensorMl[i] = 0;
+}
+
 // Log periodik: pastikan nilai raw selalu terlihat di Serial (untuk tuning)
 void sensorLogPeriodik() {
 #if SENSOR_LOG_PERIOD_MS
@@ -146,9 +195,12 @@ void sensorUpdate() {
     int ambangAbs = (int)max((long)TOUCH_DELTA_MIN, (long)sensorBaseline[i] * TOUCH_DELTA_PERSEN / 100);
     sensorDelta[i] = raw - sensorBaseline[i];            // bertanda: bisa +/-
     aktif = !sensorKalibrasi && abs(sensorDelta[i]) >= ambangAbs;
+    sensorHitungPersen(i);
 #else
     sensorDelta[i] = raw;
     aktif = !sensorKalibrasi && (raw == 1);
+    // Mode digital tidak punya analog level: hanya 0% atau 100%
+    sensorPersen[i] = aktif ? 100 : 0;
 #endif
 
     // Debounce: hitung sampel berturut-turut saat kondisi BERUBAH dari state
@@ -192,16 +244,99 @@ void sensorUpdate() {
     berubah = true;
   }
   sensorLogPeriodik();
-  if (berubah && halaman == HAL_LEVEL) perluGambar = true;
+  sensorKalibTick();
+  // Level Cairan & Kalib Sensor menampilkan bar/angka -> refresh tiap pembacaan
+  if (halaman == HAL_LEVEL || halaman == HAL_KALIB_SENSOR ||
+      halaman == HAL_KALIB_SENSOR_LIST) perluGambar = true;
+  (void)berubah;
 }
 
-// ----- helper halaman Level Cairan (mode uji) -----
+// ----- helper halaman Level Cairan (read-only) & Kalibrasi Sensor Level -----
 void levelMasuk() {}
 
+// BACK pada dialog simpan -> buang perubahan kalibrasi (lihat .ino: muatAmbang)
 void levelBuang() {}
 
-void levelSetAmbangDariNilai(int i) {
-  dbg.println(F("[LEVEL] Ambang belum dipakai (mode uji touch)"));
+// ================= SAMPLER KALIBRASI 0% / 100% =================
+// Titik acuan diambil dari rata-rata SAMPEL_KALIB_N (40 x 50ms ~ 2 detik),
+// bukan 1 sampel momentan - 1 sampel bisa saja kena noise atau riak.
+#define SAMPEL_KALIB_N 40
+
+enum KalibJenis { KALIB_NOL = 0, KALIB_PENUH = 1 };
+
+bool kalibSampling    = false;   // true selama sampel sedang diambil
+int  kalibSampelIdx   = 0;       // index sensor yang dikalibrasi
+int  kalibSampelJenis = KALIB_NOL;
+long kalibSampelSum   = 0;
+int  kalibSampelN     = 0;       // jumlah sampel yang sudah terkumpul
+
+int sensorKalibProgres() {   // 0..100 untuk progress bar
+  return kalibSampling ? constrain(kalibSampelN * 100 / SAMPEL_KALIB_N, 0, 100) : 100;
 }
 
-void levelUbahAmbang(int i, int arah) {}
+// Mulai mengumpulkan sampel. Diabaikan kalau sampling masih berjalan.
+void sensorKalibMulai(int i, int jenis) {
+  if (i < 0 || i >= JUMLAH_SENSOR) return;
+  if (kalibSampling) return;
+  kalibSampling    = true;
+  kalibSampelIdx   = i;
+  kalibSampelJenis = jenis;
+  kalibSampelSum   = 0;
+  kalibSampelN     = 0;
+  dbg.print(F("[KALIB] Ambil sampel untuk "));
+  dbg.print(namaSensor[i]);
+  dbg.println(jenis == KALIB_NOL ? F(" (0%)") : F(" (100%)"));
+}
+
+// Dipanggil setiap sensorUpdate() (50ms) selama pengumpulan sampel
+void sensorKalibTick() {
+  if (!kalibSampling) return;
+  int i = kalibSampelIdx;
+  if (kalibSampelJenis == KALIB_NOL) kalibSampelSum += sensorRaw[i];
+  else {
+    long refs = sensorKering[i] > 0 ? sensorKering[i] : sensorBaseline[i];
+    long d = (long)sensorRaw[i] - refs;
+    if (d < 0) d = -d;
+    kalibSampelSum += d;
+  }
+  if (++kalibSampelN < SAMPEL_KALIB_N) return;
+
+  // ---- selesai: simpan rata-rata ----
+  int rata = (int)(kalibSampelSum / kalibSampelN);
+  kalibSampling = false;
+
+  if (kalibSampelJenis == KALIB_NOL) {
+    sensorKering[i]   = rata;
+    sensorBaseline[i] = rata;      // baseline adaptif mulai dari titik kosong ini
+    sensorCnt[i]      = 0;
+    sensorAktif[i]    = false;
+    sensorIsi[i]      = false;
+    sensorPersen[i]   = 0;
+    sensorMl[i]       = 0;
+    dbg.print(F("[KALIB] "));
+    dbg.print(namaSensor[i]);
+    dbg.print(F(" 0% = "));
+    dbg.println(rata);
+  } else {
+    if (rata < TOUCH_DELTA_MIN * 2) {
+      dbg.print(F("[KALIB] GAGAL "));
+      dbg.print(namaSensor[i]);
+      dbg.println(F(": delta penuh terlalu kecil (tangki mungkin belum penuh)"));
+      return;
+    }
+    sensorDeltaPenuh[i] = rata;
+    sensorKalibValid[i] = true;
+    sensorPersen[i]     = 100;
+    dbg.print(F("[KALIB] "));
+    dbg.print(namaSensor[i]);
+    dbg.print(F(" 100% = delta "));
+    dbg.println(rata);
+  }
+}
+
+// Ubah kapasitas tangki (ml) - kolom ml di tampilan mengikuti nilai ini
+void sensorSetKapasitas(int i, int ml) {
+  if (i < 0 || i >= JUMLAH_SENSOR) return;
+  sensorKapasitasMl[i] = constrain(ml, 0, 20000);
+  sensorHitungPersen(i);
+}

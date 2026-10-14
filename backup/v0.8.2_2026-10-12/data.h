@@ -66,7 +66,7 @@ KalibrasiData kalibrasi;
 const char* menuUtama[JUMLAH_MENU] = {
   "Pilih Preset",
   "Buat Preset",
-  "Cadangan Senyawa",
+  "Level Cairan",
   "Kalibrasi",
   "Tentang"
 };
