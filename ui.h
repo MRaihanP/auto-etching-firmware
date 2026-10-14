@@ -513,6 +513,11 @@ void gambarKalibStepper() {
 }
 
 // ================= HALAMAN: KALIBRASI DC (Pompa Sabun/Limbah) =================
+// Konten lebih tinggi dari area tampil -> scroll agar baris terakhir tidak terpotong.
+// Baris: START (h=16), Duty (h=12), Hasil test (h=12).
+const int KALIB_DC_CONTENT_H = 40;              // 16 + 12 + 12
+const int KALIB_DC_ROW_TOP[3]   = { 0, 16, 28 }; // offset dari HEADER_H+4
+
 void gambarKalibDC() {
   const char* nama[] = { "Pompa Sabun", "Pompa Limbah" };
   gambarHeader(nama[kalibMotorIdx - 3]);
@@ -520,38 +525,67 @@ void gambarKalibDC() {
   oled.setTextSize(1);
   oled.setTextColor(WHITE);
 
-  int y = HEADER_H + 4;
-  // START button dengan rounded corner
-  bool selStart = (kalibDCCursor == 0);
-  if (selStart) {
-    oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
-    oled.setTextColor(BLACK);
-  } else {
-    oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
-    oled.setTextColor(WHITE);
-  }
-  teksTengah("START", y + 2, 1);
-  y += 16;
+  int maxScroll = max(0, KALIB_DC_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
+  if (kalibDCScroll < 0) kalibDCScroll = 0;
+  if (kalibDCScroll > maxScroll) kalibDCScroll = maxScroll;
 
-  // Duty cycle
-  bool selDuty = (kalibDCCursor == 1);
-  if (selDuty) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-  oled.setTextColor(selDuty ? BLACK : WHITE);
-  oled.setCursor(2, y);
-  oled.print(F("Duty"));
+  int baseY = HEADER_H + 4 - kalibDCScroll;
   char buf[16];
-  sprintf(buf, "%d%%", kalibDuty[kalibMotorIdx - 3] * 100 / 255);
-  teksKanan(buf, SCREEN_WIDTH - 2, y);
-  y += 12;
 
-  // Hasil test (ml)
-  bool selMl = (kalibDCCursor == 2);
-  if (selMl) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-  oled.setTextColor(selMl ? BLACK : WHITE);
-  oled.setCursor(2, y);
-  oled.print(F("Hasil test"));
-  sprintf(buf, "%d ml", (int)kalibMl[kalibMotorIdx - 3]);
-  teksKanan(buf, SCREEN_WIDTH - 2, y);
+  // --- Baris 1: START (rounded) ---
+  {
+    int y = baseY + KALIB_DC_ROW_TOP[0];
+    bool sel = (kalibDCCursor == 0);
+    if (y + 12 > HEADER_H && y < AREA_BAWAH) {
+      if (sel) {
+        oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+        oled.setTextColor(BLACK);
+      } else {
+        oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+        oled.setTextColor(WHITE);
+      }
+      teksTengah("START", y + 2, 1);
+    }
+  }
+
+  // --- Baris 2: Duty cycle ---
+  {
+    int y = baseY + KALIB_DC_ROW_TOP[1];
+    bool sel = (kalibDCCursor == 1);
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("Duty"));
+      sprintf(buf, "%d%%", kalibDuty[kalibMotorIdx - 3] * 100 / 255);
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 3: Hasil test ---
+  {
+    int y = baseY + KALIB_DC_ROW_TOP[2];
+    bool sel = (kalibDCCursor == 2);
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("Hasil test"));
+      sprintf(buf, "%d ml", (int)kalibMl[kalibMotorIdx - 3]);
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  oled.setTextColor(WHITE);
+
+  // --- Indikator scroll ---
+  if (maxScroll > 0) {
+    const int x = SCREEN_WIDTH - 4;
+    if (kalibDCScroll > 0)
+      oled.fillTriangle(x - 2, HEADER_H + 3, x + 2, HEADER_H + 3, x, HEADER_H + 1, WHITE);
+    if (kalibDCScroll < maxScroll)
+      oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
+  }
 }
 
 // ================= HALAMAN: KALIBRASI AGITASI =================

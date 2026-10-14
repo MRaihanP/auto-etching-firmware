@@ -197,6 +197,7 @@ void tanganiTombol(int t) {
           pindahHalaman(HAL_KALIB_STEPPER);
         } else if (kalibMotorIdx <= 4) {
           // Pompa Sabun, Limbah (DC)
+          kalibDCScroll = 0;
           pindahHalaman(HAL_KALIB_DC);
         } else if (kalibMotorIdx == 5) {
           // Motor Agitasi
@@ -235,9 +236,22 @@ void tanganiTombol(int t) {
 
     // ---------- Kalibrasi DC (Pompa Sabun/Limbah) ----------
     case HAL_KALIB_DC:
-      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_BACK) { kalibDCScroll = 0; pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
       if (t == P_ATAS || t == P_BAWAH) {
         kalibDCCursor = (kalibDCCursor + 1) % 3;
+        // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
+        {
+          static const int rowTop[3]  = { 0, 16, 28 };
+          static const int rowH[3]    = { 12, 10, 10 };
+          int maxScroll = max(0, KALIB_DC_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
+          int visibleH  = AREA_BAWAH - (HEADER_H + 4);
+          if (rowTop[kalibDCCursor] - kalibDCScroll + rowH[kalibDCCursor] > visibleH)
+            kalibDCScroll = rowTop[kalibDCCursor] + rowH[kalibDCCursor] - visibleH;
+          if (rowTop[kalibDCCursor] - kalibDCScroll < 0)
+            kalibDCScroll = rowTop[kalibDCCursor];
+          if (kalibDCScroll > maxScroll) kalibDCScroll = maxScroll;
+          if (kalibDCScroll < 0) kalibDCScroll = 0;
+        }
         break;
       }
       if (t == P_KIRI || t == P_KANAN) {
