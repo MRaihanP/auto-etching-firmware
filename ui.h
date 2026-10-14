@@ -623,8 +623,8 @@ void gambarKalibAgitasi() {
 }
 
 // ================= HALAMAN: KALIBRASI SENSOR SUHU =================
-// 3 blok: nama di atas tengah, di bawahnya "Suhu saat ini: xx.x°C".
-// KANAN menambah offset, KIRI mengurangi. Scroll agar semua blok terlihat.
+// 3 blok. Tiap blok: nama di atas tengah; baris bawah berisi "addr: x" (kiri)
+// dan "xx.x°C" (kanan). ENTER pindah field aktif, KIRI/KANAN mengubahnya.
 void gambarKalibSuhu() {
   gambarHeader("Sensor Suhu");
 
@@ -639,28 +639,49 @@ void gambarKalibSuhu() {
     int y = baseY + SUHU_ROW_TOP[i];
     if (y + SUHU_ROW_H < HEADER_H || y > AREA_BAWAH) continue;
 
-    bool sel = (i == kalibSuhuIdx);
-    if (sel) oled.drawRoundRect(0, y - 1, SCREEN_WIDTH, SUHU_ROW_H - 1, 3, WHITE);
+    bool blokSel = (i == kalibSuhuIdx);
+    // Kotak selector: inset 2px dari kiri/kanan, 1px dari bawah blok.
+    if (blokSel) oled.drawRoundRect(2, y - 1, SCREEN_WIDTH - 4, SUHU_ROW_H - 2, 3, WHITE);
 
-    // Nama sensor, di atas tengah
+    // Nama sensor di atas tengah (2px dari atas kotak)
     oled.setTextColor(WHITE);
-    teksTengah(namaSensorSuhu[i], y, 1);
+    teksTengah(namaSensorSuhu[i], y + 1, 1);
 
-    // "Suhu saat ini:" kiri, nilai kanan
-    char buf[24];
-    oled.setCursor(3, y + 9);
-    oled.print(F("Suhu saat ini:"));
-    sprintf(buf, "%.1f", sensorSuhu(i));
-    int16_t x1, y1; uint16_t w, h;
-    oled.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
-    int vx = SCREEN_WIDTH - 4 - (int)w - 8;   // sisakan ruang untuk "°C"
-    oled.setCursor(vx, y + 9);
+    int rowY = y + 10;              // baris addr + suhu, 2px dari nama
+    bool fieldAddr  = blokSel && kalibSuhuField == 0;
+    bool fieldSuhu  = blokSel && kalibSuhuField == 1;
+
+    char buf[16];
+
+    // --- addr: x (kiri) ---
+    sprintf(buf, "addr:%d", kalibSuhuAddr[i]);
+    if (fieldAddr) oled.fillRect(4, rowY - 1, 38, 10, WHITE);
+    oled.setTextColor(fieldAddr ? BLACK : WHITE);
+    oled.setCursor(5, rowY);
     oled.print(buf);
-    // Simbol derajat (lingkaran kecil) + huruf C
-    oled.drawCircle(vx + (int)w + 2, y + 12, 1, WHITE);
-    oled.setCursor(vx + (int)w + 6, y + 9);
-    oled.print(F("C"));
+
+    // --- xx.x °C (kanan) ---
+    int vx = SCREEN_WIDTH - 7;
+    uint16_t warnaTeks = fieldSuhu ? BLACK : WHITE;
+    if (fieldSuhu) oled.fillRect(vx - 30, rowY - 1, 31, 10, WHITE);
+    oled.setTextColor(warnaTeks);
+    float t = sensorSuhu(i);
+    if (sensorSuhuValid(i)) {
+      sprintf(buf, "%.1f", t);
+      int16_t x1, y1; uint16_t w, h;
+      oled.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
+      oled.setCursor(vx - (int)w - 6, rowY);
+      oled.print(buf);
+      // Simbol derajat = lingkaran kecil (font tidak punya glyph "°")
+      oled.drawCircle(vx - 5, rowY + 3, 1, warnaTeks);
+      oled.setCursor(vx - 1, rowY);
+      oled.print(F("C"));
+    } else {
+      oled.setCursor(vx - 30, rowY);
+      oled.print(F("--.-C"));
+    }
   }
+  oled.setTextColor(WHITE);
 
   // Indikator scroll
   if (maxScroll > 0) {
@@ -673,37 +694,31 @@ void gambarKalibSuhu() {
 }
 
 // ================= HALAMAN: KALIBRASI SENSOR UDARA (MQ-135) =================
-// "MQ-135" di tengah, lalu 2 baris: Udara Normal / Udara Kotor + value.
-// ENTER merekam bacaan saat itu sebagai acuan. Bacaan real-time di bawah tengah.
+// Dua baris acuan (Normal / Kotor) + bacaan real-time di bawah.
 void gambarKalibUdara() {
   gambarHeader("Sensor Udara");
 
   oled.setTextSize(1);
-  oled.setTextColor(WHITE);
 
-  // Judul MQ-135 di tengah atas
-  teksTengah("MQ-135", HEADER_H + 3, 1);
-
-  // Dua baris kalibrasi
   static const char* label[2] = { "Udara Normal", "Udara Kotor" };
   int nilai[2] = { mq135Normal, mq135Kotor };
-  int y = HEADER_H + 13;
-  for (int i = 0; i < 2; i++, y += 11) {
+  int y = HEADER_H + 4;
+  for (int i = 0; i < 2; i++, y += 12) {
     bool sel = (kalibUdaraSel == i);
-    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 11, WHITE);
     oled.setTextColor(sel ? BLACK : WHITE);
-    oled.setCursor(3, y);
+    oled.setCursor(4, y);
     oled.print(label[i]);
     char buf[12];
     sprintf(buf, "%d", nilai[i]);
-    teksKanan(buf, SCREEN_WIDTH - 3, y);
+    teksKanan(buf, SCREEN_WIDTH - 4, y);
   }
 
-  // Bacaan real-time, di bawah tengah
+  // Bacaan real-time di bawah tengah, dengan gap dari baris di atasnya
   oled.setTextColor(WHITE);
   char buf[24];
-  sprintf(buf, "Bacaan: %d", mq135Bacaan);
-  teksTengah(buf, AREA_BAWAH - 9, 1);
+  sprintf(buf, "Bacaan: %d ppm", mq135PPM);
+  teksTengah(buf, y + 6, 1);
 }
 
 // ================= HALAMAN: KALIBRASI FAN =================

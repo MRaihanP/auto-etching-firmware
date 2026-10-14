@@ -111,15 +111,16 @@ const char* namaSensorSuhu[JUMLAH_SUHU] = {
 };
 int kalibSuhuIdx    = 0;       // blok terpilih
 int kalibSuhuScroll = 0;       // scroll offset halaman suhu
-const int SUHU_ROW_TOP[3]  = { 0, 22, 44 };   // offset dari HEADER_H+3
-const int SUHU_ROW_H       = 20;              // tinggi tiap blok
+int kalibSuhuField  = 0;       // 0 = addr sensor, 1 = suhu saat ini
+const int SUHU_ROW_TOP[3]  = { 0, 26, 52 };   // offset dari HEADER_H+3 (gap 4px antar blok)
+const int SUHU_ROW_H       = 22;              // tinggi tiap blok
 const int SUHU_CONTENT_H   = SUHU_ROW_TOP[2] + SUHU_ROW_H + 3;
 
 // State Kalibrasi Sensor Udara (MQ-135)
 int kalibUdaraSel    = 0;     // 0 = normal, 1 = kotor
-int mq135Normal      = 0;     // baseline udara bersih
-int mq135Kotor       = 0;     // baseline udara kotor
-int mq135Bacaan      = 0;     // bacaan real-time (diupdate di loop)
+int mq135Normal      = 0;     // acuan udara bersih (ppm)
+int mq135Kotor       = 0;     // acuan udara kotor (ppm)
+int mq135Bacaan      = 0;     // ADC real-time (diupdate di loop)
 
 // State Konfigurasi Preset
 enum DialogCfg { DLG_NONE, DLG_SIMPAN, DLG_HAPUS };

@@ -181,6 +181,7 @@ void tanganiTombol(int t) {
           // Sensor Suhu
           kalibSuhuIdx = 0;
           kalibSuhuScroll = 0;
+          kalibSuhuField = 0;
           pindahHalaman(HAL_KALIB_SUHU);
         } else if (a == 3) {
           // Sensor Udara (MQ-135)
@@ -348,16 +349,26 @@ void tanganiTombol(int t) {
       if (t == P_BACK) { kalibSuhuScroll = 0; pindahHalaman(HAL_KALIB_MAIN); break; }
       if (t == P_ATAS)  kalibSuhuIdx = max(0, kalibSuhuIdx - 1);
       if (t == P_BAWAH) kalibSuhuIdx = min(JUMLAH_SUHU - 1, kalibSuhuIdx + 1);
+      if (t == P_ENTER) kalibSuhuField = 1 - kalibSuhuField;   // pindah field aktif
       if (t == P_KIRI || t == P_KANAN) {
-        // KIRI/KANAN menyesuaikan offset kalibrasi sensor terpilih
-        float delta = (t == P_KANAN) ? 0.1f : -0.1f;
-        suhuOffsetX10[kalibSuhuIdx] += delta * 10.0f;
-        if (suhuOffsetX10[kalibSuhuIdx] >  200.0f) suhuOffsetX10[kalibSuhuIdx] =  200.0f;
-        if (suhuOffsetX10[kalibSuhuIdx] < -200.0f) suhuOffsetX10[kalibSuhuIdx] = -200.0f;
-        dbg.print(F("[KALIB-SUHU] "));
-        dbg.print(namaSensorSuhu[kalibSuhuIdx]);
-        dbg.print(F(" offset="));
-        dbg.println(suhuOffsetX10[kalibSuhuIdx] / 10.0f);
+        int arah = (t == P_KANAN) ? +1 : -1;
+        if (kalibSuhuField == 0) {
+          // Field addr: pilih sensor 1..3
+          kalibSuhuAddr[kalibSuhuIdx] = constrain(kalibSuhuAddr[kalibSuhuIdx] + arah, 1, 3);
+          dbg.print(F("[KALIB-SUHU] "));
+          dbg.print(namaSensorSuhu[kalibSuhuIdx]);
+          dbg.print(F(" addr="));
+          dbg.println(kalibSuhuAddr[kalibSuhuIdx]);
+        } else {
+          // Field suhu: atur offset kalibrasi ±0.1 °C
+          suhuOffsetX10[kalibSuhuIdx] += arah * 1.0f;
+          if (suhuOffsetX10[kalibSuhuIdx] >  200.0f) suhuOffsetX10[kalibSuhuIdx] =  200.0f;
+          if (suhuOffsetX10[kalibSuhuIdx] < -200.0f) suhuOffsetX10[kalibSuhuIdx] = -200.0f;
+          dbg.print(F("[KALIB-SUHU] "));
+          dbg.print(namaSensorSuhu[kalibSuhuIdx]);
+          dbg.print(F(" offset="));
+          dbg.println(suhuOffsetX10[kalibSuhuIdx] / 10.0f);
+        }
         break;
       }
       // Auto-scroll: pastikan blok terpilih terlihat
@@ -378,18 +389,22 @@ void tanganiTombol(int t) {
       if (t == P_BACK) { pindahHalaman(HAL_KALIB_MAIN); break; }
       if (t == P_ATAS || t == P_BAWAH) kalibUdaraSel = 1 - kalibUdaraSel;
       if (t == P_ENTER) {
-        // Rekam bacaan saat ini sebagai acuan baris terpilih
+        // Rekam bacaan saat ini (ppm) sebagai acuan baris terpilih
+        mq135Bacaan = sensorUdaraRaw();
+        int ppm = (int)mq135PPM();
         if (kalibUdaraSel == 0) {
-          mq135Normal = mq135Bacaan;
+          mq135Normal = ppm;
           tampilToast("Normal direkam");
         } else {
-          mq135Kotor = mq135Bacaan;
+          mq135Kotor = ppm;
           tampilToast("Kotor direkam");
         }
         dbg.print(F("[KALIB-MQ135] "));
         dbg.print(kalibUdaraSel == 0 ? F("normal") : F("kotor"));
-        dbg.print(F(" = "));
-        dbg.println(mq135Bacaan);
+        dbg.print(F(" adc="));
+        dbg.print(mq135Bacaan);
+        dbg.print(F(" ppm="));
+        dbg.println(ppm);
       }
       break;
 
@@ -559,6 +574,7 @@ void setup() {
 
   if (!sensorInit())
     dbg.println(F("!! Sensor level tidak siap. Cek wiring GPIO."));
+  sensorSuhuInit();                      // scan address DS18B20 di GPIO10
 
   motorInit();
   dcmotorInit();
@@ -596,6 +612,12 @@ void loop() {
   motorUpdate();                             // stepper non-blocking
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
+
+  // Konversi suhu DS18B20 (1-Wire, blocking ~750ms) + tampilan kalibrasi
+  if (halaman == HAL_KALIB_SUHU) {
+    sensorSuhuUpdate();
+    perluGambar = true;                 // nilai suhu selalu berubah tiap konversi
+  }
 
   // Bacaan real-time untuk halaman kalibrasi MQ-135
   if (halaman == HAL_KALIB_UDARA) {

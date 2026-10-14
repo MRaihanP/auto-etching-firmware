@@ -1,5 +1,7 @@
 #pragma once
 #include <Arduino.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include "config.h"
 #include "data.h"
 
@@ -105,23 +107,103 @@ void levelMasuk() {
   levelScroll = 0;
 }
 
-// ================= SENSOR SUHU (DS18B20) =================
-// 3 sensor: Motor, Komponen, Chamber.
-// CATATAN: sensor suhu belum dipetakan ke pin terpisah, jadi sementara semua
-// blok memakai satu pin (PIN_DS18B20) dan sensorSuhuRaw() mengembalikan
-// nilai placeholder. Setelah tiap sensor punya pin sendiri, ganti fungsi ini.
-float suhuOffsetX10[JUMLAH_SUHU] = { 0, 0, 0 };   // kalibrasi offset (x10 °C)
+// ================= SENSOR SUHU (DS18B20 x3, 1-Wire) =================
+// Satu bus 1-Wire di PIN_DS18B20, tiga sensor dibedakan lewat DeviceAddress.
+// Blok "Suhu Motor / Komponen / Chamber" masing-masing menunjuk ke salah satu
+// address lewat kalibSuhuAddr[] (1..3) -> sensorAddress[alamat-1].
+// Offset per blok (x10 °C) dihimpun dari kalibrasi KIRI/KANAN.
 
+OneWire ds18Bus(PIN_DS18B20);
+DallasTemperature ds18(&ds18Bus);
+
+DeviceAddress sensorAddress[3] = {
+  { 0x28, 0xB8, 0xEF, 0x87, 0x3A, 0x25, 0x02, 0x64 },
+  { 0x28, 0x80, 0x77, 0x48, 0x3A, 0x25, 0x02, 0x02 },
+  { 0x28, 0x8E, 0xFD, 0x23, 0x39, 0x25, 0x02, 0x87 }
+};
+
+// address terpilih per blok (1..3, index 0 = sensorAddress[0])
+int kalibSuhuAddr[JUMLAH_SUHU] = { 1, 2, 3 };
+
+// offset kalibrasi per blok (x10 °C)
+float suhuOffsetX10[JUMLAH_SUHU] = { 0, 0, 0 };
+
+bool ds18Siap = false;
+
+void sensorSuhuInit() {
+  ds18.begin();
+  ds18.setResolution(12);
+  int jumlah = ds18.getDeviceCount();
+  ds18Siap = (jumlah >= 1);
+  dbg.print(F("[SUHU] DS18B20 ditemukan: "));
+  dbg.print(jumlah);
+  dbg.println(ds18Siap ? F(" sensor") : F(" (tidak ada)"));
+  // Cocokkan address hasil scan dengan address yang diharapkan (urutan).
+  for (int s = 0; s < 3; s++) {
+    bool ketemu = false;
+    for (int i = 0; i < jumlah; i++) {
+      DeviceAddress a;
+      if (!ds18.getAddress(a, i)) continue;
+      if (memcmp(a, sensorAddress[s], 8) == 0) { ketemu = true; break; }
+    }
+    dbg.print(F("[SUHU]  sensor"));
+    dbg.print(s + 1);
+    dbg.println(ketemu ? F(" OK") : F(" TIDAK DITEMUKAN"));
+  }
+  sensorSuhuRequest();
+}
+
+// Konversi 1-Wire memblokir ~750 ms, jadi konversi dipicu berkala di loop()
+// dan hasilnya dibaca dari cache. Tampilan UI hanya membaca cache ini.
+void sensorSuhuRequest() {
+  if (!ds18Siap) return;
+  ds18.requestTemperatures();          // memblokir, panggil dari loop() saja
+}
+
+unsigned long sensorSuhuMs = 0;
+const unsigned long INTERVAL_SUHU_MS = 1000;
+void sensorSuhuUpdate() {
+  unsigned long now = millis();
+  if (now - sensorSuhuMs < INTERVAL_SUHU_MS) return;
+  sensorSuhuMs = now;
+  sensorSuhuRequest();
+}
+
+// Baca suhu (°C) untuk blok idx dari cache terakhir.
 float sensorSuhuRaw(int idx) {
-  // Placeholder: satu pin DS18B20 dipakai bersama sampai pin per sensor tersedia.
-  return 25.0;
+  if (!ds18Siap) return -127.0f;
+  int slot = constrain(kalibSuhuAddr[idx], 1, 3) - 1;
+  return ds18.getTempC(sensorAddress[slot]);
 }
 
+// Suhu ternormalisasi = bacaan + offset kalibrasi blok tsb.
 float sensorSuhu(int idx) {
-  return sensorSuhuRaw(idx) + suhuOffsetX10[idx] / 10.0f;
+  float raw = sensorSuhuRaw(idx);
+  if (raw <= -100.0f) return raw;   // error / belum ada sensor
+  return raw + suhuOffsetX10[idx] / 10.0f;
 }
+
+bool sensorSuhuValid(int idx) { return sensorSuhuRaw(idx) > -100.0f; }
 
 // ================= SENSOR UDARA (MQ-135) =================
+// ADC -> tegangan sensor (dibagi divider ratio) ->ppm MQ-135.
 int sensorUdaraRaw() {
-  return analogRead(PIN_MQ135);
+  return analogRead(MQ135_PIN);
+}
+
+// Tegangan pada sensor MQ-135 sebelum divider (V).
+float mq135Tegangan() {
+  int raw = analogRead(MQ135_PIN);
+  float vAdc = (raw / ADC_RES) * VREF;          // tegangan di pin ADC
+  return vAdc / DIVIDER_RATIO;                  // naikkan kembali sebelum divider
+}
+
+// Konversi tegangan -> ppm mengikuti kurva MQ-135 (datasheet).
+float mq135PPM() {
+  float vc = mq135Tegangan();
+  if (vc <= 0.05f) return 0.0f;                  // avoid divide by ~0
+  float rs = ((MQ135_VCC / vc) - 1.0f) * MQ135_RLOAD;
+  if (rs <= 0.0f) return 0.0f;
+  float ratio = rs / MQ135_RLOAD;
+  return 25.7f * pow(ratio, -1.81f) * pow(ratio, 0.13f);
 }
