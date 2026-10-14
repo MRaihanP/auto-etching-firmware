@@ -12,23 +12,21 @@
   LED RGB NeoPixel: GPIO48 (1 LED onboard ESP32-S3 DevKitC-1)
   
   Serial Commands:
-    0 = tampilkan semua sensor
+    a = tampilkan semua sensor
     1 = HCl only
     2 = H2O2 only
     3 = Air only
     4 = Sabun only
     5 = Limbah only
-    c = enter/exit mode kalibrasi (untuk sensor yang dipilih)
-    e = set 0% (saat jerican kosong) — hanya aktif di mode kalibrasi
-    f = set 100% (saat jerican penuh) — hanya aktif di mode kalibrasi
+    c = enter/exit mode kalibrasi
+    e = set 0% (kosong) — di mode kalibrasi
+    f = set 100% (penuh) — di mode kalibrasi
   
   Alur kalibrasi per jerican:
-    1. Ketik 1 (pilih HCl)
-    2. Ketik c (enter calib mode)
-    3. Kosongkan jerican → tekan e (set 0%)
-    4. Isi jerican penuh → tekan f (set 100%)
-    5. Ketik c (exit calib mode)
-    6. Ketik 2 (pilih H2O2) → ulangi langkah 2-5
+    Ketik 1 → c → kosongkan → e → isi penuh → f → c → ketik 2 (next)
+  
+  Alur kalibrasi semua sekaligus:
+    Ketik a → c → kosongkan SEMUA → e → isi SEMUA → f → c
 */
 
 #include <Adafruit_NeoPixel.h>
@@ -77,10 +75,10 @@ void setup() {
 
 void printMenu() {
   Serial.println(F("--- Menu ---"));
-  Serial.println(F("0 = tampilkan semua sensor"));
+  Serial.println(F("a = tampilkan semua sensor"));
   Serial.println(F("1 = HCl    2 = H2O2   3 = Air"));
   Serial.println(F("4 = Sabun  5 = Limbah"));
-  Serial.println(F("c = enter/exit kalibrasi (sensor terpilih)"));
+  Serial.println(F("c = enter/exit kalibrasi (sensor terpilih / semua)"));
   Serial.println(F("e = set 0% (kosong) — di mode kalibrasi"));
   Serial.println(F("f = set 100% (penuh) — di mode kalibrasi"));
   Serial.println(F("-------------"));
@@ -107,51 +105,81 @@ void loop() {
   if (Serial.available()) {
     char cmd = Serial.read();
     
-    if (cmd >= '0' && cmd <= '5') {
+    if (cmd == 'a' || cmd == 'A') {
+      sensorPilih = 0;
+      modeKalibrasi = false;
+      Serial.println(F("→ Tampilkan semua sensor"));
+    }
+    else if (cmd >= '1' && cmd <= '5') {
       sensorPilih = cmd - '0';
       modeKalibrasi = false;
+      int idx = sensorPilih - 1;
       Serial.print(F("→ Sensor: "));
-      if (sensorPilih == 0) {
-        Serial.println(F("Semua"));
-      } else {
-        Serial.print(NAMA_SENSOR[sensorPilih - 1]);
-        Serial.print(F("  [0%="));
-        Serial.print(kalibKosong[sensorPilih - 1]);
-        Serial.print(F("  100%="));
-        Serial.print(kalibPenuh[sensorPilih - 1]);
-        Serial.println(F("]"));
-      }
+      Serial.print(NAMA_SENSOR[idx]);
+      Serial.print(F("  [0%="));
+      Serial.print(kalibKosong[idx]);
+      Serial.print(F("  100%="));
+      Serial.print(kalibPenuh[idx]);
+      Serial.println(F("]"));
     }
     else if (cmd == 'c' || cmd == 'C') {
       if (!modeKalibrasi) {
+        modeKalibrasi = true;
         if (sensorPilih == 0) {
-          Serial.println(F("Pilih sensor dulu (1-5) sebelum kalibrasi!"));
+          Serial.println(F("→ Mode kalibrasi: SEMUA sensor"));
         } else {
-          modeKalibrasi = true;
           Serial.print(F("→ Mode kalibrasi: "));
           Serial.println(NAMA_SENSOR[sensorPilih - 1]);
-          Serial.println(F("  Kosongkan jerican → tekan 'e' untuk set 0%"));
         }
+        Serial.println(F("  Kosongkan jerican → tekan 'e' untuk set 0%"));
       } else {
         modeKalibrasi = false;
         Serial.println(F("→ Exit mode kalibrasi"));
       }
     }
     else if (cmd == 'e' || cmd == 'E') {
-      if (modeKalibrasi && sensorPilih > 0) {
-        int idx = sensorPilih - 1;
-        kalibKosong[idx] = nilaiTouch[idx];
-        Serial.print(F("✓ 0% tersimpan: "));
-        Serial.println(kalibKosong[idx]);
+      if (modeKalibrasi) {
+        if (sensorPilih == 0) {
+          // Set 0% untuk semua
+          for (int i = 0; i < 5; i++) kalibKosong[i] = nilaiTouch[i];
+          Serial.println(F("✓ 0% tersimpan untuk SEMUA sensor:"));
+          for (int i = 0; i < 5; i++) {
+            Serial.print(F("  "));
+            Serial.print(NAMA_SENSOR[i]);
+            Serial.print(F(": "));
+            Serial.println(kalibKosong[i]);
+          }
+        } else {
+          int idx = sensorPilih - 1;
+          kalibKosong[idx] = nilaiTouch[idx];
+          Serial.print(F("✓ 0% tersimpan: "));
+          Serial.print(NAMA_SENSOR[idx]);
+          Serial.print(F(" = "));
+          Serial.println(kalibKosong[idx]);
+        }
         Serial.println(F("  Isi jerican penuh → tekan 'f' untuk set 100%"));
       }
     }
     else if (cmd == 'f' || cmd == 'F') {
-      if (modeKalibrasi && sensorPilih > 0) {
-        int idx = sensorPilih - 1;
-        kalibPenuh[idx] = nilaiTouch[idx];
-        Serial.print(F("✓ 100% tersimpan: "));
-        Serial.println(kalibPenuh[idx]);
+      if (modeKalibrasi) {
+        if (sensorPilih == 0) {
+          // Set 100% untuk semua
+          for (int i = 0; i < 5; i++) kalibPenuh[i] = nilaiTouch[i];
+          Serial.println(F("✓ 100% tersimpan untuk SEMUA sensor:"));
+          for (int i = 0; i < 5; i++) {
+            Serial.print(F("  "));
+            Serial.print(NAMA_SENSOR[i]);
+            Serial.print(F(": "));
+            Serial.println(kalibPenuh[i]);
+          }
+        } else {
+          int idx = sensorPilih - 1;
+          kalibPenuh[idx] = nilaiTouch[idx];
+          Serial.print(F("✓ 100% tersimpan: "));
+          Serial.print(NAMA_SENSOR[idx]);
+          Serial.print(F(" = "));
+          Serial.println(kalibPenuh[idx]);
+        }
         Serial.println(F("  Kalibrasi selesai! Tekan 'c' untuk exit"));
       }
     }
@@ -164,10 +192,20 @@ void loop() {
     pixels.show();
     
     // Print nilai live
-    if (sensorPilih > 0) {
+    if (sensorPilih == 0) {
+      Serial.print(F("[LIVE] "));
+      for (int i = 0; i < 5; i++) {
+        Serial.print(NAMA_SENSOR[i]);
+        Serial.print(F("="));
+        Serial.print(nilaiTouch[i]);
+        if (i < 4) Serial.print(F(" "));
+      }
+      Serial.println();
+    } else {
       int idx = sensorPilih - 1;
+      Serial.print(F("[LIVE] "));
       Serial.print(NAMA_SENSOR[idx]);
-      Serial.print(F(": "));
+      Serial.print(F("="));
       Serial.print(nilaiTouch[idx]);
       Serial.print(F("  [0%="));
       Serial.print(kalibKosong[idx]);
