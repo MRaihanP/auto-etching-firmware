@@ -1,6 +1,6 @@
 /*
   Pilot: Non-Contact Water Level Sensor via Nickel Strip
-  Phase 2: Variable Measurement 0-100% + LED Brightness + Serial Command
+  Phase 2: Variable Measurement 0-100% + LED Brightness + Serial Command + Filter
   
   Pin Mapping:
     GPIO11 = HCl       → LED Merah
@@ -10,6 +10,8 @@
     GPIO3  = Limbah    → LED Putih
   
   LED RGB NeoPixel: GPIO48 (1 LED onboard ESP32-S3 DevKitC-1)
+  
+  Filter: Moving Average (window=8) untuk stabilkan pembacaan saat kabel bergoyang/tersentuh.
   
   Serial Commands:
     a = tampilkan semua sensor
@@ -36,6 +38,9 @@
 #define NUM_PIXELS      1
 #define BRIGHTNESS_MAX  255
 
+// Filter: Moving Average
+#define FILTER_WINDOW   8
+
 // Pin sensor
 const int PIN_SENSOR[5] = { 11, 12, 13, 14, 3 };
 const char* NAMA_SENSOR[5] = { "HCl", "H2O2", "Air", "Sabun", "Limbah" };
@@ -53,10 +58,39 @@ const uint32_t WARNA_SENSOR[5] = {
 int kalibKosong[5] = { 113000, 113000, 113000, 116000, 110000 };
 int kalibPenuh[5]  = { 156000, 161000, 161000, 157000, 152000 };
 
+// Filter state: circular buffer per sensor
+int filterBuf[5][FILTER_WINDOW];
+int filterIdx[5] = { 0, 0, 0, 0, 0 };
+long filterSum[5] = { 0, 0, 0, 0, 0 };
+bool filterInit[5] = { false, false, false, false, false };
+
 Adafruit_NeoPixel pixels(NUM_PIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 int sensorPilih = 0;  // 0 = semua, 1-5 = sensor tertentu
 bool modeKalibrasi = false;
+
+// ================= FILTER =================
+int bacaFiltered(int idx) {
+  int raw = touchRead(PIN_SENSOR[idx]);
+  
+  if (!filterInit[idx]) {
+    // Inisialisasi: isi buffer dengan nilai pertama
+    for (int i = 0; i < FILTER_WINDOW; i++) {
+      filterBuf[idx][i] = raw;
+    }
+    filterSum[idx] = (long)raw * FILTER_WINDOW;
+    filterInit[idx] = true;
+    return raw;
+  }
+  
+  // Update circular buffer
+  filterSum[idx] -= filterBuf[idx][filterIdx[idx]];
+  filterBuf[idx][filterIdx[idx]] = raw;
+  filterSum[idx] += raw;
+  filterIdx[idx] = (filterIdx[idx] + 1) % FILTER_WINDOW;
+  
+  return (int)(filterSum[idx] / FILTER_WINDOW);
+}
 
 // ================= SETUP =================
 void setup() {
@@ -68,7 +102,8 @@ void setup() {
   pixels.clear();
   pixels.show();
   
-  Serial.println(F("=== Pilot Touch Sensor Phase 2 ==="));
+  Serial.println(F("=== Pilot Touch Sensor Phase 2 + Filter ==="));
+  Serial.println(F("Filter: Moving Average (window=8)"));
   Serial.println(F(""));
   printMenu();
 }
@@ -95,10 +130,10 @@ int kePersen(int nilai, int idx) {
 
 // ================= LOOP =================
 void loop() {
-  // Baca semua sensor
+  // Baca semua sensor dengan filter
   int nilaiTouch[5];
   for (int i = 0; i < 5; i++) {
-    nilaiTouch[i] = touchRead(PIN_SENSOR[i]);
+    nilaiTouch[i] = bacaFiltered(i);
   }
   
   // Handle serial command
@@ -140,7 +175,6 @@ void loop() {
     else if (cmd == 'e' || cmd == 'E') {
       if (modeKalibrasi) {
         if (sensorPilih == 0) {
-          // Set 0% untuk semua
           for (int i = 0; i < 5; i++) kalibKosong[i] = nilaiTouch[i];
           Serial.println(F("✓ 0% tersimpan untuk SEMUA sensor:"));
           for (int i = 0; i < 5; i++) {
@@ -163,7 +197,6 @@ void loop() {
     else if (cmd == 'f' || cmd == 'F') {
       if (modeKalibrasi) {
         if (sensorPilih == 0) {
-          // Set 100% untuk semua
           for (int i = 0; i < 5; i++) kalibPenuh[i] = nilaiTouch[i];
           Serial.println(F("✓ 100% tersimpan untuk SEMUA sensor:"));
           for (int i = 0; i < 5; i++) {
@@ -191,7 +224,6 @@ void loop() {
     pixels.setPixelColor(0, warna);
     pixels.show();
     
-    // Print nilai live
     if (sensorPilih == 0) {
       Serial.print(F("[LIVE] "));
       for (int i = 0; i < 5; i++) {
@@ -219,7 +251,6 @@ void loop() {
   
   // Tampilkan & update LED
   if (sensorPilih == 0) {
-    // Semua sensor
     for (int i = 0; i < 5; i++) {
       int persen = kePersen(nilaiTouch[i], i);
       Serial.print(NAMA_SENSOR[i]);
@@ -231,7 +262,6 @@ void loop() {
     }
     Serial.println(F("---"));
   } else {
-    // Sensor tertentu
     int idx = sensorPilih - 1;
     int persen = kePersen(nilaiTouch[idx], idx);
     Serial.print(NAMA_SENSOR[idx]);
@@ -241,7 +271,6 @@ void loop() {
     Serial.print(persen);
     Serial.println(F("%)"));
     
-    // LED: warna sensor, brightness = persen
     uint32_t warna = WARNA_SENSOR[idx];
     uint8_t r = ((warna >> 16) & 0xFF) * persen / 100;
     uint8_t g = ((warna >> 8) & 0xFF) * persen / 100;
@@ -250,5 +279,5 @@ void loop() {
     pixels.show();
   }
   
-  delay(100);
+  delay(50);
 }
