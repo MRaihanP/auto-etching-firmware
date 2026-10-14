@@ -241,12 +241,17 @@ void tanganiTombol(int t) {
         break;
       }
       if (t == P_KIRI || t == P_KANAN) {
-        int delta = (t == P_KANAN) ? 5 : -5;
         int idx = kalibMotorIdx - 3;
         if (kalibDCCursor == 1) {
+          int delta = (t == P_KANAN) ? 5 : -5;
           kalibDuty[idx] += delta;
           if (kalibDuty[idx] < 0) kalibDuty[idx] = 0;
           if (kalibDuty[idx] > 255) kalibDuty[idx] = 255;
+        } else if (kalibDCCursor == 2) {
+          float delta = (t == P_KANAN) ? 0.5 : -0.5;
+          kalibMl[idx] += delta;
+          if (kalibMl[idx] < 0) kalibMl[idx] = 0;
+          if (kalibMl[idx] > 999) kalibMl[idx] = 999;
         }
         break;
       }

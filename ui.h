@@ -516,12 +516,17 @@ void gambarKalibDC() {
   oled.setTextColor(WHITE);
 
   int y = HEADER_H + 4;
-  // START button
+  // START button dengan rounded corner
   bool selStart = (kalibDCCursor == 0);
-  if (selStart) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-  oled.setTextColor(selStart ? BLACK : WHITE);
-  teksTengah("START", y, 1);
-  y += 12;
+  if (selStart) {
+    oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(BLACK);
+  } else {
+    oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+    oled.setTextColor(WHITE);
+  }
+  teksTengah("START", y + 2, 1);
+  y += 16;
 
   // Duty cycle
   bool selDuty = (kalibDCCursor == 1);
@@ -534,12 +539,12 @@ void gambarKalibDC() {
   teksKanan(buf, SCREEN_WIDTH - 2, y);
   y += 12;
 
-  // ml hasil
+  // Hasil test (ml)
   bool selMl = (kalibDCCursor == 2);
   if (selMl) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
   oled.setTextColor(selMl ? BLACK : WHITE);
   oled.setCursor(2, y);
-  oled.print(F("ml"));
+  oled.print(F("Hasil test"));
   sprintf(buf, "%.1f ml", kalibMl[kalibMotorIdx - 3]);
   teksKanan(buf, SCREEN_WIDTH - 2, y);
 }
