@@ -703,9 +703,9 @@ void gambarKalibUdara() {
   static const char* label[2] = { "Udara Normal", "Udara Kotor" };
   int nilai[2] = { mq135Normal, mq135Kotor };
   int y = HEADER_H + 4;
-  for (int i = 0; i < 2; i++, y += 12) {
+  for (int i = 0; i < 2; i++, y += 11) {
     bool sel = (kalibUdaraSel == i);
-    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 11, WHITE);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
     oled.setTextColor(sel ? BLACK : WHITE);
     oled.setCursor(4, y);
     oled.print(label[i]);
@@ -717,8 +717,9 @@ void gambarKalibUdara() {
   // Bacaan real-time di bawah tengah, dengan gap dari baris di atasnya
   oled.setTextColor(WHITE);
   char buf[24];
-  sprintf(buf, "Bacaan: %d ppm", mq135PPM);
-  teksTengah(buf, y + 6, 1);
+  int ppm = (int)mq135PPM();
+  sprintf(buf, "Bacaan: %d ppm", ppm);
+  teksTengah(buf, y + 4, 1);
 }
 
 // ================= HALAMAN: KALIBRASI FAN =================

@@ -613,10 +613,10 @@ void loop() {
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
 
-  // Konversi suhu DS18B20 (1-Wire, blocking ~750ms) + tampilan kalibrasi
+  // Konversi DS18B20 non-blocking + redraw kalibrasi saat data baru tiba
   if (halaman == HAL_KALIB_SUHU) {
     sensorSuhuUpdate();
-    perluGambar = true;                 // nilai suhu selalu berubah tiap konversi
+    if (sensorSuhuSiapTampil()) perluGambar = true;
   }
 
   // Bacaan real-time untuk halaman kalibrasi MQ-135

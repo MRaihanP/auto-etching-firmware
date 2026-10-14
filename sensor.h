@@ -135,6 +135,7 @@ void sensorSuhuInit() {
   ds18.begin();
   // Resolusi 12-bit per sensor (mengikuti sketch referensi DS18B20_3pcs).
   for (int s = 0; s < 3; s++) ds18.setResolution(sensorAddress[s], 12);
+  ds18.setWaitForConversion(false);       // konversi di latar belakang, UI tetap responsif
   int jumlah = ds18.getDeviceCount();
   ds18Siap = (jumlah >= 1);
   dbg.print(F("[SUHU] DS18B20 ditemukan: "));
@@ -154,20 +155,38 @@ void sensorSuhuInit() {
   }
 }
 
-// Konversi 1-Wire memblokir ~750 ms, jadi konversi dipicu berkala di loop()
-// dan hasilnya dibaca dari cache. Tampilan UI hanya membaca cache ini.
+// ===== Konversi non-blocking =====
+// requestTemperatures() secara default memblokir ~750 ms; selama itu tombol dan
+// render UI berhenti, sehingga halaman terasa macet. Dengan
+// setWaitForConversion(false), fungsi itu hanya menyalakan bit convert lalu
+// langsung kembali: konversi berjalan di latar belakang dan dicek lewat
+// isConversionComplete().
+
 void sensorSuhuRequest() {
   if (!ds18Siap) return;
-  ds18.requestTemperatures();          // memblokir, panggil dari loop() saja
+  ds18.requestTemperatures();          // tidak memblokir
 }
 
 unsigned long sensorSuhuMs = 0;
 const unsigned long INTERVAL_SUHU_MS = 1000;
+bool suhuDataBaru = false;
+
+// Panggil tiap loop(): mulai konversi baru lalu tandai data baru saat selesai.
 void sensorSuhuUpdate() {
+  if (!ds18Siap) return;
+  if (!ds18.isConversionComplete()) return;   // konversi lama masih jalan
   unsigned long now = millis();
   if (now - sensorSuhuMs < INTERVAL_SUHU_MS) return;
   sensorSuhuMs = now;
-  sensorSuhuRequest();                  // setelah init, ambient >= ~1.3 °C -> ~750 ms
+  sensorSuhuRequest();
+  suhuDataBaru = true;
+}
+
+// true tepat setelah konversi selesai; pemicu redraw UI.
+bool sensorSuhuSiapTampil() {
+  if (!suhuDataBaru) return false;
+  suhuDataBaru = false;
+  return true;
 }
 
 // Baca suhu (°C) untuk blok idx dari cache terakhir.
