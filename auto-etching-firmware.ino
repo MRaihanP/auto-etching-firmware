@@ -181,9 +181,9 @@ void tanganiTombol(int t) {
           // Sensor Suhu -> pilih kanal (Chamber / Cairan / Motor)
           listReset(L_AKSI);
           pindahHalaman(HAL_KALIB_SUHU_LIST);
-        } else {
-          // Sensor Udara
-          kalibUdaraBaris = 0;
+        } else if (a == 3) {
+          // Sensor Udara (MQ-135)
+          kalibUdaraSel = 0;
           pindahHalaman(HAL_KALIB_UDARA);
         }
       }

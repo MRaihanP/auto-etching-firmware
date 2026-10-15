@@ -60,12 +60,16 @@ enum Halaman {
   HAL_KALIB_STEPPER,
   HAL_KALIB_DC,
   HAL_KALIB_AGITASI,
-  HAL_KALIB_FAN
+  HAL_KALIB_FAN,
+  HAL_KALIB_SUHU_LIST,
+  HAL_KALIB_SUHU,
+  HAL_KALIB_UDARA
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
-  "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN"
+  "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN",
+  "KALIB_SUHU_LIST", "KALIB_SUHU", "KALIB_UDARA"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
@@ -100,6 +104,13 @@ float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah
 bool kalibMotorRunning = false;  // true = motor sedang berjalan
 unsigned long kalibMotorStartMs = 0;
 int kalibMotorRunMs = 2000;    // durasi test default 2 detik
+
+// State Kalibrasi Sensor Suhu (3 kanal: Chamber / Cairan / Motor)
+int kalibSuhuIdx   = 0;   // kanal: 0=Chamber, 1=Cairan, 2=Motor
+int kalibSuhuBaris = 0;
+
+// State Kalibrasi Sensor Udara (MQ-135)
+int kalibUdaraBaris = 0;
 
 // State Konfigurasi Preset
 enum DialogCfg { DLG_NONE, DLG_SIMPAN, DLG_HAPUS };
