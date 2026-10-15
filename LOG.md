@@ -233,6 +233,64 @@ masih jalan — sebelumnya motor bisa terus nyala sampai user tebak-tebak.
 
 ---
 
+## [2026-10-15] v0.6.2 — Blob NVS "kal4": duty PWM & ml hasil uji motor DC
+
+MulaiBab 7 (Sensor & Kalibrasi). Item pertama: `kalibDuty[]` & `kalibMl[]`
+yang tadinya **volatile** — setiap reboot semua nilai PWM motor agitasi, pompa
+sabun, pompa limbah, dan exhaust fan kembali ke default inisialisasi.
+
+**`storage.h` — blob baru `"kal4"`**
+
+```cpp
+struct DataKalib4 {
+  uint32_t versi;
+  int16_t  duty[JUMLAH_KALIB_DUTY];   // 7 — PWM 0..255
+  int16_t  mlX10[JUMLAH_KALIB_ML];     // 2 — ml x10, 0 = belum diuji
+  uint32_t crc;
+};
+```
+
+Layout `kalibDuty[7]` mengikuti `data.h`:
+`[0]` pompa Sabun · `[1]` pompa Limbah · `[2..4]` agitasi speed 1–3 ·
+`[5]` belum dipakai · `[6]` exhaust fan.
+
+`kalibMl[]` bertipe `float` di RAM, disimpan sebagai `x10` (`int16_t`) supaya
+sizeof struct tetap pasti dan tidak ikut bergantung rounding float. Default
+bila blob belum ada: duty **128** (~50% — motor tetap berputar tanpa kepanasan),
+ml **0** (belum diuji).
+
+Blob terpisah dari `"kal"`/`"kal2"`/`"kal3"` supaya perubahan struct di sini
+tidak membuat kalibrasi lain hilang.
+
+**`.ino`** — `muatKalib4()` di `setup()`, `simpanKalib4()` di BACK dari tiga
+halaman: `HAL_KALIB_DC`, `HAL_KALIB_AGITASI`, `HAL_KALIB_FAN`. Di
+`HAL_KALIB_DC` sekalian dimatikan motor kalau test masih jalan.
+
+### Audit 3 item ⚠️ Bab 7 — 2 ternyata sudah selesai
+
+- `kalibSuhuAddr[]` & `suhuOffsetX10[]` → NVS: **sudah** sejak v0.6.0
+  (`DataKalib2` versi 2)
+- `mq135Normal`/`mq135Kotor` → NVS: **sudah** sejak v0.6.0 (bidang yang sama)
+- Auto-stop motor kalibrasi ganti `delay()`: **sudah** sejak v0.6.1
+
+### ⚠️ Temuan: `kalibDuty[]` disimpan tapi belum dipakai motor
+
+Setelah ditelusuri, `kalibDuty[]` **hanya dibaca untuk tampilan** (`ui.h`).
+`dcmotor.h` masih `agitasiSet()` memetakan speed 1–5 → PWM 80–255 tetap dan
+`fanSet()` on/off tetap, padahal `agitasiSetDuty()` dan `fanSetAt()` sudah ada
+di sana tapi belum dipakai.
+
+Artinya: tanpa perubahan di `dcmotor.h`/`process.h`, nilai yang baru disimpan
+hanya bertahan — belum mengubah perilaku motor. Dicatat sebagai item baru
+di `PROGRESS.md` §7, dengan catatan file tersebut milik Orang A (pembagian
+kerja dua orang), jadi sengaja tidak disentuh di versi ini.
+
+**Compile:** sukses — 472393 bytes (36%) program, 58664 bytes (17%) RAM.
+
+**`PROGRESS.md` §7:** 15/4/3 → **18/1/4**. Total 98/8/61 → **101/5/61**.
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

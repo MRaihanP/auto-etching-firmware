@@ -157,13 +157,14 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Kalibrasi agitasi & fan: uji motor/kipas (`ino:292-344`)
 - [x] ✅ Kalibrasi DC: atur duty 0–255 dan catat ml hasil uji (`ino:246-289`)
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]` ke Serial
-- [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119` — harus cocok address fisik
-- [ ] ⚠️ `kalibSuhuAddr[]` & `suhuOffsetX10[]` **tidak disimpan ke NVS** (hilang saat reset)
-- [ ] ⚠️ `mq135Normal`/`mq135Kotor` **tidak disimpan ke NVS** dan tidak dipakai proteksi
+- [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik
+- [x] ✅ `kalibSuhuAddr[]` & `suhuOffsetX10[]` **sudah disimpan ke NVS** (v0.6.0) — `DataKalib2` versi 2 memakai `addrSensor[3]` + `suhuOffsetX10[3]`, ditulis `simpanKalib2()` saat BACK dari `HAL_KALIB_SUHU`
+- [x] ✅ `mq135Normal`/`mq135Kotor` **sudah disimpan ke NVS** (v0.6.0) — keduanya field di `DataKalib2` versi 2. *Sisa:* belum dipakai proteksi gas (itu item Bab 4)
 - [x] ✅ `kalibMotorRunning` **sudah dibaca** (v0.6.1) — `mulaiTestMotor()` + `upkeepKalibrasiMotor()` menjadwalkan auto-stop test agitasi/fan via `millis()`, plus BACK mematikan motor lebih dulu. Lihat §2 Modul UI
-- [ ] ⚠️ `kalibDuty[]` & `kalibMl[]` tidak disimpan ke NVS
-- [ ] ⬜ Simpan semua parameter kalibrasi ke NVS (versi format naik ke 2)
-- [ ] ⬜ Auto-stop motor kalibrasi setelah N ms (ganti `delay()`)
+- [x] ✅ `kalibDuty[]` & `kalibMl[]` **sudah disimpan ke NVS** (v0.6.2) — blob `"kal4"` (`DataKalib4`: `duty[7]` + `mlX10[2]`, versi + CRC32), ditulis `simpanKalib4()` saat BACK dari `HAL_KALIB_DC` / `HAL_KALIB_AGITASI` / `HAL_KALIB_FAN`, dibaca `muatKalib4()` di `setup()`. Default 128 (≈50% duty) bila blob belum ada
+- [x] ✅ Auto-stop motor kalibrasi setelah N ms (ganti `delay()`) — selesai v0.6.1 (`upkeepKalibrasiMotor()`), lihat catatan `kalibMotorRunning` di atas
+- [ ] ⬜ Terapkan `kalibDuty[]` ke motor — saat ini hanya dipakai tampilan (`ui.h`); `dcmotor.h` masih `agitasiSet()` memetakan speed 1–5 → PWM 80–255 tetap, `fanSet()` on/off tetap. Butuh `agitasiSetDuty()`/`fanSetAt()` yang sudah ada di `dcmotor.h` (**file milik Orang A**)
+- [ ] ⬜ Simpan semua parameter kalibrasi ke NVS — `kalibDuty`/`kalibMl` selesai v0.6.2, `kalibSuhuAddr`/`suhuOffsetX10`/`mq135*` selesai v0.6.0, `kalibStepperMl` selesai v0.5.7
 - [ ] ⬜ Deteksi sensor touch mati (nilai tidak berubah / selalu 0%)
 
 ---
@@ -236,13 +237,13 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Modul Etching | 5 | 1 | 6 |
 | Modul Draining & Rinsing | 5 | 3 | 6 |
 | Modul Emergency Stop | 8 | 0 | 10 |
-| Sensor & Kalibrasi | 15 | 4 | 3 |
+| Sensor & Kalibrasi | 18 | 1 | 4 |
 | Penyimpanan & Data | 7 | 0 | 5 |
 | Infrastruktur | 5 | 0 | 5 |
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 98 ✅ · 8 ⚠️ · 61 ⬜**
+**Total: 101 ✅ · 5 ⚠️ · 61 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai

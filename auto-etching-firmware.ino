@@ -284,7 +284,13 @@ void tanganiTombol(int t) {
 
     // ---------- Kalibrasi DC (Pompa Sabun/Limbah) ----------
     case HAL_KALIB_DC:
-      if (t == P_BACK) { kalibDCScroll = 0; pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_BACK) {
+        kalibDCScroll = 0;
+        if (kalibMotorRunning) { pompaSabunSet(false); pompaLimbahSet(false); kalibMotorRunning = false; }
+        simpanKalib4();
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
       if (t == P_ATAS || t == P_BAWAH) {
         kalibDCCursor = (kalibDCCursor + 1) % 3;
         // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
@@ -332,6 +338,7 @@ void tanganiTombol(int t) {
     case HAL_KALIB_AGITASI:
       if (t == P_BACK) {
         if (kalibMotorRunning) { agitasiSet(0); kalibMotorRunning = false; }
+        simpanKalib4();
         pindahHalaman(HAL_KALIB_MOTOR_LIST);
         break;
       }
@@ -366,6 +373,7 @@ void tanganiTombol(int t) {
     case HAL_KALIB_FAN:
       if (t == P_BACK) {
         if (kalibMotorRunning) { fanSet(false); kalibMotorRunning = false; }
+        simpanKalib4();
         pindahHalaman(HAL_KALIB_MOTOR_LIST);
         break;
       }
@@ -611,6 +619,7 @@ void setup() {
   muatKalib();
   muatKalib2();
   muatKalibStepper();
+  muatKalib4();
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(I2C_CLOCK);
