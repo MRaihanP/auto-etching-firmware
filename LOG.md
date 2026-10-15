@@ -375,6 +375,84 @@ secara manual dari NVS.
 
 ---
 
+## [2026-10-15] v0.6.4 — Kalibrasi Sensor Suhu & MQ-135 akhirnya tersimpan ke NVS
+
+Bug warisan merge `2c84273` ditutup. `simpanKalib2()` **ada di `storage.h`
+sejak v0.6.0 tapi tidak pernah dipanggil dari mana pun** — offset suhu, pilihan
+address blok, dan acuan MQ-135 hilang setiap reboot.
+
+### Asal-usulnya
+
+Sebelum merge, kedua halaman ini memakai dialog (`ENTER` simpan / `BACK` buang)
+yang memanggil `simpanKalib2()`. Saat konflik merge di-resolve, blok `case`
+di `.ino` digantikan versi upstream yang hanya `pindahHalaman()`. Pemanggilnya
+ikut hilang — dan tidak ketahuan karena firmware belum dikompilasi ulang.
+
+Yang tersisa: struct `DataKalib2` di `storage.h` lengkap dan benar. Fungsi
+penyimpan dan pemuatnya ada. **Tidak ada satu pun yang menunjuk ke fungsi itu.**
+
+### Perbaikan
+
+`.ino` — dua blok BACK:
+```cpp
+case HAL_KALIB_SUHU:
+  if (t == P_BACK) {
+    kalibSuhuScroll = 0;
+    tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
+    pindahHalaman(HAL_KALIB_MAIN);
+    break;
+  }
+
+case HAL_KALIB_UDARA:
+  if (t == P_BACK) {
+    tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
+    pindahHalaman(HAL_KALIB_MAIN);
+    break;
+  }
+```
+
+Tanpa dialog, mengikuti `SUMMARY.md`: "ENTER aksi · **BACK keluar + simpan**" —
+pola yang sama dengan 5 halaman kalibrasi lain. Ditambah toast supaya operator
+tahu penyimpanan berhasil atau gagal; sebelumnya tidak ada umpan balik sama
+sekali saat BACK ditekan.
+
+### Koreksi dokumentasi
+
+Ternyata `PROGRESS.md:161` (yang saya tulis sendiri di v0.6.0) **salah**. Baris
+itu mengklaim kalibrasi suhu "sudah disimpan ke NVS ... ditulis `simpanKalib2()`
+saat BACK dari `HAL_KALIB_SUHU`" — saya menyimpulkan itu dari **isi struct
+`DataKalib2`**, tanpa memeriksa apakah fungsinya benar-benar dipanggil.
+
+Akibatnya checklist sempat menandai ✅ untuk sesuatu yang tidak berfungsi. Baris
+161 & 162 sekarang ditulis ulang: Explainsi apa adanya bug-nya, kapan ditutup,
+dan mana pemanggilnya. Item yang tadinya tertunda di §7 "Simpan `simpanKalib2()`
+dari BACK" juga dicentang.
+
+Tiga item §8 "Penyimpanan & Data" yang tadinya `[ ]` padahal sudah dikerjakan
+juga dicentang, karena ketidakkonsistenan yang sama: `kal3` sudah sejak v0.5.7,
+`kal4` sejak v0.6.2, `kal2` sejak v0.6.4.
+
+### Verifikasi di Serial Monitor
+
+Setelah naik `kal2` dari versi 1 ke 2 (saat v0.6.0), blob versi lama otomatis
+ditolak karena `versi` tidak cocok → default. Jadi setelah flash ulang:
+
+```
+[STORE] Kalibrasi suhu/udara belum ada (default)   ← sekali saja, wajar
+...
+BACK dari Kalibrasi Sensor Suhu:
+[STORE] Simpan kalibrasi suhu/udara: OK
+```
+
+**Semua 7 halaman kalibrasi sekarang tersimpan ke NVS saat BACK.** Tidak ada lagi
+halaman kalibrasi yang diam-diam membuang nilainya.
+
+**Compile:** sukses — 473581 bytes (36%) program, 58656 bytes (17%) RAM.
+
+**`PROGRESS.md`** §8: 7/0/5 → **10/0/2**. Total 102/4/61 → **105/4/58**.
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

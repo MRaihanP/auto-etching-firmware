@@ -399,7 +399,14 @@ void tanganiTombol(int t) {
 
     // ---------- Kalibrasi Sensor Suhu (DS18B20, 3 blok) ----------
     case HAL_KALIB_SUHU:
-      if (t == P_BACK) { kalibSuhuScroll = 0; pindahHalaman(HAL_KALIB_MAIN); break; }
+      if (t == P_BACK) {
+        kalibSuhuScroll = 0;
+        // "BACK keluar + simpan" — sama dengan halaman Kalibrasi Motor
+        // Stepper/DC/Agitasi/Fan (lihat SUMMARY.md).
+        tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
+        pindahHalaman(HAL_KALIB_MAIN);
+        break;
+      }
       if (t == P_ATAS)  kalibSuhuIdx = max(0, kalibSuhuIdx - 1);
       if (t == P_BAWAH) kalibSuhuIdx = min(JUMLAH_SUHU - 1, kalibSuhuIdx + 1);
       if (t == P_ENTER) kalibSuhuField = 1 - kalibSuhuField;   // pindah field aktif
@@ -439,7 +446,12 @@ void tanganiTombol(int t) {
 
     // ---------- Kalibrasi Sensor Udara (MQ-135) ----------
     case HAL_KALIB_UDARA:
-      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MAIN); break; }
+      if (t == P_BACK) {
+        // "BACK keluar + simpan" — lihat SUMMARY.md
+        tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
+        pindahHalaman(HAL_KALIB_MAIN);
+        break;
+      }
       if (t == P_ATAS || t == P_BAWAH) kalibUdaraSel = 1 - kalibUdaraSel;
       if (t == P_ENTER) {
         // Rekam bacaan saat ini (ppm) sebagai acuan baris terpilih

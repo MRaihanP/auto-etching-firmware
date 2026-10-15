@@ -158,8 +158,8 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Kalibrasi DC: atur duty 0–255 dan catat ml hasil uji (`ino:246-289`)
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]` ke Serial
 - [x] ✅ **Address DS18B20 tidak lagi hardcode** (v0.6.3) — `sensorSuhuInit()` memindai bus 1-Wire lewat `getAddress()` lalu menyimpan hasilnya ke NVS blob `"kal5"` (`DataKalib5`: `addr[3][8]` + bitmask valid + CRC32). Boot berikutnya memakaitaddress dari NVS supaya urutan blok tidak berubah. Family code 0x28 diverifikasi saat muat — blob rusak ditolak lalu dipindai ulang. Slot kosong ditandai `sensorAddressValid[s] = false` → `sensorSuhuRaw()` mengembalikan -127 → UI tampil `--.-C`. Address dicetak ke Serial saat boot pertama untuk dicocokkan dgn label fisik Motor/Komponen/Chamber
-- [x] ✅ `kalibSuhuAddr[]` & `suhuOffsetX10[]` **sudah disimpan ke NVS** (v0.6.0) — `DataKalib2` versi 2 memakai `addrSensor[3]` + `suhuOffsetX10[3]`, ditulis `simpanKalib2()` saat BACK dari `HAL_KALIB_SUHU`
-- [x] ✅ `mq135Normal`/`mq135Kotor` **sudah disimpan ke NVS** (v0.6.0) — keduanya field di `DataKalib2` versi 2. *Sisa:* belum dipakai proteksi gas (itu item Bab 4)
+- [x] ✅ `kalibSuhuAddr[]` & `suhuOffsetX10[]` **sudah disimpan ke NVS** (v0.6.4) — `DataKalib2` versi 2 memakai `addrSensor[3]` + `suhuOffsetX10[3]`. **Perbaikan v0.6.4:** sebelumnya status ini ditandai ✅ padahal `simpanKalib2()` tidak pernah dipanggil — struct-nya sudah ada sejak v0.6.0 tapi tidak ada pemanggilnya (bug warisan merge `2c84273`). Sekarang `simpanKalib2()` dipanggil saat BACK dari `HAL_KALIB_SUHU`
+- [x] ✅ `mq135Normal`/`mq135Kotor` **sudah disimpan ke NVS** (v0.6.4) — keduanya field di `DataKalib2` versi 2, ditulis saat BACK dari `HAL_KALIB_UDARA` (perbaikan yang sama). *Sisa:* belum dipakai proteksi gas (itu item Bab 4)
 - [x] ✅ `kalibMotorRunning` **sudah dibaca** (v0.6.1) — `mulaiTestMotor()` + `upkeepKalibrasiMotor()` menjadwalkan auto-stop test agitasi/fan via `millis()`, plus BACK mematikan motor lebih dulu. Lihat §2 Modul UI
 - [x] ✅ `kalibDuty[]` & `kalibMl[]` **sudah disimpan ke NVS** (v0.6.2) — blob `"kal4"` (`DataKalib4`: `duty[7]` + `mlX10[2]`, versi + CRC32), ditulis `simpanKalib4()` saat BACK dari `HAL_KALIB_DC` / `HAL_KALIB_AGITASI` / `HAL_KALIB_FAN`, dibaca `muatKalib4()` di `setup()`. Default 128 (≈50% duty) bila blob belum ada
 - [x] ✅ Auto-stop motor kalibrasi setelah N ms (ganti `delay()`) — selesai v0.6.1 (`upkeepKalibrasiMotor()`), lihat catatan `kalibMotorRunning` di atas
@@ -178,9 +178,9 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Simpan preset ke NVS sebagai satu blob + versi + CRC32 (`storage.h:26`)
 - [x] ✅ Muat preset: reject bila versi beda / CRC rusak / data tak valid (`storage.h:45`)
 - [x] ✅ Auto-reset ke default bila data korup (`storage.h:70`)
-- [ ] ⬜ Simpan kalibrasi pompa (ml/rotasi) ke NVS
-- [ ] ⬜ Simpan offset suhu & acuan MQ-135 ke NVS
-- [ ] ⬜ Simpan duty/kecepatan motor per kalibrasi ke NVS
+- [x] ✅ Simpan kalibrasi pompa (ml/rotasi) ke NVS — blob `"kal3"` (`DataKalib3`: `float stepperMl[3]` + versi + CRC32), ditulis `simpanKalibStepper()` saat BACK dari `HAL_KALIB_STEPPER` (v0.5.7)
+- [x] ✅ Simpan offset suhu & acuan MQ-135 ke NVS — blob `"kal2"` (`DataKalib2` versi 2: `addrSensor[3]` + `suhuOffsetX10[3]` + `mq135Normal`/`mq135Kotor`, versi + CRC32), ditulis `simpanKalib2()` saat BACK dari `HAL_KALIB_SUHU` / `HAL_KALIB_UDARA` (v0.6.4)
+- [x] ✅ Simpan duty/kecepatan motor per kalibrasi ke NVS — blob `"kal4"` (`DataKalib4`: `duty[7]` + `mlX10[2]`, versi + CRC32), ditulis `simpanKalib4()` saat BACK dari `HAL_KALIB_DC`/`HAL_KALIB_AGITASI`/`HAL_KALIB_FAN` (v0.6.2)
 - [ ] ⬜ Backup/restore preset via Serial (export/import)
 
 ---
@@ -238,12 +238,12 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Modul Draining & Rinsing | 5 | 3 | 6 |
 | Modul Emergency Stop | 8 | 0 | 10 |
 | Sensor & Kalibrasi | 19 | 0 | 4 |
-| Penyimpanan & Data | 7 | 0 | 5 |
+| Penyimpanan & Data | 10 | 0 | 2 |
 | Infrastruktur | 5 | 0 | 5 |
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 102 ✅ · 4 ⚠️ · 61 ⬜**
+**Total: 105 ✅ · 4 ⚠️ · 58 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai
