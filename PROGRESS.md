@@ -150,7 +150,8 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Konversi raw → persen dengan clamp 0–100 (`sensor.h:74`)
 - [x] ✅ Kalibrasi 0% & 100% per sensor dari UI (`ino:412-460`)
 - [x] ✅ Kalibrasi level disimpan ke NVS + CRC + auto-reject bila tidak valid (`storage.h:87`)
-- [x] ✅ Baseline default 113000/156000 bila kalibrasi belum ada (`storage.h:120`)
+- [x] ✅ Baseline default `113000/156000` bila kalibrasi belum ada (`storage.h:121-122`, `sensor.h:54-55`) — **angka hasil ukur nyata** dari `pilot/pilot_touch_sensor.ino:58-59`, bukan tebakan; skala `touchRead()` di ESP32-S3 memang ratusan ribu. ⚠️ Default dipakai **seragam untuk kelima sensor**, padahal hasil ukur per-sensor berbeda → error ±12% di tengah skala (masih tepat di 0% dan 100%). Hilang begitu tangki dikalibrasi lewat UI, karena nilai asli dari `touchRead()` lalu tersimpan di NVS `"kal"`
+- [ ] ⬜ Default baseline **per-sensor** (5 pasang nilai) — pakai hasil ukur pilot sketch: kosong `{113000, 113000, 113000, 116000, 110000}`, penuh `{156000, 161000, 161000, 157000, 152000}` (`sensor.h:54-55`, `storage.h:121-122`). **Prioritas rendah** — hanya menjaga akurasi sebelum tangki dikalibrasi; setelah `Kalibrasi → Sensor Level` tiap tangki, default tidak lagi dipakai
 - [x] ✅ Halaman Kalibrasi → 4 submenu (Motor, Sensor Level, Sensor Suhu, Sensor Udara)
 - [x] ✅ Kalibrasi MQ-135: rekam acuan udara bersih & kotor (`ino:388-408`)
 - [x] ✅ Kalibrasi suhu: pilih sensor per blok + offset ±0,1 °C (`ino:348-373`)
@@ -163,8 +164,8 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ `kalibMotorRunning` **sudah dibaca** (v0.6.1) — `mulaiTestMotor()` + `upkeepKalibrasiMotor()` menjadwalkan auto-stop test agitasi/fan via `millis()`, plus BACK mematikan motor lebih dulu. Lihat §2 Modul UI
 - [x] ✅ `kalibDuty[]` & `kalibMl[]` **sudah disimpan ke NVS** (v0.6.2) — blob `"kal4"` (`DataKalib4`: `duty[7]` + `mlX10[2]`, versi + CRC32), ditulis `simpanKalib4()` saat BACK dari `HAL_KALIB_DC` / `HAL_KALIB_AGITASI` / `HAL_KALIB_FAN`, dibaca `muatKalib4()` di `setup()`. Default 128 (≈50% duty) bila blob belum ada
 - [x] ✅ Auto-stop motor kalibrasi setelah N ms (ganti `delay()`) — selesai v0.6.1 (`upkeepKalibrasiMotor()`), lihat catatan `kalibMotorRunning` di atas
-- [ ] ⬜ Terapkan `kalibDuty[]` ke motor — saat ini hanya dipakai tampilan (`ui.h`); `dcmotor.h` masih `agitasiSet()` memetakan speed 1–5 → PWM 80–255 tetap, `fanSet()` on/off tetap. Butuh `agitasiSetDuty()`/`fanSetAt()` yang sudah ada di `dcmotor.h` (**file milik Orang A**)
-- [ ] ⬜ Simpan semua parameter kalibrasi ke NVS — `kalibDuty`/`kalibMl` selesai v0.6.2, `kalibSuhuAddr`/`suhuOffsetX10`/`mq135*` selesai v0.6.0, `kalibStepperMl` selesai v0.5.7
+- [x] ✅ Terapkan `kalibDuty[]` ke motor (v0.6.6) — semua PWM kini diambil dari hasil kalibrasi, bukan konstanta: `pompaSabunSet()`→`kalibDuty[0]`, `pompaLimbahSet()`→`kalibDuty[1]`, `fanSet()`→`kalibDuty[6]`. Agitasi punya 5 tingkat di preset tapi hanya 3 titik kalibrasi, jadi `agitasiPwm()` meng-interpolasi linier (speed 1→slot 2, 2→antara 2-3, 3→slot 3, 4→antara 3-4, 5→slot 4) — semua hasil kalibrasi terpakai dan tidak ada tingkat yang meloncat. `dcmotorInit()` dipanggil setelah `muatKalib4()` di `setup()`, jadi nilai kalibrasi sudah tersedia saat motor pertama kali dihidupkan. Default semua slot 128 (~50%) bila blob belum ada
+- [x] ✅ Simpan semua parameter kalibrasi ke NVS — 5 blob terpisah, masing-masing dengan versi + CRC32: `"kal"` (baseline 0%/100% + kapasitas 5 tangki level), `"kal2"` (addr + offset 3 blok DS18B20 + acuan MQ-135), `"kal3"` (ml/rotasi pompa stepper), `"kal4"` (duty PWM 7 motor + ml hasil uji motor DC), `"kal5"` (address DS18B20 hasil pindai bus)
 - [x] ✅ Deteksi sensor touch mati (v0.6.5) — `sensor.h:sensorMatiUpdate()` menandai strip yang `touchRead()`-nya beku di **0** selama `SENSOR_BEKU_MS` (60 detik); `touchRead()` yang sehat selalu non-nol, jadi 0 beku ≈ kabel putus / strip copot. Log `[SENSOR] <nama> MATI` sekali saat berubah, dan `[SENSOR] <nama> pulih` saat hidup lagi (tanpa perlu reset). `ui.h:gambarLevel()` menampilkan `DEAD` menggantikan persen + menyembunyikan isi bar, karena angka 0% yang palsu lebih berbahaya daripada tidak menampilkan apa pun. **Batas deteksi:** strip yang sudah tidak sensitif (buildup karat, HDPE tebal) masih bergerak sedikit dan *tidak* terdeteksi — hanya kasus beku total yang tertangkap. Penting untuk `FASE_CEK` Bab 3 agar tidak memercayai level yang salah
 
 ---
@@ -237,13 +238,13 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Modul Etching | 5 | 1 | 6 |
 | Modul Draining & Rinsing | 5 | 3 | 6 |
 | Modul Emergency Stop | 8 | 0 | 10 |
-| Sensor & Kalibrasi | 20 | 0 | 3 |
+| Sensor & Kalibrasi | 22 | 0 | 1 |
 | Penyimpanan & Data | 10 | 0 | 2 |
 | Infrastruktur | 5 | 0 | 5 |
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 106 ✅ · 4 ⚠️ · 57 ⬜**
+**Total: 108 ✅ · 4 ⚠️ · 55 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai

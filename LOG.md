@@ -512,6 +512,75 @@ Bab 7 sisa 2 item, keduanya **bukan milik sisi Antarmuka**:
 
 ---
 
+## [2026-10-15] v0.6.6 — PWM motor memakai hasil kalibrasi + Bab 7 tuntas
+
+Item terakhir Bab 7. `kalibDuty[]` sudah **tersimpan ke NVS sejak v0.6.2**, tapi
+tidak pernah dipakai motor — semua PWM masih konstanta. Jadi nilai yang dikalibrasi
+lewat menu Kalibrasi selama ini **tidak berefek apa pun**.
+
+### `dcmotor.h`
+
+```cpp
+// SEBELUM — konstanta, kalibrasi diabaikan
+agitasiSet(speed)    → map(speed, 1..5, 80..255)
+pompaSabunSet(true)  → 255
+pompaLimbahSet(true) → 255
+fanSet(true)         → 255
+
+// SESUDAH — dari hasil kalibrasi
+pompaSabunSet(on)    → kalibDuty[0]
+pompaLimbahSet(on)   → kalibDuty[1]
+fanSet(on)           → kalibDuty[6]
+agitasiSet(speed)    → agitasiPwm(speed)
+```
+
+Layout `kalibDuty[7]`: `[0]` Sabun · `[1]` Limbah · `[2..4]` agitasi spd 1–3 ·
+`[5]` tidak dipakai · `[6]` fan.
+
+### Interpolasi agitasi
+
+Preset punya **5** tingkat speed, tapi hanya **3** titik kalibrasi. Mapping
+sederhana akan membuat speed 4–5 melompat ke nilai yang sama dengan speed 3 —
+hasil kalibrasi di tengah skala jadi mubazir dan tingkat terasa tidak rata.
+
+`agitasiPwm()` karena itu meng-interpolasi linier di antara titik:
+
+| speed | posisi | duty |
+|---|---|---|
+| 1 | titik | `kalibDuty[2]` |
+| 2 | tengah | rata-rata `kalibDuty[2]` & `[3]` |
+| 3 | titik | `kalibDuty[3]` |
+| 4 | tengah | rata-rata `kalibDuty[3]` & `[4]` |
+| 5 | titik | `kalibDuty[4]` |
+
+Semua titik kalibrasi terpakai, dan tidak ada tingkat yang meloncat.
+
+`dcmotorInit()` sudah dipanggil **setelah** `muatKalib4()` di `setup()`, jadi nilai
+kalibrasi tersedia sebelum motor pertama kali dihidupkan. Default semua slot
+**128** (~50% duty) kalau blob belum ada — motor tetap berputar normal, tidak diam
+total seperti kalau defaultnya 0.
+
+### Catatan dokumentasi
+
+Catatan "file milik Orang A" pada item ini dihapus. Pembagian kerja dua orang itu
+hanya latihan planning, tidak pernah dipakai — repo ini dikerjakan satu orang.
+
+### PROGRESS.md
+
+- §7: 20/0/3 → **22/0/1**. Item tersisa hanya "default baseline per-sensor"
+  (prioritas rendah, baru berpengaruh sebelum tangki dikalibrasi).
+- Item "Simpan semua parameter kalibrasi ke NVS" dicentang dengan rincian
+  **5 blob**: `kal` · `kal2` · `kal3` · `kal4` · `kal5`.
+- Baris "Baseline default 113000/156000" dianotasi: angkanya **hasil ukur nyata**
+  dari pilot sketch (skala `touchRead()` ESP32-S3 memang ratusan ribu), tapi
+  dipakai seragam untuk kelima sensor → error ±12% di tengah skala.
+
+**Total: 106/4/57 → 108/4/55.**
+
+**Compile:** sukses.
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

@@ -1,6 +1,6 @@
 # SUMMARY — Mesin PCB Etching Otomatis
 
-Firmware **Etching v0.6.5** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
+Firmware **Etching v0.6.6** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
 HCl/H2O2/H2O (stepper TMC2209), agitasi, draining, dan rinsing, dikendalikan lewat layar
 OLED 128x64 + 6 tombol (PCF8574).
 
@@ -24,7 +24,7 @@ OLED 128x64 + 6 tombol (PCF8574).
   3200 step/rev), konversi ml → step via `langkahPerMl` hasil kalibrasi NVS.
   `EN`/`PDN` shared 3 driver; `stepperSleep(true)` mematikan semua driver saat
   proses berhenti.
-- **Aktuator DC (PWM LEDC):** motor agitasi, pompa air sabun, pompa limbah, exhaust fan.
+- **Aktuator DC (PWM LEDC):** motor agitasi, pompa air sabun, pompa limbah, exhaust fan. PWM diambil dari `kalibDuty[]` hasil kalibrasi (interpolasi 5 tingkat agitasi dari 3 titik kalibrasi).
 - **Kalibrasi level cairan:** tiap tangki punya baseline 0% (fixed) + delta 100%
   + kapasitas ml, tersimpan di NVS. Persen = `|raw − kering| / deltaPenuh`.
 - **Penyimpanan NVS:** preset via `Preferences` dengan checksum.
@@ -48,7 +48,7 @@ OLED 128x64 + 6 tombol (PCF8574).
 | `sensor.h` | 5 sensor touch (level + status ISI/KOSONG) + 3 DS18B20 1-bus (address dipindai) + MQ-135 ppm |
 | `storage.h` | Preferences (NVS), checksum, simpan/muat preset & 4 blob kalibrasi |
 | `motor.h` | Stepper TMC2209 non-blocking (pompa peristaltik) + `stepperSleep()`/`pompaMatikanTotal()` |
-| `dcmotor.h` | DC motor via TB6612FNG (agitasi, pompa sabun, pompa limbah, fan) |
+| `dcmotor.h` | DC motor via TB6612FNG, PWM dari `kalibDuty[]` (agitasi interpolasi 5 tingkat, pompa, fan) |
 | `buzzer.h` | Buzzer non-blocking (state machine berbasis millis) |
 | `led_strip.h` | LED status WS2812 GPIO 7, 8 mode (Boot/Idle/Proses/Jeda/Selesai/Error/E-stop/Warning), animasi non-blocking |
 | `process.h` | State machine proses etching, jeda/batal/selesai |
@@ -56,7 +56,7 @@ OLED 128x64 + 6 tombol (PCF8574).
 | `fontmini.h` | Font data untuk OLED |
 | `dbg.h` | Debug helper (serial print) |
 
-## Pin Map (v0.6.5)
+## Pin Map (v0.6.6)
 
 | Fungsi | GPIO | Catatan |
 |---|---|---|
