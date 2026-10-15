@@ -4,6 +4,7 @@
 #include <Adafruit_NeoPixel.h>
 #include "config.h"
 #include "dbg.h"
+#include "sensor.h"   // sensorPersen[] — dipakai indikator per sensor
 
 #ifndef LED_PI
 #define LED_PI 3.14159265358979323846
@@ -182,6 +183,98 @@ void ledStripUpdate() {
       break;
   }
 }
+
+// ================= RGB WS2812 INDIKATOR PER SENSOR (5 sensor) =================
+// Strip terpisah (GPIO lain) dengan 1 LED per sensor. Menampilkan level tangki
+// sebagai "bar": LED menyala proporsional terhadap persen, dan warnanya
+// berubah saat level turun di bawah ambang.
+//
+//   merah   < AMBANG_SEKRIT   (hampir kosong — jangan jalankan proses)
+//   kuning  < AMBANG_WASPADA  (rendah — sisa menipis)
+//   hijau   >= AMBANG_WASPADA (cukup)
+//   (kecerahan tiap komponen diskalakan level, jadi LED penuh = tangki penuh)
+//
+// Non-blocking: `ledSensorUpdate()` dipanggil tiap loop(); redraw hanya saat
+// nilai sensor berubah >= 2% supaya tidak membanjiri bus WS2812.
+//
+// ---------------------------------------------------------------------------
+// STATUS IMPLEMENTASI: DEFAULT NON-AKTIF.
+// `SENSOR_LED_ENABLE` di `config.h` = 0 karena GPIO 47 masih dipakai DRV8825
+// sebagai PIN_STEP3. Aktifkan hanya setelah:
+//   (a) migrasi stepper ke TMC2209 selesai -> GPIO 21 / 47 bebas, ATAU
+//   (b) pilih GPIO lain yang benar-benar kosong.
+// Setelah aktif, kode di bawah sudah lengkap dan tidak perlu diubah lagi —
+// cukup set `SENSOR_LED_ENABLE 1` + `PIN_LED_SENSOR` ke pin yang benar.
+// ---------------------------------------------------------------------------
+
+#if SENSOR_LED_ENABLE
+
+// Ambang level (%). Di bawah SEKRIT = merah, di bawah WASPADA = kuning.
+#define AMBANG_SEKRIT   5    // %
+#define AMBANG_WASPADA  20   // %
+
+// Satu LED per sensor; warna status digabung kecerahan supaya level terbaca
+// sebagai bar visual (LED redup = level rendah, LED terang = level penuh).
+Adafruit_NeoPixel ledSensor(SENSOR_LED_PIXELS, PIN_LED_SENSOR, NEO_GRB + NEO_KHZ800);
+
+int  sensorLedTerakhir[SENSOR_LED_PIXELS];
+unsigned long sensorLedMs = 0;
+bool sensorLedSiap = false;
+
+void ledSensorInit() {
+  ledSensor.begin();
+  ledSensor.setBrightness(SENSOR_LED_BRI);
+  ledSensor.clear();
+  ledSensor.show();
+  for (int i = 0; i < SENSOR_LED_PIXELS; i++) sensorLedTerakhir[i] = -1;
+  sensorLedSiap = true;
+  dbg.print(F("[LED] Indikator sensor: GPIO"));
+  dbg.print(PIN_LED_SENSOR);
+  dbg.print(F(", "));
+  dbg.print(SENSOR_LED_PIXELS);
+  dbg.println(F(" pixel"));
+}
+
+// Warna menurut level: merah (kritis) -> kuning (menipis) -> hijau (cukup).
+uint32_t sensorLedWarna(int persen) {
+  if (persen < AMBANG_SEKRIT)  return ledSensor.Color(255, 0, 0);
+  if (persen < AMBANG_WASPADA) return ledSensor.Color(255, 160, 0);
+  return ledSensor.Color(0, 200, 0);
+}
+
+// Panggil tiap loop(). Throttle 250 ms + hanya redraw bila ada sensor yang
+// berubah >= 2% supaya tidak membanjiri bus WS2812 tiap iterasi.
+void ledSensorUpdate() {
+  if (!sensorLedSiap) return;
+  unsigned long now = millis();
+  if ((long)(now - sensorLedMs) < (long)INTERVAL_LED_SENSOR_MS) return;
+  sensorLedMs = now;
+
+  bool berubah = false;
+  for (int i = 0; i < SENSOR_LED_PIXELS && i < JUMLAH_SENSOR; i++) {
+    int p = constrain(sensorPersen[i], 0, 100);
+    if (abs(p - sensorLedTerakhir[i]) >= 2) {
+      sensorLedTerakhir[i] = p;
+      berubah = true;
+    }
+  }
+  if (!berubah) return;
+
+  // Kecerahan tiap komponen diskalakan level -> LED redup = level rendah,
+  // LED terang = level penuh (bar visual tanpa butuh pixel tambahan).
+  for (int i = 0; i < SENSOR_LED_PIXELS; i++) {
+    if (i >= JUMLAH_SENSOR) { ledSensor.setPixelColor(i, 0); continue; }
+    int p = constrain(sensorPersen[i], 0, 100);
+    uint32_t c = sensorLedWarna(p);
+    uint8_t r = (uint8_t)(((c >> 16) & 0xFF) * p / 100);
+    uint8_t g = (uint8_t)(((c >>  8) & 0xFF) * p / 100);
+    uint8_t b = (uint8_t)(( c        & 0xFF) * p / 100);
+    ledSensor.setPixelColor(i, ledSensor.Color(r, g, b));
+  }
+  ledSensor.show();
+}
+
+#endif  // SENSOR_LED_ENABLE
 
 // ---------- API singkat ----------
 inline void ledBoot()    { ledSetMode(LED_BOOT); }

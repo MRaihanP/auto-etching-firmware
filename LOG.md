@@ -44,6 +44,46 @@ GPIO & Hardware 9 ✅ → 10 ✅.
 
 ---
 
+## [2026-10-15] v0.5.9 — Perbaiki sisa merge upstream (build rusak) + indikator sensor LED (gated)
+
+Merge upstream (`2c84273`) menyisakan **3 file tidak bisa dikompilasi** —
+`.ino` masih memakai API sensor versi lama (`dsOffsetX10`, `JUMLAH_KANAL_SUHU`,
+`udaraSiap()`, `mq135Baseline`/`mq135Margin`, `HAL_KALIB_SUHU_LIST`) sementara
+`sensor.h` sudah berisi desain baru 3-sensor-1-bus (`sensorSuhu()`, `suhuOffsetX10[]`,
+`kalibSuhuAddr[]`, `mq135PPM()`), dan `sensor_extra.h` versi upstream menggantikan
+versi lama. Akibatnya `gambarKalibSuhu()`/`gambarKalibUdara()` ikut hilang dari
+`ui.h`.
+
+**Build fix** — diselaraskan ke satu desain (3 sensor pada 1 bus 1-Wire):
+
+| File | Perubahan |
+|---|---|
+| `config.h` | Tambah `PIN_DS18B20 10` (bus tunggal). `PIN_DS_CHAMBER/CAIRAN/MOTOR` jadi alias + catatan "tidak dipakai" |
+| `data.h` | Buang `HAL_KALIB_SUHU_LIST` (halaman tunggal, bukan list+detail). State suhu → `JUMLAH_SUHU`, `namaSensorSuhu[3]`, `kalibSuhuIdx/Scroll/Field`, `SUHU_ROW_TOP/ROW_H/CONTENT_H`. State udara → `kalibUdaraSel`, `mq135Normal`, `mq135Kotor`, `mq135Bacaan` |
+| `ui.h` | Kembalikan `gambarKalibSuhu()` + `gambarKalibUdara()` (3 blok: addr + suhu; 2 baris acuan + ppm live) dan daftarkan di `gambarLayar()` |
+| `auto-etching-firmware.ino` | `HAL_KALIB_SUHU`: ATAS/BAWAH pindah blok + auto-scroll, ENTER pindah field (addr↔suhu), KIRI/KANAN ubah addr 1–3 atau offset ±0,1 °C. `HAL_KALIB_UDARA`: ATAS/BAWAH pilih Normal/Kotor, ENTER rekam ppm. Loop live → `sensorSuhuUpdate()` + `mq135Bacaan` |
+| `storage.h` | `FORMAT_VERSI_KALIB2` 1 → **2**. `DataKalib2` ganti `dsOffsetX10`/`mq135Baseline`/`mq135Margin` → `addrSensor[3]`/`suhuOffsetX10[3]`/`mq135Normal`/`mq135Kotor` (semua `int16_t`, CRC tetap) |
+
+Blob `"kal2"` versi 1 otomatis ditolak (versi beda) → default, tidak merusak
+kalibrasi level `"kal"` yang sudah tersimpan.
+
+**Indikator RGB per sensor** (`led_strip.h`) — kode lengkap tapi **default non-aktif**:
+`config.h` `SENSOR_LED_ENABLE 0` karena GPIO 47 masih dipakai DRV8825 sebagai
+`PIN_STEP3`. Strip 5 pixel di GPIO 47 (tentatif): warna hijau ≥20%, kuning 5–19%,
+merah <5%; tiap komponen warna diskalakan level sehingga kecerahan = "bar" liquid.
+Throttle 250 ms + redraw hanya bila sensor berubah ≥2%. Hook `ledSensorInit()` di
+`setup()` dan `ledSensorUpdate()` di `loop()`, keduanya di-`#if SENSOR_LED_ENABLE`.
+Aktifkan nanti cukup set `SENSOR_LED_ENABLE 1` + `PIN_LED_SENSOR` ke pin yang
+benar-benar bebas — tidak perlu ubah logika.
+
+**Compile:** sukses — 470693 bytes (35%) program, 58592 bytes (17%) RAM.
+
+**`PROGRESS.md`** — Bab 1 GPIO & Hardware diselaraskan dengan kode aktual:
+TMC2209 jadi 1 item consolidated (butuh konfirmasi hardware), DS18B20 & MQ-135
+diperbarui, item RGB per sensor dicatat "kode ada, belum diaktifkan".
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

@@ -94,10 +94,26 @@
 #define PIN_DIR3        21
 // Lain-lain
 #define PIN_BUZZER      6
-#define PIN_LED_STRIP   7
-#define PIN_DS_CHAMBER   10    // 1-Wire DS18B20: suhu ruangan chamber
-#define PIN_DS_CAIRAN    45    // 1-Wire DS18B20: suhu cairan dalam chamber
-#define PIN_DS_MOTOR     36    // 1-Wire DS18B20: suhu motor agitasi
+#define PIN_LED_STRIP   7    // WS2812 status sistem (1 LED) - lihat led_strip.h
+
+// ===== RGB WS2812 indikator per sensor (5 sensor) =====
+// Set SENSOR_LED_ENABLE = 1 setelah ada pin bebas (GPIO 21 atau 47 — keduanya
+// baru bebas setelah migrasi stepper ke TMC2209; saat ini masih dipakai
+// DRV8825 sbbg PIN_DIR3 / PIN_STEP3).
+#define SENSOR_LED_ENABLE  0
+#define PIN_LED_SENSOR     47   // tentative — ubah sesuai pin yang benar-benar bebas
+#define SENSOR_LED_PIXELS  5    // HCl, H2O2, H2O, Sabun, Limbah
+#define SENSOR_LED_BRI     40   // 0-255 (lebih redup dari status supaya tidak menyilaukan)
+// Periode redraw indikator sensor (ms). 250 ms = 4x per detik, cukup untuk
+// level liquid yang berubah lambat tanpa membanjiri bus WS2812.
+#define INTERVAL_LED_SENSOR_MS 250
+// 1-Wire DS18B20. Design final: TIGA sensor pada SATU bus (GPIO10), dibedakan
+// lewat DeviceAddress di `sensor.h` (Motor / Komponen / Chamber). Define
+// per-kanal di bawah hanya sisa dari desain 3-bus yang sudah tidak dipakai.
+#define PIN_DS18B20      10    // bus 1-Wire tunggal untuk 3 sensor DS18B20
+#define PIN_DS_CHAMBER   10    // (dipakai lewat PIN_DS18B20)
+#define PIN_DS_CAIRAN    45    // tidak dipakai — sisa desain 3-bus
+#define PIN_DS_MOTOR     36    // tidak dipakai — sisa desain 3-bus
 #define PIN_MQ135       9     // analog (kualitas udara)
 
 // ===== MQ-135: divider analog sebelum ADC =====
@@ -111,4 +127,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.8"
+#define FW_VERSI  "v0.5.9"

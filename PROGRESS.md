@@ -9,22 +9,19 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 
 ## 1. GPIO & Hardware
 
-- [ ] ⬜ Update pin map stepper ke TMC2209 (`config.h`): STEP HCl=38, DIR HCl=48, STEP H2O2=40, DIR H2O2=39, STEP Air=42, DIR Air=41, TMC_EN=1, TMC_PDN=2
-- [ ] ⬜ Hapus `PIN_SLP1/2/3`, tambahkan `PIN_TMC_EN` + `PIN_TMC_PDN`
-- [ ] ⬜ Konfirmasi apakah `EN`/`PDN` (GPIO 1 & 2) shared 3 channel atau per-channel
-- [ ] ⬜ Konfirmasi step/rev mikrostep TMC2209 (untuk hitung `langkahPerMl`)
-- [x] ✅ I2C SDA=4, SCL=5, 400 kHz (`config.h:5-7`, `.ino:568`)
-- [x] ✅ OLED SSD1306 0x3C 128×64 terinisialisasi (`.ino:586`)
-- [x] ✅ PCF8574 0x20 — 6 tombol, inisialisasi tulis `0xFF` (`.ino:571`)
-- [x] ✅ Error I2C dideteksi & dicatat ke Serial (`.ino:571,586`)
-- [x] ✅ 5 GPIO sensor level (11/12/13/14/3) `INPUT` (`sensor.h:37`)
-- [x] ✅ 4 PWM TB6612FNG (15/16/17/18) (`dcmotor.h:10`)
-- [x] ✅ Buzzer pasif GPIO 6 via LEDC (`buzzer.h:14`)
-- [x] ✅ **LED status WS2812 GPIO 7** — file baru `led_strip.h`, mode Boot/Idle/Proses/Jeda/Selesai/Error/E-stop/Warning, animasi non-blocking di `ledStripUpdate()`, integrasi di `process.h` (`aksiFase`, `prosesToggleJeda`, `prosesBatal`, `prosesKeluarSelesai`) + `.ino` (`setup()` init, `loop()` update, handler E-stop)
-- [x] ✅ DS18B20 di GPIO 10, 3 sensor pada satu bus 1-Wire (`sensor.h:116`)
-- [x] ✅ MQ-135 analog GPIO 9 + divider (`config.h:99`, `sensor.h:210`)
-- [x] ✅ E-stop GPIO 8 `INPUT_PULLUP` (`.ino:582`)
-- [ ] ⬜ RGB WS2812 indikator per sensor (rencana awal GPIO 48 — kini bentrok dengan DIR HCl)
+- [ ] ⬜ **Migrasi ke TMC2209 (rencana, belum dikerjakan)** — kode saat ini masih pakai DRV8825 (`config.h:86-94`: `PIN_SLP1/2/3`, `PIN_STEP1/2/3`, `PIN_DIR1/2/3`). Rencana pin map TMC2209 (STEP HCl=38, DIR HCl=48, STEP H2O2=40, DIR H2O2=39, STEP Air=42, DIR Air=41, TMC_EN=1, TMC_PDN=2) ada di `PROCESS.md` §1.2 — butuh konfirmasi: (a) `EN`/`PDN` GPIO 1 & 2 shared 3 channel atau per-channel, (b) step/rev mikrostep TMC2209 untuk hitung `langkahPerMl`.
+- [x] ✅ I2C SDA=4, SCL=5, 400 kHz (`config.h:5-7`, `.ino:601-602`)
+- [x] ✅ OLED SSD1306 0x3C 128×64 terinisialisasi (`.ino:618`)
+- [x] ✅ PCF8574 0x20 — 6 tombol, inisialisasi tulis `0xFF` (`.ino:604`)
+- [x] ✅ Error I2C dideteksi & dicatat ke Serial (`.ino:604,618`)
+- [x] ✅ 5 GPIO sensor level (11/12/13/14/3) `INPUT` (`sensor.h:36-38`)
+- [x] ✅ 4 PWM TB6612FNG (15/16/17/18) (`config.h:79-82`, `dcmotor.h`)
+- [x] ✅ Buzzer pasif GPIO 6 via LEDC (`buzzer.h:14-18`)
+- [x] ✅ **LED status WS2812 GPIO 7** — file baru `led_strip.h`, 8 mode (Boot/Idle/Proses/Jeda/Selesai/Error/E-stop/Warning), animasi non-blocking di `ledStripUpdate()`, integrasi di `process.h` (`aksiFase`, `prosesToggleJeda`, `prosesBatal`, `prosesKeluarSelesai`) + `.ino` (`setup()` init, `loop()` update, handler E-stop)
+- [x] ✅ DS18B20 **x3 pada satu bus 1-Wire GPIO 10** (`PIN_DS18B20` = 10, `config.h`), 3 DeviceAddress hardcode (`sensor.h:119-123`), non-blocking `setWaitForConversion(false)`, offset kalibrasi per blok `suhuOffsetX10[3]` + pilih address `kalibSuhuAddr[3]`, halaman kalibrasi `HAL_KALIB_SUHU` (`ui.h:gambarKalibSuhu()`) & `HAL_KALIB_UDARA` (`ui.h:gambarKalibUdara()`), NVS blob `"kal2"` versi 2 — **catatan:** `PIN_DS_CAIRAN=45` & `PIN_DS_MOTOR=36` di `config.h` **tidak dipakai** (sisa desain lama 3-bus)
+- [x] ✅ MQ-135 analog GPIO 9 + divider R1=10k/R2=15k (`config.h:109-114`, `sensor.h:210-228`), rekam acuan `mq135Normal`/`mq135Kotor` di halaman kalibrasi
+- [x] ✅ E-stop GPIO 8 `INPUT_PULLUP` (`.ino:616`)
+- [ ] ⬜ RGB WS2812 indikator per sensor (5 sensor) — **kode sudah lengkap** di `led_strip.h` (`ledSensorInit`/`ledSensorUpdate`, bar level + warna hijau/kuning/merah, non-blocking, gating `SENSOR_LED_ENABLE`) tetapi **belum diaktifkan**: `config.h` `SENSOR_LED_ENABLE = 0` karena GPIO 47 masih dipakai DRV8825 sebagai `PIN_STEP3`. Aktifkan setelah ada GPIO bebas (setelah migrasi TMC2209 → GPIO 21/47 bebas, atau pilih pin lain) — cukup set `SENSOR_LED_ENABLE 1` + `PIN_LED_SENSOR`, tidak perlu ubah logika.
 
 ---
 

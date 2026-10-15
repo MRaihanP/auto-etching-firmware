@@ -179,9 +179,11 @@ void tanganiTombol(int t) {
           kalibSetStep = 0;
           pindahHalaman(HAL_KALIB_LEVEL);
         } else if (a == 2) {
-          // Sensor Suhu -> pilih kanal (Chamber / Cairan / Motor)
-          listReset(L_AKSI);
-          pindahHalaman(HAL_KALIB_SUHU_LIST);
+          // Sensor Suhu -> 3 blok (Motor / Komponen / Chamber), scroll di dalam
+          kalibSuhuIdx    = 0;
+          kalibSuhuScroll = 0;
+          kalibSuhuField  = 0;
+          pindahHalaman(HAL_KALIB_SUHU);
         } else if (a == 3) {
           // Sensor Udara (MQ-135)
           kalibUdaraSel = 0;
@@ -347,96 +349,67 @@ void tanganiTombol(int t) {
       }
       break;
 
-    // ---------- Kalibrasi Sensor Suhu: Pilih Kanal ----------
-    case HAL_KALIB_SUHU_LIST:
-      if (t == P_ATAS)  listGeser(L_AKSI, -1, JUMLAH_KANAL_SUHU);
-      if (t == P_BAWAH) listGeser(L_AKSI, +1, JUMLAH_KANAL_SUHU);
-      if (t == P_ENTER) {
-        kalibSuhuIdx   = lsSel[L_AKSI];
-        kalibSuhuBaris = 0;
-        pindahHalaman(HAL_KALIB_SUHU);
-      }
-      if (t == P_BACK) pindahHalaman(HAL_KALIB_MAIN);
-      break;
-
-    // ---------- Kalibrasi Sensor Suhu (DS18B20) ----------
+    // ---------- Kalibrasi Sensor Suhu (DS18B20, 3 blok) ----------
     case HAL_KALIB_SUHU:
-      if (dialogCfg == DLG_SIMPAN) {
-        if (t == P_ENTER) {
-          dialogCfg = DLG_NONE;
-          pindahHalaman(HAL_KALIB_SUHU_LIST);
-          tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
-        } else if (t == P_BACK) {
-          dialogCfg = DLG_NONE;
-          muatKalib2();          // buang perubahan, kembali ke nilai tersimpan
-          pindahHalaman(HAL_KALIB_SUHU_LIST);
+      if (t == P_BACK) { kalibSuhuScroll = 0; pindahHalaman(HAL_KALIB_MAIN); break; }
+      if (t == P_ATAS)  kalibSuhuIdx = max(0, kalibSuhuIdx - 1);
+      if (t == P_BAWAH) kalibSuhuIdx = min(JUMLAH_SUHU - 1, kalibSuhuIdx + 1);
+      if (t == P_ENTER) kalibSuhuField = 1 - kalibSuhuField;   // pindah field aktif
+      if (t == P_KIRI || t == P_KANAN) {
+        int arah = (t == P_KANAN) ? +1 : -1;
+        if (kalibSuhuField == 0) {
+          // Field addr: pilih sensor 1..3 pada bus 1-Wire
+          kalibSuhuAddr[kalibSuhuIdx] = constrain(kalibSuhuAddr[kalibSuhuIdx] + arah, 1, 3);
+          dbg.print(F("[KALIB-SUHU] "));
+          dbg.print(namaSensorSuhu[kalibSuhuIdx]);
+          dbg.print(F(" addr="));
+          dbg.println(kalibSuhuAddr[kalibSuhuIdx]);
+        } else {
+          // Field suhu: atur offset kalibrasi ±0.1 °C
+          suhuOffsetX10[kalibSuhuIdx] += arah * 1.0f;
+          if (suhuOffsetX10[kalibSuhuIdx] >  200.0f) suhuOffsetX10[kalibSuhuIdx] =  200.0f;
+          if (suhuOffsetX10[kalibSuhuIdx] < -200.0f) suhuOffsetX10[kalibSuhuIdx] = -200.0f;
+          dbg.print(F("[KALIB-SUHU] "));
+          dbg.print(namaSensorSuhu[kalibSuhuIdx]);
+          dbg.print(F(" offset="));
+          dbg.println(suhuOffsetX10[kalibSuhuIdx] / 10.0f);
         }
-      } else {
-        bool berubah = false;
-        if (t == P_KIRI || t == P_KANAN) {
-          int arah = (t == P_KANAN) ? 1 : -1;
-          dsOffsetX10[kalibSuhuIdx] = constrain(dsOffsetX10[kalibSuhuIdx] + arah, -500, 500);
-          berubah = true;
-          char tb[20];
-          int o = dsOffsetX10[kalibSuhuIdx];
-          snprintf(tb, sizeof(tb), "offset %s%d.%d C", (o < 0 ? "-" : ""),
-                   abs(o) / 10, abs(o) % 10);
-          tampilToast(tb);
-        }
-        if (t == P_BACK) {
-          if (berubah) dialogCfg = DLG_SIMPAN;
-          else pindahHalaman(HAL_KALIB_SUHU_LIST);
-        }
+        break;
+      }
+      // Auto-scroll: pastikan blok terpilih terlihat
+      {
+        int maxScroll = max(0, SUHU_CONTENT_H - (AREA_BAWAH - HEADER_H - 3));
+        int visibleH  = AREA_BAWAH - (HEADER_H + 3);
+        if (SUHU_ROW_TOP[kalibSuhuIdx] - kalibSuhuScroll + SUHU_ROW_H > visibleH)
+          kalibSuhuScroll = SUHU_ROW_TOP[kalibSuhuIdx] + SUHU_ROW_H - visibleH;
+        if (SUHU_ROW_TOP[kalibSuhuIdx] - kalibSuhuScroll < 0)
+          kalibSuhuScroll = SUHU_ROW_TOP[kalibSuhuIdx];
+        if (kalibSuhuScroll > maxScroll) kalibSuhuScroll = maxScroll;
+        if (kalibSuhuScroll < 0) kalibSuhuScroll = 0;
       }
       break;
 
     // ---------- Kalibrasi Sensor Udara (MQ-135) ----------
     case HAL_KALIB_UDARA:
-      if (dialogCfg == DLG_SIMPAN) {
-        if (t == P_ENTER) {
-          dialogCfg = DLG_NONE;
-          pindahHalaman(HAL_KALIB_MAIN);
-          tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
-        } else if (t == P_BACK) {
-          dialogCfg = DLG_NONE;
-          muatKalib2();
-          pindahHalaman(HAL_KALIB_MAIN);
+      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MAIN); break; }
+      if (t == P_ATAS || t == P_BAWAH) kalibUdaraSel = 1 - kalibUdaraSel;
+      if (t == P_ENTER) {
+        // Rekam bacaan saat ini (ppm) sebagai acuan baris terpilih
+        mq135Bacaan = sensorUdaraRaw();
+        int ppm = (int)mq135PPM();
+        if (kalibUdaraSel == 0) {
+          mq135Normal = ppm;
+          tampilToast("Normal direkam");
+        } else {
+          mq135Kotor = ppm;
+          tampilToast("Kotor direkam");
         }
-      } else {
-        bool berubah = false;
-        if (t == P_ATAS)  kalibUdaraBaris = max(0, kalibUdaraBaris - 1);
-        if (t == P_BAWAH) kalibUdaraBaris = min(1, kalibUdaraBaris + 1);
-        if (t == P_KIRI || t == P_KANAN) {
-          int arah = (t == P_KANAN) ? 1 : -1;
-          if (kalibUdaraBaris == 0) {
-            mq135Baseline = constrain(mq135Baseline + arah * 5, 0, 4095);
-            char tb[16];
-            snprintf(tb, sizeof(tb), "baseline %d", mq135Baseline);
-            tampilToast(tb);
-          } else {
-            mq135Margin = constrain(mq135Margin + arah * 5, 0, 4095);
-            char tb[16];
-            snprintf(tb, sizeof(tb), "margin %d", mq135Margin);
-            tampilToast(tb);
-          }
-          berubah = true;
-        }
-        // ENTER: baseline diambil dari bacaan saat ini (tunggu hangus dulu)
-        if (t == P_ENTER && kalibUdaraBaris == 0) {
-          if (!udaraSiap()) {
-            tampilToast("Tunggu hangus");
-          } else {
-            mq135Baseline = constrain(udaraBaca(), 0, 4095);
-            berubah = true;
-            char tb[16];
-            snprintf(tb, sizeof(tb), "base %d", mq135Baseline);
-            tampilToast(tb);
-          }
-        }
-        if (t == P_BACK) {
-          if (berubah) dialogCfg = DLG_SIMPAN;
-          else pindahHalaman(HAL_KALIB_MAIN);
-        }
+        dbg.print(F("[KALIB-MQ135] "));
+        dbg.print(kalibUdaraSel == 0 ? F("normal") : F("kotor"));
+        dbg.print(F(" adc="));
+        dbg.print(mq135Bacaan);
+        dbg.print(F(" ppm="));
+        dbg.println(ppm);
       }
       break;
 
@@ -608,14 +581,17 @@ void setup() {
 
   if (!sensorInit())
     dbg.println(F("!! Sensor level tidak siap. Cek wiring GPIO."));
-  suhuInit();          // DS18B20 (GPIO10)
-  udaraInit();         // MQ-135 (GPIO9) + mulai hitung waktu hangus 60 dtk
+  sensorSuhuInit();         // DS18B20 x3 pada 1 bus GPIO10 + scan DeviceAddress
+  udaraInit();             // MQ-135 (GPIO9) — pinMode INPUT
 
   motorInit();
   dcmotorInit();
   buzzerInit();
   ledStripInit();
   ledBoot();               // LED biru kelap-kelip selama boot
+#if SENSOR_LED_ENABLE
+  ledSensorInit();         // RGB indikator per sensor (5 LED)
+#endif
   pinMode(PIN_ESTOP, INPUT_PULLUP);
 
   if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
@@ -649,6 +625,9 @@ void loop() {
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
   ledStripUpdate();                          // animasi LED status (non-blocking)
+#if SENSOR_LED_ENABLE
+  ledSensorUpdate();                       // RGB level 5 tangki (non-blocking)
+#endif
 
   // E-stop: hentikan semua aktuator & batalkan proses
   if (digitalRead(PIN_ESTOP) == LOW) {
@@ -676,12 +655,10 @@ void loop() {
     perluGambar = true;
   }
 
-  // Halaman Kalib Suhu/Udara menampilkan angka live (bacaan ADC, sisa waktu
-  // hangus MQ-135, suhu DS18B20) -> refresh berkala. DS18B20 sendiri sudah
-  // dibatasi 1x per 2 detik per kanal di dalam suhuBaca() supaya tidak
-  // blocking terus.
-  if (halaman == HAL_KALIB_SUHU || halaman == HAL_KALIB_UDARA ||
-      halaman == HAL_KALIB_SUHU_LIST) {
+  // Halaman Kalib Suhu/Udara menampilkan angka live (bacaan DS18B20 3 blok,
+  // ppm MQ-135) -> refresh berkala. DS18B20 sendiri sudah dibatasi 1x per
+  // detik di sensorSuhuUpdate() supaya tidak blocking terus.
+  if (halaman == HAL_KALIB_SUHU || halaman == HAL_KALIB_UDARA) {
     static unsigned long liveKalibMs = 0;
     if ((long)(millis() - liveKalibMs) >= 300) {
       liveKalibMs = millis();

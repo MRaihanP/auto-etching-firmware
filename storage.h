@@ -127,23 +127,29 @@ void muatKalib() {
 // ================= KALIBRASI SENSOR SUHU & UDARA =================
 // Blob TERPISAH dari kalibrasi level ("kal"): kalau struct ini ikut berubah,
 // kalibrasi 0%/100% yang sudah disimpan di "kal" tidak jadi hilang.
-#define FORMAT_VERSI_KALIB2 1
+// v1 = dsOffsetX10[] + mq135Baseline/Margin (design lama, 3-bus)
+// v2 = addrSensor[] + suhuOffsetX10[] + mq135Normal/mq135Kotor (design 3-sensor-1-bus)
+#define FORMAT_VERSI_KALIB2 2
 
 struct DataKalib2 {
   uint32_t versi;
-  int16_t  dsOffsetX10[JUMLAH_KANAL_SUHU];   // x10 degC per kanal
-  int16_t  mq135Baseline;
-  int16_t  mq135Margin;
-  uint32_t crc;                // harus field terakhir
+  int16_t  addrSensor[JUMLAH_SUHU];    // DeviceAddress 1..3 per blok
+  int16_t  suhuOffsetX10[JUMLAH_SUHU]; // x10 degC per blok (untuk-aligned dengan float runtime)
+  int16_t  mq135Normal;                // acuan udara bersih (ppm)
+  int16_t  mq135Kotor;                 // acuan udara kotor (ppm)
+  uint32_t crc;                        // harus field terakhir
 };
 
 bool simpanKalib2() {
   DataKalib2 d;
   memset(&d, 0, sizeof(d));
   d.versi = FORMAT_VERSI_KALIB2;
-  for (int i = 0; i < JUMLAH_KANAL_SUHU; i++) d.dsOffsetX10[i] = dsOffsetX10[i];
-  d.mq135Baseline    = mq135Baseline;
-  d.mq135Margin      = mq135Margin;
+  for (int i = 0; i < JUMLAH_SUHU; i++) {
+    d.addrSensor[i]    = (int16_t)kalibSuhuAddr[i];
+    d.suhuOffsetX10[i] = (int16_t)suhuOffsetX10[i];
+  }
+  d.mq135Normal = constrain(mq135Normal, 0, 32767);
+  d.mq135Kotor  = constrain(mq135Kotor,  0, 32767);
   d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
 
   bool ok = false;
@@ -164,17 +170,22 @@ void muatKalib2() {
       prefs.getBytes("kal2", &d, sizeof(d));
       valid = (d.versi == FORMAT_VERSI_KALIB2) &&
               (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
-      for (int i = 0; valid && i < JUMLAH_KANAL_SUHU; i++)
-        if (d.dsOffsetX10[i] < -500 || d.dsOffsetX10[i] > 500) valid = false;
-      if (d.mq135Baseline < 0 || d.mq135Baseline > 4095) valid = false;
-      if (d.mq135Margin   < 0 || d.mq135Margin   > 4095) valid = false;
+      for (int i = 0; valid && i < JUMLAH_SUHU; i++) {
+        if (d.addrSensor[i]    < 1 || d.addrSensor[i]    > 3) valid = false;
+        if (d.suhuOffsetX10[i] < -200 || d.suhuOffsetX10[i] > 200) valid = false;
+      }
+      if (d.mq135Normal < 0 || d.mq135Normal > 32767) valid = false;
+      if (d.mq135Kotor  < 0 || d.mq135Kotor  > 32767) valid = false;
     }
     prefs.end();
   }
   if (valid) {
-    for (int i = 0; i < JUMLAH_KANAL_SUHU; i++) dsOffsetX10[i] = d.dsOffsetX10[i];
-    mq135Baseline    = d.mq135Baseline;
-    mq135Margin      = d.mq135Margin;
+    for (int i = 0; i < JUMLAH_SUHU; i++) {
+      kalibSuhuAddr[i]    = d.addrSensor[i];
+      suhuOffsetX10[i]    = (float)d.suhuOffsetX10[i];
+    }
+    mq135Normal = d.mq135Normal;
+    mq135Kotor  = d.mq135Kotor;
   }
   dbg.println(valid ? F("[STORE] Kalibrasi suhu/udara dimuat")
                     : F("[STORE] Kalibrasi suhu/udara belum ada (default)"));
