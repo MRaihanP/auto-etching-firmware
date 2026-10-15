@@ -291,6 +291,90 @@ kerja dua orang), jadi sengaja tidak disentuh di versi ini.
 
 ---
 
+## [2026-10-15] v0.6.3 — Address DS18B20 dipindai otomatis, bukan hardcode
+
+Bab 7 item 5. Tiga `DeviceAddress` sebelumnya ditulis manual di `sensor.h:119-123`:
+
+```cpp
+DeviceAddress sensorAddress[3] = {
+  { 0x28, 0xB8, 0xEF, 0x87, 0x3A, 0x25, 0x02, 0x64 },   // ??? sensor apa ini?
+  ...
+};
+```
+
+Kalau address di board fisik tidak persis sama —misal sensor ditukar, atau
+dipindai dengan konfigurasi lain — maka `sensorSuhu()` selalu mengembalikan
+`DEVICE_DISCONNECTED_C` dan ketiga blok tampil `--.-C` tanpa ada petunjuk sensor
+mana yang bermasalah.
+
+### Perubahan
+
+**`sensor.h`**
+- `sensorAddress[3]` diinisialisasi nol + `sensorAddressValid[3]` sebagai
+  penanda slot terisi. Tidak ada lagi address yangbakal ditulis di firmware.
+- `sensorSimpanAddress()` memindai bus lewat `getAddress()`, mengisi slot
+  0..2 sesuai urutan bus, menandai sisa slot sebagai kosong.
+- `sensorSuhuInit()`: coba muat dari NVS dulu; kalau belum ada, pindai bus lalu
+  simpan hasilnya. `setResolution(12)` hanya dipasang ke slot yang benar-benar
+  terisi.
+- `sensorSuhuRaw()` mengembalikan -127 lebih awal kalau slot yang dipilih tidak
+  terisi, supaya tidak memanggil `getTempC()` dengan address nol.
+- `sensorPrintAddress()` mencetak 16 digit hex per slot saat boot pertama.
+  Diformat dengan `snprintf` karena `DbgPort` tidak punya `print(uint8_t, base)`.
+
+### NVS blob baru `"kal5"` (`storage.h`)
+
+```cpp
+struct DataKalib5 {
+  uint32_t versi;
+  uint8_t  addr[3][8];   // DeviceAddress per slot, 0 = kosong
+  uint8_t  valid;         // bitmask per slot
+  uint32_t crc;
+};
+```
+
+**Dipisah dari `"kal2"` dengan sengaja.** Kalau address ikut disisipkan ke
+`DataKalib2`, maka `FORMAT_VERSI_KALIB2` harus naik dan **semua kalibrasi suhu
+yang sudah tersimpan di alat ikut ditolak**. address hasil pindaian juga tidak
+boleh hilang hanya karena user menulis ulang offset. Memisahkan menjaga
+`FORMAT_VERSI_KALIB2` tetap 2 sehingga blob lama tidak terganggu.
+
+Saat muat, **family code 0x28 diverifikasi** per slot. Blob dengan isi acak atau
+dari versi lama ditolak, lalu bus dipindai ulang.
+
+### Catatan operasional
+
+Urutan `getAddress()` mengikuti urutan enumerate di bus, **dan tidak dijamin sama
+dengan posisi fisik**. Setelah boot pertama, cocokkan output Serial dengan label
+kabel:
+
+```
+[SUHU] blok 0 addr=28B8EF873A250264
+[SUHU] blok 1 addr=288077483A250202
+[SUHU] blok 2 addr=288EFD2339250287
+```
+
+Blok 0/1/2 = "Suhu Motor" / "Suhu Komponen" / "Suhu Chamber". Kalau urutannya
+salah dengan label fisik, blok bisa dipindah di halaman Kalibrasi Sensor Suhu
+(KIRI/KANAN pada field `addr`) — nilainya disimpan di `"kal2"`.
+
+Untuk memaksa pindai ulang (mis. setelah menukar sensor): ubah urutan di UI
+Kalibrasi Sensor Suhu lalu BACK akan menyimpan ulang, atau hapus blob `"kal5"`
+secara manual dari NVS.
+
+### Sisa Bab 7
+
+- ⬜ Deteksi sensor touch mati (`sensor.h`)
+- ⬜ Terapkan `kalibDuty[]` ke motor — file `dcmotor.h` milik Orang A
+- ⬜ Simpan `simpanKalib2()` dari BACK `HAL_KALIB_SUHU`/`HAL_KALIB_UDARA` —
+  masih bug warisan merge `2c84273`, ditunda atas permintaan pemilik
+
+**Compile:** sukses — 473305 bytes (36%) program, 58656 bytes (17%) RAM.
+
+**`PROGRESS.md` §7:** 18/1/4 → **19/0/4**. Total 101/5/61 → **102/4/61**.
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

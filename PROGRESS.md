@@ -157,7 +157,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Kalibrasi agitasi & fan: uji motor/kipas (`ino:292-344`)
 - [x] ✅ Kalibrasi DC: atur duty 0–255 dan catat ml hasil uji (`ino:246-289`)
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]` ke Serial
-- [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik
+- [x] ✅ **Address DS18B20 tidak lagi hardcode** (v0.6.3) — `sensorSuhuInit()` memindai bus 1-Wire lewat `getAddress()` lalu menyimpan hasilnya ke NVS blob `"kal5"` (`DataKalib5`: `addr[3][8]` + bitmask valid + CRC32). Boot berikutnya memakaitaddress dari NVS supaya urutan blok tidak berubah. Family code 0x28 diverifikasi saat muat — blob rusak ditolak lalu dipindai ulang. Slot kosong ditandai `sensorAddressValid[s] = false` → `sensorSuhuRaw()` mengembalikan -127 → UI tampil `--.-C`. Address dicetak ke Serial saat boot pertama untuk dicocokkan dgn label fisik Motor/Komponen/Chamber
 - [x] ✅ `kalibSuhuAddr[]` & `suhuOffsetX10[]` **sudah disimpan ke NVS** (v0.6.0) — `DataKalib2` versi 2 memakai `addrSensor[3]` + `suhuOffsetX10[3]`, ditulis `simpanKalib2()` saat BACK dari `HAL_KALIB_SUHU`
 - [x] ✅ `mq135Normal`/`mq135Kotor` **sudah disimpan ke NVS** (v0.6.0) — keduanya field di `DataKalib2` versi 2. *Sisa:* belum dipakai proteksi gas (itu item Bab 4)
 - [x] ✅ `kalibMotorRunning` **sudah dibaca** (v0.6.1) — `mulaiTestMotor()` + `upkeepKalibrasiMotor()` menjadwalkan auto-stop test agitasi/fan via `millis()`, plus BACK mematikan motor lebih dulu. Lihat §2 Modul UI
@@ -237,13 +237,13 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Modul Etching | 5 | 1 | 6 |
 | Modul Draining & Rinsing | 5 | 3 | 6 |
 | Modul Emergency Stop | 8 | 0 | 10 |
-| Sensor & Kalibrasi | 18 | 1 | 4 |
+| Sensor & Kalibrasi | 19 | 0 | 4 |
 | Penyimpanan & Data | 7 | 0 | 5 |
 | Infrastruktur | 5 | 0 | 5 |
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 101 ✅ · 5 ⚠️ · 61 ⬜**
+**Total: 102 ✅ · 4 ⚠️ · 61 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai

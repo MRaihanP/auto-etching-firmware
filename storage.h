@@ -238,6 +238,75 @@ void muatKalibStepper() {
                     : F("[STORE] Kalibrasi stepper belum ada (default)"));
 }
 
+// ================= ADDRESS DS18B20 (v0.6.3) =================
+// Blob TERPISAH: "kal5". Alasan pisah dari "kal2": `DataKalib2` disimpan lewat
+// Preferences sebagai struct dengan CRC; address hasil pindaian bus TIDAK boleh
+// ikut hilang kalau kalibrasi suhu ditulis ulang, dan sebaliknya. Memisahkan
+// juga menjaga `FORMAT_VERSI_KALIB2` tetap 2 sehingga blob "kal2" versi lama
+// yang sudah tersimpan di alat tidak ditolak.
+#define FORMAT_VERSI_KALIB5 1
+
+struct DataKalib5 {
+  uint32_t versi;
+  uint8_t  addr[3][8];   // DeviceAddress tiap slot, 0 = slot kosong
+  uint8_t  valid;         // bitmask: bit s = 1 kalau slot s terisi
+  uint32_t crc;
+};
+
+bool simpanAddressNVS() {
+  DataKalib5 d;
+  memset(&d, 0, sizeof(d));
+  d.versi = FORMAT_VERSI_KALIB5;
+  for (int s = 0; s < 3; s++) {
+    memcpy(d.addr[s], sensorAddress[s], 8);
+    if (sensorAddressValid[s]) d.valid |= (1 << s);
+  }
+  d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
+
+  bool ok = false;
+  if (prefs.begin(PREF_NS, false)) {
+    ok = (prefs.putBytes("kal5", &d, sizeof(d)) == sizeof(d));
+    prefs.end();
+  }
+  dbg.println(ok ? F("[STORE] Simpan address DS18B20: OK")
+                 : F("[STORE] Simpan address DS18B20: GAGAL"));
+  return ok;
+}
+
+// Return true kalau blob ada, CRC cocok, dan addressesnya terlihat plausibel
+// (family code DS18B20 = 0x28). Kalau tidak, caller memindai ulang bus.
+bool sensorMuatAddressNVS() {
+  DataKalib5 d;
+  bool ok = false;
+  if (prefs.begin(PREF_NS, false)) {
+    if (prefs.getBytesLength("kal5") == sizeof(d)) {
+      prefs.getBytes("kal5", &d, sizeof(d));
+      ok = (d.versi == FORMAT_VERSI_KALIB5) &&
+           (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
+    }
+    prefs.end();
+  }
+  if (!ok) { dbg.println(F("[STORE] Address DS18B20 belum ada -> pindai bus")); return false; }
+
+  bool ada = false;
+  for (int s = 0; s < 3; s++) {
+    bool v = (d.valid & (1 << s)) != 0;
+    // Family code 0x28 wajib: menolak blob yang isinya acak / versi lama.
+    if (v && d.addr[s][0] != 0x28) { ok = false; break; }
+    memcpy(sensorAddress[s], d.addr[s], 8);
+    sensorAddressValid[s] = v;
+    if (v) ada = true;
+  }
+  if (!ok || !ada) {
+    for (int s = 0; s < 3; s++) {
+      memcpy(sensorAddress[s], DS_ADDR_KOSONG, 8);
+      sensorAddressValid[s] = false;
+    }
+    return false;
+  }
+  return true;
+}
+
 // ================= KALIBRASI DC: DUTY PWM + ML HASIL TEST =================
 // Blob TERPISAH: "kal4" — nilai yang diedit di halaman Kalibrasi Motor DC
 // (pompa Sabun/Limbah) sekaligus Kalibrasi Agitasi & Fan. Sebelumnya semua

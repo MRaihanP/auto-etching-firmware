@@ -1,6 +1,6 @@
 # SUMMARY — Mesin PCB Etching Otomatis
 
-Firmware **Etching v0.6.1** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
+Firmware **Etching v0.6.3** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
 HCl/H2O2/H2O (stepper TMC2209), agitasi, draining, dan rinsing, dikendalikan lewat layar
 OLED 128x64 + 6 tombol (PCF8574).
 
@@ -44,8 +44,8 @@ OLED 128x64 + 6 tombol (PCF8574).
 | `input.h` | Debounce & pembacaan 6 tombol via PCF8574 |
 | `data.h` | Struct Preset, enum halaman, state global, list |
 | `presetops.h` | CRUD preset, kalkulasi ml, validasi |
-| `sensor.h` | Pembacaan 5 sensor touch, baseline adaptif, persen + kalibrasi 0%/100% |
-| `storage.h` | Preferences (NVS), checksum, simpan/muat preset & kalibrasi level |
+| `sensor.h` | 5 sensor touch (level + status ISI/KOSONG) + 3 DS18B20 1-bus (address dipindai) + MQ-135 ppm |
+| `storage.h` | Preferences (NVS), checksum, simpan/muat preset & 4 blob kalibrasi |
 | `motor.h` | Stepper TMC2209 non-blocking (pompa peristaltik) + `stepperSleep()`/`pompaMatikanTotal()` |
 | `dcmotor.h` | DC motor via TB6612FNG (agitasi, pompa sabun, pompa limbah, fan) |
 | `buzzer.h` | Buzzer non-blocking (state machine berbasis millis) |
@@ -55,7 +55,7 @@ OLED 128x64 + 6 tombol (PCF8574).
 | `fontmini.h` | Font data untuk OLED |
 | `dbg.h` | Debug helper (serial print) |
 
-## Pin Map (v0.6.1)
+## Pin Map (v0.6.3)
 
 | Fungsi | GPIO | Catatan |
 |---|---|---|

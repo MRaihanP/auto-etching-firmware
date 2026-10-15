@@ -142,15 +142,25 @@ void levelMasuk() {
 // Blok "Suhu Motor / Komponen / Chamber" masing-masing menunjuk ke salah satu
 // address lewat kalibSuhuAddr[] (1..3) -> sensorAddress[alamat-1].
 // Offset per blok (x10 °C) dihimpun dari kalibrasi KIRI/KANAN.
+//
+// v0.6.3: address TIDAK lagi hardcode. `sensorSuhuInit()` memindai bus dan
+// mengisi `sensorAddress[]` dengan urutan hasil `getAddress()`, lalu menyimpannya
+// ke NVS blob "kal2" supaya urutan yang sama berlaku setelah reboot. Kalau address
+// hasil boot pertama (tidak ada di NVS), urutan penentuannya adalah urutan bus —
+// cetak address ke Serial lalu cocokkan dengan label fisik Motor/Komponen/Chamber.
 
 OneWire ds18Bus(PIN_DS18B20);
 DallasTemperature ds18(&ds18Bus);
 
+// Penanda slot yang tidak terisi: seluruh byte address 0.
+const uint8_t DS_ADDR_KOSONG[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
 DeviceAddress sensorAddress[3] = {
-  { 0x28, 0xB8, 0xEF, 0x87, 0x3A, 0x25, 0x02, 0x64 },
-  { 0x28, 0x80, 0x77, 0x48, 0x3A, 0x25, 0x02, 0x02 },
-  { 0x28, 0x8E, 0xFD, 0x23, 0x39, 0x25, 0x02, 0x87 }
+  { 0, 0, 0, 0, 0, 0, 0, 0 },
+  { 0, 0, 0, 0, 0, 0, 0, 0 },
+  { 0, 0, 0, 0, 0, 0, 0, 0 }
 };
+bool sensorAddressValid[3] = { false, false, false };
 
 // address terpilih per blok (1..3, index 0 = sensorAddress[0])
 int kalibSuhuAddr[JUMLAH_SUHU] = { 1, 2, 3 };
@@ -160,29 +170,74 @@ float suhuOffsetX10[JUMLAH_SUHU] = { 0, 0, 0 };
 
 bool ds18Siap = false;
 
+// Cetak 8 byte address sebagai 16 digit hex ke Serial (untuk dicocokkan dgn
+// label fisik). DbgPort tidak punya print(uint8_t, base) jadi diformat dulu.
+void sensorPrintAddress(int slot, const uint8_t* a) {
+  char buf[20];
+  snprintf(buf, sizeof(buf), "%02X%02X%02X%02X",
+           a[0], a[1], a[2], a[3]);
+  dbg.print(F("[SUHU] blok "));
+  dbg.print(slot);
+  dbg.print(F(" addr="));
+  dbg.print(buf);
+  snprintf(buf, sizeof(buf), "%02X%02X%02X%02X",
+           a[4], a[5], a[6], a[7]);
+  dbg.println(buf);
+}
+
+// Salin hasil pindaian bus ke sensorAddress[]. Slot yang tidak terisi
+// ditandai address nol + sensorAddressValid = false.
+void sensorSimpanAddress(int* jumlahTersimpan) {
+  int jumlah = ds18.getDeviceCount();
+  int n = 0;
+  for (int i = 0; i < jumlah && n < 3; i++) {
+    DeviceAddress a;
+    if (!ds18.getAddress(a, i)) continue;
+    memcpy(sensorAddress[n], a, 8);
+    sensorAddressValid[n] = true;
+    sensorPrintAddress(n, a);
+    n++;
+  }
+  for (int i = n; i < 3; i++) {   // sisa slot kosong
+    memcpy(sensorAddress[i], DS_ADDR_KOSONG, 8);
+    sensorAddressValid[i] = false;
+  }
+  if (jumlahTersimpan) *jumlahTersimpan = n;
+  ds18Siap = (n >= 1);
+  dbg.print(F("[SUHU] DS18B20 terpakai: "));
+  dbg.print(n);
+  dbg.print(F("/3"));
+  dbg.println(ds18Siap ? F(" slot terisi") : F(" - TIDAK ADA, cek GPIO10"));
+}
+
+// Coba pakai address dari NVS. Return true kalau blob ada & addressesnya
+// valid, sehingga tidak perlu pindai ulang (pindai bus ~750 ms, dan urutan
+// bus bisa berubah kalau sensor dicabut/di-exchange).
+bool sensorMuatAddressNVS();   // definisi di storage.h
+
+// Tulis address hasil pindaian ke NVS supaya dipakai pada boot berikutnya.
+bool simpanAddressNVS();   // definisi di storage.h
+
 void sensorSuhuInit() {
   analogReadResolution(12);                // ADC MQ-135 12-bit (0..4095)
   ds18.begin();
-  // Resolusi 12-bit per sensor (mengikuti sketch referensi DS18B20_3pcs).
-  for (int s = 0; s < 3; s++) ds18.setResolution(sensorAddress[s], 12);
-  ds18.setWaitForConversion(false);       // konversi di latar belakang, UI tetap responsif
-  int jumlah = ds18.getDeviceCount();
-  ds18Siap = (jumlah >= 1);
-  dbg.print(F("[SUHU] DS18B20 ditemukan: "));
-  dbg.print(jumlah);
-  dbg.println(ds18Siap ? F(" sensor") : F(" (tidak ada)"));
-  // Cocokkan address hasil scan dengan address yang diharapkan (urutan).
-  for (int s = 0; s < 3; s++) {
-    bool ketemu = false;
-    for (int i = 0; i < jumlah; i++) {
-      DeviceAddress a;
-      if (!ds18.getAddress(a, i)) continue;
-      if (memcmp(a, sensorAddress[s], 8) == 0) { ketemu = true; break; }
-    }
-    dbg.print(F("[SUHU]  sensor"));
-    dbg.print(s + 1);
-    dbg.println(ketemu ? F(" OK") : F(" TIDAK DITEMUKAN"));
+  ds18.setWaitForConversion(false);       // konversi di latar belakang, UI responsif
+
+  int n = 0;
+  bool dariNVS = sensorMuatAddressNVS();
+  if (!dariNVS) {
+    sensorSimpanAddress(&n);
+    simpanAddressNVS();                   // simpan hasil pindaian pertama
+  } else {
+    for (int i = 0; i < 3; i++) if (sensorAddressValid[i]) n++;
+    dbg.print(F("[SUHU] Address dimuat dari NVS, "));
+    dbg.print(n);
+    dbg.println(F("/3 slot terisi"));
   }
+
+  // Resolusi 12-bit hanya untuk slot yang benar-benar terisi.
+  for (int s = 0; s < 3; s++)
+    if (sensorAddressValid[s]) ds18.setResolution(sensorAddress[s], 12);
 }
 
 // ===== Konversi non-blocking =====
@@ -220,9 +275,12 @@ bool sensorSuhuSiapTampil() {
 }
 
 // Baca suhu (°C) untuk blok idx dari cache terakhir.
+// Slot kosong / address tidak pernah dipindai -> DEVICE_DISCONNECTED_C (-127),
+// supaya ui.h menampilkan "--.-C".
 float sensorSuhuRaw(int idx) {
   if (!ds18Siap) return -127.0f;
   int slot = constrain(kalibSuhuAddr[idx], 1, 3) - 1;
+  if (!sensorAddressValid[slot]) return -127.0f;
   return ds18.getTempC(sensorAddress[slot]);
 }
 
