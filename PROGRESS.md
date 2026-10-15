@@ -165,7 +165,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Auto-stop motor kalibrasi setelah N ms (ganti `delay()`) — selesai v0.6.1 (`upkeepKalibrasiMotor()`), lihat catatan `kalibMotorRunning` di atas
 - [ ] ⬜ Terapkan `kalibDuty[]` ke motor — saat ini hanya dipakai tampilan (`ui.h`); `dcmotor.h` masih `agitasiSet()` memetakan speed 1–5 → PWM 80–255 tetap, `fanSet()` on/off tetap. Butuh `agitasiSetDuty()`/`fanSetAt()` yang sudah ada di `dcmotor.h` (**file milik Orang A**)
 - [ ] ⬜ Simpan semua parameter kalibrasi ke NVS — `kalibDuty`/`kalibMl` selesai v0.6.2, `kalibSuhuAddr`/`suhuOffsetX10`/`mq135*` selesai v0.6.0, `kalibStepperMl` selesai v0.5.7
-- [ ] ⬜ Deteksi sensor touch mati (nilai tidak berubah / selalu 0%)
+- [x] ✅ Deteksi sensor touch mati (v0.6.5) — `sensor.h:sensorMatiUpdate()` menandai strip yang `touchRead()`-nya beku di **0** selama `SENSOR_BEKU_MS` (60 detik); `touchRead()` yang sehat selalu non-nol, jadi 0 beku ≈ kabel putus / strip copot. Log `[SENSOR] <nama> MATI` sekali saat berubah, dan `[SENSOR] <nama> pulih` saat hidup lagi (tanpa perlu reset). `ui.h:gambarLevel()` menampilkan `DEAD` menggantikan persen + menyembunyikan isi bar, karena angka 0% yang palsu lebih berbahaya daripada tidak menampilkan apa pun. **Batas deteksi:** strip yang sudah tidak sensitif (buildup karat, HDPE tebal) masih bergerak sedikit dan *tidak* terdeteksi — hanya kasus beku total yang tertangkap. Penting untuk `FASE_CEK` Bab 3 agar tidak memercayai level yang salah
 
 ---
 
@@ -237,13 +237,13 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Modul Etching | 5 | 1 | 6 |
 | Modul Draining & Rinsing | 5 | 3 | 6 |
 | Modul Emergency Stop | 8 | 0 | 10 |
-| Sensor & Kalibrasi | 19 | 0 | 4 |
+| Sensor & Kalibrasi | 20 | 0 | 3 |
 | Penyimpanan & Data | 10 | 0 | 2 |
 | Infrastruktur | 5 | 0 | 5 |
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 105 ✅ · 4 ⚠️ · 58 ⬜**
+**Total: 106 ✅ · 4 ⚠️ · 57 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai

@@ -453,6 +453,65 @@ halaman kalibrasi yang diam-diam membuang nilainya.
 
 ---
 
+## [2026-10-15] v0.6.5 — Deteksi sensor level mati (raw beku di 0)
+
+Bab 7 item terakhir milik sisi Antarmuka. Sebelumnya `sensorOk` cuma satu flag
+global untuk kelima sensor — kalau satu strip nikel putus, firmware tidak tahu,
+dan hanya menampilkan `0%` atau `100%` seperti biasa.
+
+Yang paling berbahaya bukan tampilannya salah, tapi **nilainya dipakai untuk
+keputusan**: `FASE_CEK` (Bab 3) akan memakainya untuk mengecek "apakah tangki
+HCl cukup cairan sebelum dosing". Sensor putus yang baca 0% berarti sistem mengira
+tangki kosong — lalu gagal dengan pesan yang menyesatkan.
+
+### Cara deteksi
+
+`touchRead()` yang sehat **selalu mengembalikan nilai non-nol**. Jadi syaratnya
+sempit: raw **0** dan bertahan **60 detik** (`SENSOR_BEKU_MS`).
+
+Syaratnya sengaja tidak dibuat "nilai tidak berubah" — karena tangki kosong yang
+wajar juga nilainya diam, dan itu kondisi normal, bukan kerusakan.
+
+```cpp
+bool sensorMati[JUMLAH_SENSOR];
+bool sensorMatiDilaporkan[JUMLAH_SENSOR];   // cegah log berulang tiap 50 ms
+unsigned long sensorBekuMs[JUMLAH_SENSOR];
+```
+
+- Nilai != 0 → reset penghitung, `sensorMati = false`. **Pulih sendiri** tanpa
+  perlu reboot atau reset manual.
+- Nilai == 0 > 60 s → `sensorMati = true`, log sekali:
+  `[SENSOR] HCl MATI - raw beku di 0, cek strip nikel & kabel AWG30`
+
+### Tampilan
+
+`ui.h:gambarLevel()` — persen diganti `DEAD`, dan isi bar progres dikosongkan.
+Menampilkan `0%` dengan bar kosong untuk sensor yang putus **lebih berbahaya**
+daripada menampilkan `DEAD`: yang pertama terlihat seperti data valid.
+
+### Batas deteksi (dicatat di PROGRESS.md)
+
+Strip yang sudah tidak sensitif — buildup karat, HDPE terlalu tebal — masih
+bergerak sedikit, jadi **tidak** tertangkap. Yang tertangkap hanya kasus beku
+total, yaitu kabel yang benar-benar putus atau strip yang copot.
+
+Kalau butuh deteksi yang lebih tajam, jalannya lewat uji manual: masuk ke
+Kalibrasi Sensor Level, tangki dikosongkan lalu diisi, lihat apakah persen
+ikut berubah. Itu masih item uji di Bab 11.
+
+### Compile
+
+Sukses — 474089 bytes (36%) program, 58688 bytes (17%) RAM.
+
+**`PROGRESS.md` §7:** 19/0/4 → **20/0/3**. Total 105/4/58 → **106/4/57**.
+
+Bab 7 sisa 2 item, keduanya **bukan milik sisi Antarmuka**:
+- Terapkan `kalibDuty[]` ke motor — file `dcmotor.h`
+- Simpan semua parameter kalibrasi ke NVS — sudah selesai, tinggal centang
+  setelah item di atas beres
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

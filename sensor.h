@@ -26,6 +26,20 @@ int  sensorPersen[JUMLAH_SENSOR];       // level dalam persen 0-100
 int  sensorKalibKosong[JUMLAH_SENSOR];  // nilai saat 0% (kosong)
 int  sensorKalibPenuh[JUMLAH_SENSOR];   // nilai saat 100% (penuh)
 
+// ================= DETEKSI SENSOR MATI (v0.6.5) =================
+// `touchRead()` yang sehat selalu mengembalikan nilai non-nol. Kalau sebuah strip
+// menunjukkan 0 terus-menerus, hampir pasti kabelnya putus atau strip copot.
+//
+// CATATAN BATAS DETEKSI: strip yang sudah tidak sensitif (buildup karat, HDPE
+// terlalu tebal) masih bergerak sedikit, jadi TIDAK terdeteksi di sini. Yang
+// bisa ditangkap hanya kasus "nilai beku total" — cukup untuk mencegah FASE_CEK
+// nanti memercayai angka 0% yang palsu.
+#define SENSOR_BEKU_MS 60000UL   // nilai harus beku selama ini sebelum dicurigai mati
+
+bool sensorMati[JUMLAH_SENSOR] = { false, false, false, false, false };
+bool sensorMatiDilaporkan[JUMLAH_SENSOR] = { false, false, false, false, false };
+unsigned long sensorBekuMs[JUMLAH_SENSOR] = { 0, 0, 0, 0, 0 };
+
 // Filter state
 int  filterBuf[JUMLAH_SENSOR][FILTER_WINDOW];
 int  filterIdx[JUMLAH_SENSOR] = { 0, 0, 0, 0, 0 };
@@ -35,11 +49,14 @@ bool filterInit[JUMLAH_SENSOR] = { false, false, false, false, false };
 bool sensorInit() {
   for (int i = 0; i < JUMLAH_SENSOR; i++) {
     pinMode(sensorPin[i], INPUT);
-    sensorRaw[i]       = 0;
-    sensorPersen[i]    = 0;
+    sensorRaw[i]         = 0;
+    sensorPersen[i]      = 0;
     sensorKalibKosong[i] = 113000;
     sensorKalibPenuh[i]  = 156000;
-    filterInit[i]      = false;
+    filterInit[i]        = false;
+    sensorMati[i]           = false;
+    sensorMatiDilaporkan[i] = false;
+    sensorBekuMs[i]         = 0;
   }
   sensorOk = true;
   dbg.println(F("[SENSOR] Nickel strip touch mode, filter MA(8)"));
@@ -82,6 +99,41 @@ int kePersen(int nilai, int idx) {
 
 void sensorStatusUpdate();   // definisi di bawah (bagian status ISI/KOSONG)
 
+// Panggil tiap sensorUpdate(). Sensor yang touchRead()-nya beku di 0 selama
+// SENSOR_BEKU_MS ditandai mati. Log ke Serial hanya saat status berubah supaya
+// tidak membanjiri monitor tiap 50 ms.
+void sensorMatiUpdate() {
+  unsigned long now = millis();
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    if (sensorRaw[i] != 0) {
+      // Ada nilai: bukan sensor beku. Reset penghitung.
+      if (sensorMati[i]) {
+        dbg.print(F("[SENSOR] "));
+        dbg.print(namaSensor[i]);
+        dbg.println(F(" pulih - sensor hidup lagi"));
+      }
+      sensorMati[i]           = false;
+      sensorMatiDilaporkan[i] = false;
+      sensorBekuMs[i]         = 0;
+      continue;
+    }
+    // Nilai 0: hitung berapa lama beku.
+    if (sensorBekuMs[i] == 0) sensorBekuMs[i] = now;
+    if (!sensorMati[i] && (now - sensorBekuMs[i]) >= SENSOR_BEKU_MS) {
+      sensorMati[i] = true;
+      dbg.print(F("[SENSOR] "));
+      dbg.print(namaSensor[i]);
+      dbg.println(F(" MATI - raw beku di 0, cek strip nikel & kabel AWG30"));
+    }
+    if (sensorMati[i] && !sensorMatiDilaporkan[i]) {
+      sensorMatiDilaporkan[i] = true;
+      dbg.print(F("[SENSOR] "));
+      dbg.print(namaSensor[i]);
+      dbg.println(F(" tidak bisa dipercaya - abaikan sampai nilai berubah"));
+    }
+  }
+}
+
 void sensorUpdate() {
   if (!sensorOk) return;
   bool berubah = false;
@@ -96,6 +148,7 @@ void sensorUpdate() {
   }
   if (berubah && halaman == HAL_LEVEL) perluGambar = true;
   sensorStatusUpdate();
+  sensorMatiUpdate();
 }
 
 void sensorSetKosong(int i) {

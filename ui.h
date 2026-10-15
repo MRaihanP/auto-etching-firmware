@@ -440,12 +440,23 @@ void gambarLevel() {
     oled.print(namaSensor[i]);
 
     char buf[12];
-    sprintf(buf, "%d%%", sensorPersen[i]);
+    if (sensorMati[i]) {
+      // Sensor dicurigai mati: jangan tampilkan persen karena angkanya tidak
+      // bisa dipercaya. Tanda "DEAD" lebih jujur daripada 0% yang palsu.
+      oled.setTextColor(WHITE);
+      sprintf(buf, "DEAD");
+    } else {
+      sprintf(buf, "%d%%", sensorPersen[i]);
+    }
     teksKanan(buf, SCREEN_WIDTH - 1, y);
 
-    // Baris 2: status ISI / KOSONG (kiri, kontras pakai blok terbalik) + bar
+    // Baris 2: status ISI / KOSONG / DEAD (kiri, kontras pakai blok terbalik) + bar
     int barY = y + 9;
-    if (sensorAdaCairan(i)) {
+    if (sensorMati[i]) {
+      oled.setTextColor(WHITE);
+      oled.setCursor(1, barY);
+      oled.print("DEAD");
+    } else if (sensorAdaCairan(i)) {
       oled.fillRect(1, barY - 1, 21, 10, WHITE);
       oled.setTextColor(BLACK);
       oled.setCursor(3, barY);
@@ -458,7 +469,7 @@ void gambarLevel() {
     }
 
     oled.drawRect(barX, barY, barW, barH, WHITE);
-    int isi = (barW - 2) * sensorPersen[i] / 100;
+    int isi = sensorMati[i] ? 0 : (barW - 2) * sensorPersen[i] / 100;
     if (isi > 0) oled.fillRect(barX + 1, barY + 1, isi, barH - 2, WHITE);
 
     y += ROW_H;
