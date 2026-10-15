@@ -43,18 +43,18 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Tombol dibaca ulang setelah `oled.display()` (`.ino:671`)
 - [x] ✅ Kompensasi baris atas OLED rusak (`UI_Y_OFFSET` = 15 px) (`ui.h:13-46`)
 - [x] ✅ Konversi suhu DS18B20 non-blocking (`setWaitForConversion(false)`) (`sensor.h:138`)
-- [ ] ⬜ **Halaman ALARM baru** (`HAL_ALARM`) untuk semua kondisi gagal
-- [ ] ⬜ Layar proses: progress **per fase** (bukan persen total)
-- [ ] ⬜ Layar proses: panel ml terpompa per bahan (HCl/H2O2/H2O)
-- [ ] ⬜ Layar proses: ikon status aktuator (agitasi/drain/fan/soap)
-- [ ] ⬜ Layar proses: badge peringatan gas MQ-135 / suhu tinggi
-- [ ] ⬜ Layar proses: tampilkan siklus agitasi ke berapa
-- [ ] ⬜ Badge permanen "E-STOP" di header saat latch aktif
-- [ ] ⬜ Layar selesai: ringkasan total ml terpompa + durasi aktual
-- [ ] ⬜ Tampilkan nomor versi firmware di OLED (sekarang hanya Serial)
-- [ ] ⬜ Level Cairan: status ISI/KOSONG + ambang (define `AMBANG_MARGIN`/`AMBANG_HYST` ada tapi tak terpakai)
-- [ ] ⬜ Halaman `HAL_PLACEHOLDER` & `gambarPlaceholder()` — kode mati, tidak pernah dipanggil (`ui.h:336`)
-- [ ] ⬜ Halaman Kalibrasi Motor/Agitasi/Fan masih pakai `delay()` 1000–2000 ms → UI macet (`ino:310,316,341`)
+- [x] ✅ Tampilkan nomor versi firmware di OLED — `FW_VERSI` di pojok kanan atas halaman Menu Utama (`ui.h:gambarMenuUtama()`, `areaAtas` list dinaikkan ke 10 px supaya tidak menimpa baris versi)
+- [x] ✅ Level Cairan: status ISI/KOSONG + ambang — `sensor.h:sensorStatusUpdate()` memakai `AMBANG_MARGIN` (10%) naik & `AMBANG_HYST` (3%) turun supaya tidak berkedip di ambang; `sensorAdaCairan(i)` dipakai `ui.h:gambarLevel()` (label `ISI` blok terbalik / `KOSONG`, bar geser ke kanan)
+- [x] ✅ Halaman `HAL_PLACEHOLDER` & `gambarPlaceholder()` dihapus —enum `data.h`, `namaHalaman[]`, `case` di `ui.h` & `.ino`, fungsi `gambarPlaceholder()` tidak pernah terjangkau sejak v0.5.2
+- [x] ✅ Halaman Kalibrasi Agitasi/Fan tidak lagi pakai `delay()` — `mulaiTestMotor(jenis, durasiMs)` + `upkeepKalibrasiMotor()` dijadwalkan via `millis()`, dicek di `loop()`. `kalibMotorRunning` yang tadinya di-set tapi tidak pernah dibaca kini jadi flag aktif. BACK saat test sedang jalan mematikan motor
+- [ ] ⬜ **Halaman ALARM baru** (`HAL_ALARM`) untuk semua kondisi gagal — butuh `prosesGagal()` + `KodeError` dari Bab 6
+- [ ] ⬜ Layar proses: progress **per fase** (bukan persen total) — butuh durasi per fase
+- [ ] ⬜ Layar proses: panel ml terpompa per bahan (HCl/H2O2/H2O) — butuh `pompaProgres(i)` dari Bab 3
+- [ ] ⬜ Layar proses: ikon status aktuator (agitasi/drain/fan/soap) — butuh status aktuator live
+- [ ] ⬜ Layar proses: badge peringatan gas MQ-135 / suhu tinggi — butuh ambang proteksi dari Bab 4
+- [ ] ⬜ Layar proses: tampilkan siklus agitasi ke berapa — butuh `prosesSiklus` dari Bab 4
+- [ ] ⬜ Badge permanen "E-STOP" di header saat latch aktif — butuh latch `estopAktif` dari Bab 6
+- [ ] ⬜ Layar selesai: ringkasan total ml terpompa + durasi aktual — butuh `totalMlTerpompa`
 
 ---
 
@@ -160,7 +160,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119` — harus cocok address fisik
 - [ ] ⚠️ `kalibSuhuAddr[]` & `suhuOffsetX10[]` **tidak disimpan ke NVS** (hilang saat reset)
 - [ ] ⚠️ `mq135Normal`/`mq135Kotor` **tidak disimpan ke NVS** dan tidak dipakai proteksi
-- [ ] ⚠️ `kalibMotorRunning` diset `true` tapi **tidak pernah dibaca** → motor kalibrasi tak pernah auto-stop (`data.h:103`, `ino:284`)
+- [x] ✅ `kalibMotorRunning` **sudah dibaca** (v0.6.1) — `mulaiTestMotor()` + `upkeepKalibrasiMotor()` menjadwalkan auto-stop test agitasi/fan via `millis()`, plus BACK mematikan motor lebih dulu. Lihat §2 Modul UI
 - [ ] ⚠️ `kalibDuty[]` & `kalibMl[]` tidak disimpan ke NVS
 - [ ] ⬜ Simpan semua parameter kalibrasi ke NVS (versi format naik ke 2)
 - [ ] ⬜ Auto-stop motor kalibrasi setelah N ms (ganti `delay()`)
@@ -231,18 +231,18 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Kategori | ✅ | ⚠️ | ⬜ |
 |---|---|---|---|
 | GPIO & Hardware | 13 | 0 | 0 |
-| Modul UI | 16 | 0 | 12 |
+| Modul UI | 20 | 0 | 8 |
 | Modul Dosing | 14 | 0 | 6 |
 | Modul Etching | 5 | 1 | 6 |
 | Modul Draining & Rinsing | 5 | 3 | 6 |
 | Modul Emergency Stop | 8 | 0 | 10 |
-| Sensor & Kalibrasi | 14 | 5 | 3 |
+| Sensor & Kalibrasi | 15 | 4 | 3 |
 | Penyimpanan & Data | 7 | 0 | 5 |
 | Infrastruktur | 5 | 0 | 5 |
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 93 ✅ · 9 ⚠️ · 65 ⬜**
+**Total: 98 ✅ · 8 ⚠️ · 61 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai

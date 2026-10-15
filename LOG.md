@@ -165,6 +165,74 @@ lama di NVS blob `"kal3"` **tidak valid**. Jalankan ulang:
 
 ---
 
+## [2026-10-15] v0.6.1 — 4 item Modul UI: versi di OLED, status ISI/KOSONG, hapus placeholder, kalibrasi non-blocking
+
+Empat item ⬜ di `PROGRESS.md` §2 (Modul UI) yang bisa diselesaikan tanpa
+menunggu logika proses lain. Item yang masih ⬜ karena bergantung Bab 3/4/6
+dibiarkan apa adanya.
+
+### 1. Nomor versi firmware di OLED
+
+`FW_VERSI` tadinya hanya dicetak ke Serial. Sekarang tampil di pojok kanan atas
+halaman Menu Utama. Halaman ini tidak memakai `gambarHeader()` (bukan halaman
+daftar), jadi `areaAtas` `gambarList()` dinaikkan 0 → 10 px supaya baris list
+tidak pernah menimpa baris versi.
+
+### 2. Status ISI / KOSONG di Level Cairan
+
+`config.h` sudah punya `AMBANG_MARGIN` (10) dan `AMBANG_HYST` (3) sejak lama
+tetapi tidak pernah dipakai —Persis masalah yang dicatat `PROGRESS.md`.
+
+`sensor.h` — status per sensor dengan histeresis:
+```cpp
+bool sensorAdaCairanState[JUMLAH_SENSOR];
+void sensorStatusReset();
+bool sensorAdaCairan(int i);
+void sensorStatusUpdate();     // dipanggil dari sensorUpdate()
+```
+Naik ke ADA saat `persen >= AMBANG_MARGIN`, turun ke KOSONG saat
+`persen < AMBANG_MARGIN - AMBANG_HYST`. State lama dipakai sebagai titik awal
+agar histeresis benar-benar bekerja — bukan sekadar membandingkan dua angka,
+yang akan berkedip saat level berdiri tepat di ambang.
+
+`ui.h:gambarLevel()` — baris 1 tetap nama tangki + persen; baris 2 diisi
+status di kiri (label `ISI` dibalik warnanya supaya kontras tanpa perlu warna,
+`KOSONG` polos) dan bar progres digeser ke kanan (`STATUS_W = 40`).
+
+### 3. Hapus `HAL_PLACEHOLDER`
+
+Kode mati sejak v0.5.2 — tidak ada `pindahHalaman(HAL_PLACEHOLDER)` di mana pun,
+jadi 4 bagian ini tidak pernah terjangkau: enum di `data.h`, entri
+`namaHalaman[]`, `gambarPlaceholder()` + `case` di `ui.h`, `case` di `.ino`.
+Semuanya dihapus.
+
+### 4. Kalibrasi Agitasi & Fan tidak lagi membekukan UI
+
+Tiga `delay()` (`delay(1000)`, `delay(2000)` ×2) membuat layar beku dan tombol
+tidak responsif selama 1–2 detik.
+
+`.ino` — helper baru:
+```cpp
+void mulaiTestMotor(int jenis, int durasiMs);   // 1=agitasi, 2=agitasi semua, 3=fan
+void upkeepKalibrasiMotor();                   // dipanggil dari loop()
+```
+Test "semua kecepatan" tidak lagi `for` + `delay`: tiap kecepatan dijadwalkan
+satu per satu lewat `kalibMotorSelesaiMs += 1000`, dengan toast `Test 1/3...`
+sampai `3/3...`.
+
+`data.h` — `kalibMotorRunning` yang tadinya **di-set `true` tapi tidak pernah
+dibaca** (item ⚠️ di `PROGRESS.md` §7) kini jadi flag aktif. Ditambah
+`kalibMotorSelesaiMs`, `kalibMotorJenis`, `kalibMotorStep`.
+
+BACK di kedua halaman kalibrasi sekarang mematikan motor lebih dulu kalau test
+masih jalan — sebelumnya motor bisa terus nyala sampai user tebak-tebak.
+
+**Compile:** sukses — 471625 bytes (35%) program, 58664 bytes (17%) RAM.
+
+**`PROGRESS.md` §2:** 16 ✅ / 12 ⬜ → **20 ✅ / 8 ⬜**. Total 93/9/65 → **97/9/61**.
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

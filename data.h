@@ -48,7 +48,6 @@ enum Halaman {
   HAL_PRESET_LIST,
   HAL_PRESET_DETAIL,
   HAL_PROSES,
-  HAL_PLACEHOLDER,
   HAL_CFG_LIST,
   HAL_CFG_AKSI,
   HAL_CFG_EDIT,
@@ -65,7 +64,7 @@ enum Halaman {
   HAL_KALIB_UDARA
 };
 const char* namaHalaman[] = {
-  "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
+  "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
   "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN",
   "KALIB_SUHU", "KALIB_UDARA"
@@ -100,9 +99,12 @@ float kalibStepperMl[3] = {1.0, 1.0, 1.0};  // ml per rotasi untuk HCl, H2O2, Ai
 int kalibDCCursor = 0;        // 0=START, 1=duty, 2=ml
 int kalibDuty[7] = {128, 128, 128, 128, 128, 128, 128};  // Sabun, Limbah, Agitasi SPD1-3, Fan
 float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah
-bool kalibMotorRunning = false;  // true = motor sedang berjalan
+bool kalibMotorRunning = false;  // true = motor kalibrasi sedang berjalan
 unsigned long kalibMotorStartMs = 0;
-int kalibMotorRunMs = 2000;    // durasi test default 2 detik
+unsigned long kalibMotorSelesaiMs = 0;  // deadline (ms) test motor kalibrasi
+int kalibMotorJenis = 0;         // 0=tidak ada, 1=agitasi, 2=agitasi semua, 3=fan
+int kalibMotorStep = 0;          // untuk agitasi-semua: kecepatan sedang diuji
+int kalibMotorRunMs = 2000;      // durasi test default 2 detik
 
 // State Kalibrasi Sensor Suhu (3 blok: Motor / Komponen / Chamber)
 #define JUMLAH_SUHU 3

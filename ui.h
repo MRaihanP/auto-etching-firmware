@@ -150,7 +150,14 @@ void gambarList(const char* const* items, int jumlah, int L,
 
 // ================= HALAMAN: MAIN MENU =================
 void gambarMenuUtama() {
-  gambarList(menuUtama, JUMLAH_MENU, L_UTAMA, 0, 20);
+  // areaAtas = 10 supaya baris list tidak pernah menimpa baris versi firmware
+  // di pojok kanan atas. Halaman ini tidak pakai gambarHeader (bukan halaman
+  // daftar), jadi ruang 0..9 aman dipakai untuk versi.
+  gambarList(menuUtama, JUMLAH_MENU, L_UTAMA, 10, 20);
+
+  oled.setTextSize(1);
+  oled.setTextColor(WHITE);
+  teksKanan(FW_VERSI, SCREEN_WIDTH - 2, 1);   //FW_VERSI string literal, bukan F()
 }
 
 // ================= HALAMAN: PRESET LIST =================
@@ -332,15 +339,6 @@ void gambarProses() {
   teksMiniTengah(oled, st, 38, WHITE);                   // 38..42
 }
 
-// ================= HALAMAN: PLACEHOLDER =================
-void gambarPlaceholder() {
-  gambarHeader(menuUtama[lsSel[L_UTAMA]]);
-  teksTengah("Halaman ini", 26, 1);
-  teksTengah("belum tersedia", 36, 1);
-  oled.setTextSize(1);
-  teksTengah("[BACK] kembali", 52, 1);
-}
-
 // ================= HALAMAN: KONFIGURASI PRESET =================
 const char* const itemAksi[3] = { "Edit", "Duplikat", "Hapus" };
 const char* const TEKS_TAMBAH = "+ Tambah Preset";
@@ -427,14 +425,16 @@ void gambarLevel() {
   if (levelScroll > maxScroll) levelScroll = maxScroll;
 
   int y = HEADER_H + 2 - levelScroll;
-  const int barX = 1;
-  const int barW = SCREEN_WIDTH - 2;
-  const int barH = 6;
+  const int STATUS_W = 40;                       // ruang kiri baris 2 untuk status
+  const int barX = STATUS_W;
+  const int barW = SCREEN_WIDTH - STATUS_W - 1;
+  const int barH = 8;
 
   oled.setTextSize(1);
   for (int i = 0; i < JUMLAH_SENSOR; i++) {
     if (y + ROW_H < HEADER_H || y > AREA_BAWAH) { y += ROW_H; continue; }
 
+    // Baris 1: nama tangki (kiri) + persen (kanan)
     oled.setTextColor(WHITE);
     oled.setCursor(1, y);
     oled.print(namaSensor[i]);
@@ -443,7 +443,20 @@ void gambarLevel() {
     sprintf(buf, "%d%%", sensorPersen[i]);
     teksKanan(buf, SCREEN_WIDTH - 1, y);
 
+    // Baris 2: status ISI / KOSONG (kiri, kontras pakai blok terbalik) + bar
     int barY = y + 9;
+    if (sensorAdaCairan(i)) {
+      oled.fillRect(1, barY - 1, 21, 10, WHITE);
+      oled.setTextColor(BLACK);
+      oled.setCursor(3, barY);
+      oled.print("ISI");
+      oled.setTextColor(WHITE);
+    } else {
+      oled.setTextColor(WHITE);
+      oled.setCursor(1, barY);
+      oled.print("KOSONG");
+    }
+
     oled.drawRect(barX, barY, barW, barH, WHITE);
     int isi = (barW - 2) * sensorPersen[i] / 100;
     if (isi > 0) oled.fillRect(barX + 1, barY + 1, isi, barH - 2, WHITE);
@@ -855,7 +868,6 @@ void gambarLayar() {
     case HAL_PRESET_LIST:   gambarPresetList();   break;
     case HAL_PRESET_DETAIL: gambarPresetDetail(); break;
     case HAL_PROSES:        gambarProses();       break;
-    case HAL_PLACEHOLDER:   gambarPlaceholder();  break;
     case HAL_CFG_LIST:      gambarCfgList();      break;
     case HAL_CFG_AKSI:      gambarCfgAksi();      break;
     case HAL_CFG_EDIT:      gambarCfgEdit();      break;

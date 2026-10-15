@@ -1,6 +1,6 @@
 # SUMMARY — Mesin PCB Etching Otomatis
 
-Firmware **Etching v0.6.0** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
+Firmware **Etching v0.6.1** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
 HCl/H2O2/H2O (stepper TMC2209), agitasi, draining, dan rinsing, dikendalikan lewat layar
 OLED 128x64 + 6 tombol (PCF8574).
 
@@ -55,7 +55,7 @@ OLED 128x64 + 6 tombol (PCF8574).
 | `fontmini.h` | Font data untuk OLED |
 | `dbg.h` | Debug helper (serial print) |
 
-## Pin Map (v0.6.0)
+## Pin Map (v0.6.1)
 
 | Fungsi | GPIO | Catatan |
 |---|---|---|

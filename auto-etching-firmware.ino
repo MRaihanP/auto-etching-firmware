@@ -47,6 +47,45 @@ void simpanDanToast(const char* ok) {
   tampilToast(simpanPreset() ? ok : "Gagal simpan!");
 }
 
+// ================= TEST MOTOR KALIBRASI (NON-BLOCKING) =================
+// Halaman Kalibrasi Agitasi & Fan sebelumnya memakai delay(1000..2000) sehingga
+// UI beku dan tombol tidak responsif. Sekarang dijadwalkan lewat millis() dan
+// dicek di loop() lewat upkeepKalibrasiMotor().
+//
+// jenis: 1 = agitasi 1 kecepatan · 2 = agitasi semua kecepatan · 3 = fan
+void mulaiTestMotor(int jenis, int durasiMs) {
+  kalibMotorJenis    = jenis;
+  kalibMotorRunning  = true;
+  kalibMotorStartMs  = millis();
+  kalibMotorSelesaiMs = kalibMotorStartMs + durasiMs;
+  perluGambar = true;
+}
+
+void upkeepKalibrasiMotor() {
+  if (!kalibMotorRunning) return;
+  if ((long)(millis() - kalibMotorSelesaiMs) < 0) return;
+
+  if (kalibMotorJenis == 2) {
+    // Masih ada kecepatan berikutnya? lanjutkan tanpa jeda.
+    if (kalibMotorStep < 3) {
+      kalibMotorStep++;
+      agitasiSet(kalibMotorStep);
+      kalibMotorSelesaiMs += 1000;
+      char tb[16];
+      snprintf(tb, sizeof(tb), "Test %d/3...", kalibMotorStep);
+      tampilToast(tb);
+      perluGambar = true;
+      return;
+    }
+  }
+
+  agitasiSet(0);
+  fanSet(false);
+  kalibMotorRunning = false;
+  tampilToast("Done");
+  perluGambar = true;
+}
+
 void editGeserField(int delta) {
   editField = constrain(editField + delta, 0, JUMLAH_FIELD - 1);
   if (editField < editScroll) editScroll = editField;
@@ -140,10 +179,6 @@ void tanganiTombol(int t) {
           dbg.println(F("[PROSES] Konfirmasi batal ditampilkan"));
         }
       }
-      break;
-
-    case HAL_PLACEHOLDER:
-      if (t == P_BACK) pindahHalaman(HAL_MENU_UTAMA);
       break;
 
     // ---------- Level Cairan ----------
@@ -295,7 +330,11 @@ void tanganiTombol(int t) {
 
     // ---------- Kalibrasi Agitasi ----------
     case HAL_KALIB_AGITASI:
-      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_BACK) {
+        if (kalibMotorRunning) { agitasiSet(0); kalibMotorRunning = false; }
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
       if (t == P_ATAS || t == P_BAWAH) {
         kalibDCCursor = (kalibDCCursor + 1) % 4;
         break;
@@ -309,25 +348,27 @@ void tanganiTombol(int t) {
       }
       if (t == P_ENTER) {
         if (kalibDCCursor == 3) {
-          // Test all speeds
-          for (int s = 1; s <= 3; s++) {
-            agitasiSet(s);
-            delay(1000);
-          }
-          agitasiSet(0);
-          tampilToast("Done");
+          // Test semua kecepatan berurutan. Non-blocking: tiap kecepatan
+          // dijadwalkan lewat upkeepKalibrasiMotor() di loop().
+          kalibMotorStep = 1;
+          agitasiSet(1);
+          mulaiTestMotor(2, 1000);
+          tampilToast("Test 1/3...");
         } else {
           agitasiSet(kalibDCCursor + 1);
-          delay(2000);
-          agitasiSet(0);
-          tampilToast("Done");
+          mulaiTestMotor(1, kalibMotorRunMs);
+          tampilToast("Running...");
         }
       }
       break;
 
     // ---------- Kalibrasi Fan ----------
     case HAL_KALIB_FAN:
-      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_BACK) {
+        if (kalibMotorRunning) { fanSet(false); kalibMotorRunning = false; }
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
       if (t == P_ATAS || t == P_BAWAH) {
         kalibDCCursor = (kalibDCCursor + 1) % 2;
         break;
@@ -342,9 +383,8 @@ void tanganiTombol(int t) {
       if (t == P_ENTER) {
         if (kalibDCCursor == 1) {
           fanSet(true);
-          delay(2000);
-          fanSet(false);
-          tampilToast("Done");
+          mulaiTestMotor(3, kalibMotorRunMs);
+          tampilToast("Running...");
         }
       }
       break;
@@ -624,6 +664,7 @@ void loop() {
   motorUpdate();                             // stepper non-blocking
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
+  upkeepKalibrasiMotor();                   // test motor kalibrasi (non-blocking)
   ledStripUpdate();                          // animasi LED status (non-blocking)
 #if SENSOR_LED_ENABLE
   ledSensorUpdate();                       // RGB level 5 tangki (non-blocking)

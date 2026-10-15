@@ -80,6 +80,8 @@ int kePersen(int nilai, int idx) {
   return (int)persen;
 }
 
+void sensorStatusUpdate();   // definisi di bawah (bagian status ISI/KOSONG)
+
 void sensorUpdate() {
   if (!sensorOk) return;
   bool berubah = false;
@@ -93,6 +95,7 @@ void sensorUpdate() {
     }
   }
   if (berubah && halaman == HAL_LEVEL) perluGambar = true;
+  sensorStatusUpdate();
 }
 
 void sensorSetKosong(int i) {
@@ -101,6 +104,33 @@ void sensorSetKosong(int i) {
 
 void sensorSetPenuh(int i) {
   sensorKalibPenuh[i] = sensorRaw[i];
+}
+
+// ================= STATUS ISI / KOSONG =================
+// Dua ambang dari `config.h`: AMBANG_MARGIN = batas bawah dianggap "ADA",
+// AMBANG_HYST = lebar histeresis supaya indikator tidak berkedip saat level
+// berada tepat di ambang (naik: >= MARGIN, turun: < MARGIN - HYST).
+bool sensorAdaCairanState[JUMLAH_SENSOR];
+
+void sensorStatusReset() {
+  for (int i = 0; i < JUMLAH_SENSOR; i++) sensorAdaCairanState[i] = false;
+}
+
+bool sensorAdaCairan(int i) {
+  return sensorAdaCairanState[i];
+}
+
+// Panggil tiap sensorUpdate(). state lama dipakai sebagai titik awal supaya
+// histeresis benar-benar bekerja (bukan sekadar membandingkan dua angka).
+void sensorStatusUpdate() {
+  for (int i = 0; i < JUMLAH_SENSOR; i++) {
+    int p = sensorPersen[i];
+    if (!sensorAdaCairanState[i]) {
+      if (p >= AMBANG_MARGIN) sensorAdaCairanState[i] = true;
+    } else {
+      if (p < AMBANG_MARGIN - AMBANG_HYST) sensorAdaCairanState[i] = false;
+    }
+  }
 }
 
 void levelMasuk() {
