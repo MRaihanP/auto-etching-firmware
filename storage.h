@@ -4,6 +4,7 @@
 #include "data.h"
 #include "presetops.h"
 #include "sensor.h"
+#include "sensor_extra.h"   // dsOffsetX10[], mq135Baseline, mq135Margin
 
 // Semua preset disimpan sebagai SATU blob (satu key) + versi + checksum.
 #define FORMAT_VERSI 1
@@ -121,4 +122,107 @@ void muatKalib() {
     sensorKalibPenuh[i]  = valid ? d.penuh[i]  : 156000;
   }
   dbg.println(valid ? F("[STORE] Kalibrasi dimuat") : F("[STORE] Kalibrasi belum ada (default)"));
+}
+
+// ================= KALIBRASI SENSOR SUHU & UDARA =================
+// Blob TERPISAH dari kalibrasi level ("kal"): kalau struct ini ikut berubah,
+// kalibrasi 0%/100% yang sudah disimpan di "kal" tidak jadi hilang.
+#define FORMAT_VERSI_KALIB2 1
+
+struct DataKalib2 {
+  uint32_t versi;
+  int16_t  dsOffsetX10[JUMLAH_KANAL_SUHU];   // x10 degC per kanal
+  int16_t  mq135Baseline;
+  int16_t  mq135Margin;
+  uint32_t crc;                // harus field terakhir
+};
+
+bool simpanKalib2() {
+  DataKalib2 d;
+  memset(&d, 0, sizeof(d));
+  d.versi = FORMAT_VERSI_KALIB2;
+  for (int i = 0; i < JUMLAH_KANAL_SUHU; i++) d.dsOffsetX10[i] = dsOffsetX10[i];
+  d.mq135Baseline    = mq135Baseline;
+  d.mq135Margin      = mq135Margin;
+  d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
+
+  bool ok = false;
+  if (prefs.begin(PREF_NS, false)) {
+    ok = (prefs.putBytes("kal2", &d, sizeof(d)) == sizeof(d));
+    prefs.end();
+  }
+  dbg.println(ok ? F("[STORE] Simpan kalibrasi suhu/udara: OK")
+                 : F("[STORE] Simpan kalibrasi suhu/udara: GAGAL"));
+  return ok;
+}
+
+void muatKalib2() {
+  DataKalib2 d;
+  bool valid = false;
+  if (prefs.begin(PREF_NS, false)) {
+    if (prefs.getBytesLength("kal2") == sizeof(d)) {
+      prefs.getBytes("kal2", &d, sizeof(d));
+      valid = (d.versi == FORMAT_VERSI_KALIB2) &&
+              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
+      for (int i = 0; valid && i < JUMLAH_KANAL_SUHU; i++)
+        if (d.dsOffsetX10[i] < -500 || d.dsOffsetX10[i] > 500) valid = false;
+      if (d.mq135Baseline < 0 || d.mq135Baseline > 4095) valid = false;
+      if (d.mq135Margin   < 0 || d.mq135Margin   > 4095) valid = false;
+    }
+    prefs.end();
+  }
+  if (valid) {
+    for (int i = 0; i < JUMLAH_KANAL_SUHU; i++) dsOffsetX10[i] = d.dsOffsetX10[i];
+    mq135Baseline    = d.mq135Baseline;
+    mq135Margin      = d.mq135Margin;
+  }
+  dbg.println(valid ? F("[STORE] Kalibrasi suhu/udara dimuat")
+                    : F("[STORE] Kalibrasi suhu/udara belum ada (default)"));
+}
+
+// ================= KALIBRASI STEPPER (ml per rotasi) =================
+// Blob TERPISAH: "kal3" - simpan kalibStepperMl[3] agar langkahPerMl otomatis terhitung
+#define FORMAT_VERSI_KALIB3 1
+
+struct DataKalib3 {
+  uint32_t versi;
+  float    stepperMl[3];   // ml per rotasi untuk HCl, H2O2, Air
+  uint32_t crc;
+};
+
+bool simpanKalibStepper() {
+  DataKalib3 d;
+  memset(&d, 0, sizeof(d));
+  d.versi = FORMAT_VERSI_KALIB3;
+  for (int i = 0; i < 3; i++) d.stepperMl[i] = kalibStepperMl[i];
+  d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
+
+  bool ok = false;
+  if (prefs.begin(PREF_NS, false)) {
+    ok = (prefs.putBytes("kal3", &d, sizeof(d)) == sizeof(d));
+    prefs.end();
+  }
+  dbg.println(ok ? F("[STORE] Simpan kalibrasi stepper: OK")
+                 : F("[STORE] Simpan kalibrasi stepper: GAGAL"));
+  return ok;
+}
+
+void muatKalibStepper() {
+  DataKalib3 d;
+  bool valid = false;
+  if (prefs.begin(PREF_NS, false)) {
+    if (prefs.getBytesLength("kal3") == sizeof(d)) {
+      prefs.getBytes("kal3", &d, sizeof(d));
+      valid = (d.versi == FORMAT_VERSI_KALIB3) &&
+              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
+      for (int i = 0; valid && i < 3; i++)
+        if (d.stepperMl[i] < 0.1 || d.stepperMl[i] > 10.0) valid = false;
+    }
+    prefs.end();
+  }
+  for (int i = 0; i < 3; i++) {
+    kalibStepperMl[i] = valid ? d.stepperMl[i] : 1.0;  // default 1.0 ml/rotasi
+  }
+  dbg.println(valid ? F("[STORE] Kalibrasi stepper dimuat")
+                    : F("[STORE] Kalibrasi stepper belum ada (default)"));
 }

@@ -167,16 +167,276 @@ void tanganiTombol(int t) {
       if (t == P_BAWAH) listGeser(L_AKSI, +1, JUMLAH_MENU_KALIB);
       if (t == P_ENTER) {
         int a = lsSel[L_AKSI];
-        if (a == 1) {
+        if (a == 0) {
+          // Motor
+          listReset(L_AKSI);
+          kalibMotorIdx = 0;
+          pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        } else if (a == 1) {
           // Sensor Level
           kalibSensorIdx = 0;
           kalibSetStep = 0;
           pindahHalaman(HAL_KALIB_LEVEL);
+        } else if (a == 2) {
+          // Sensor Suhu -> pilih kanal (Chamber / Cairan / Motor)
+          listReset(L_AKSI);
+          pindahHalaman(HAL_KALIB_SUHU_LIST);
         } else {
-          tampilToast("Belum tersedia");
+          // Sensor Udara
+          kalibUdaraBaris = 0;
+          pindahHalaman(HAL_KALIB_UDARA);
         }
       }
       if (t == P_BACK) pindahHalaman(HAL_MENU_UTAMA);
+      break;
+
+    // ---------- Kalibrasi Motor: Pilih Motor ----------
+    case HAL_KALIB_MOTOR_LIST:
+      if (t == P_ATAS)  listGeser(L_AKSI, -1, JUMLAH_MENU_MOTOR);
+      if (t == P_BAWAH) listGeser(L_AKSI, +1, JUMLAH_MENU_MOTOR);
+      if (t == P_ENTER) {
+        kalibMotorIdx = lsSel[L_AKSI];
+        kalibStepperCursor = 0;
+        kalibDCCursor = 0;
+        if (kalibMotorIdx <= 2) {
+          // Pompa HCl, H2O2, Air (stepper)
+          pindahHalaman(HAL_KALIB_STEPPER);
+        } else if (kalibMotorIdx <= 4) {
+          // Pompa Sabun, Limbah (DC)
+          kalibDCScroll = 0;
+          pindahHalaman(HAL_KALIB_DC);
+        } else if (kalibMotorIdx == 5) {
+          // Motor Agitasi
+          pindahHalaman(HAL_KALIB_AGITASI);
+        } else {
+          // Kipas Exhaust
+          pindahHalaman(HAL_KALIB_FAN);
+        }
+      }
+      if (t == P_BACK) pindahHalaman(HAL_KALIB_MAIN);
+      break;
+
+    // ---------- Kalibrasi Stepper (Pompa HCl/H2O2/Air) ----------
+    case HAL_KALIB_STEPPER:
+      if (t == P_BACK) {
+        simpanKalibStepper();  // simpan kalibrasi stepper ke NVS
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
+      if (t == P_ATAS || t == P_BAWAH) {
+        kalibStepperCursor = 1 - kalibStepperCursor;
+        break;
+      }
+      if (t == P_KIRI || t == P_KANAN) {
+        if (kalibStepperCursor == 1) {
+          float delta = (t == P_KANAN) ? 0.1 : -0.1;
+          kalibStepperMl[kalibMotorIdx] += delta;
+          if (kalibStepperMl[kalibMotorIdx] < 0.1) kalibStepperMl[kalibMotorIdx] = 0.1;
+          if (kalibStepperMl[kalibMotorIdx] > 10.0) kalibStepperMl[kalibMotorIdx] = 10.0;
+        }
+        break;
+      }
+      if (t == P_ENTER) {
+        if (kalibStepperCursor == 0) {
+          pompaMulai(kalibMotorIdx, 1);
+          tampilToast("Running...");
+        }
+      }
+      break;
+
+    // ---------- Kalibrasi DC (Pompa Sabun/Limbah) ----------
+    case HAL_KALIB_DC:
+      if (t == P_BACK) { kalibDCScroll = 0; pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_ATAS || t == P_BAWAH) {
+        kalibDCCursor = (kalibDCCursor + 1) % 3;
+        // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
+        {
+          static const int rowTop[3]  = { 0, 16, 28 };
+          static const int rowH[3]    = { 12, 10, 10 };
+          int maxScroll = max(0, KALIB_DC_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
+          int visibleH  = AREA_BAWAH - (HEADER_H + 4);
+          if (rowTop[kalibDCCursor] - kalibDCScroll + rowH[kalibDCCursor] > visibleH)
+            kalibDCScroll = rowTop[kalibDCCursor] + rowH[kalibDCCursor] - visibleH;
+          if (rowTop[kalibDCCursor] - kalibDCScroll < 0)
+            kalibDCScroll = rowTop[kalibDCCursor];
+          if (kalibDCScroll > maxScroll) kalibDCScroll = maxScroll;
+          if (kalibDCScroll < 0) kalibDCScroll = 0;
+        }
+        break;
+      }
+      if (t == P_KIRI || t == P_KANAN) {
+        int idx = kalibMotorIdx - 3;
+        if (kalibDCCursor == 1) {
+          int delta = (t == P_KANAN) ? 5 : -5;
+          kalibDuty[idx] += delta;
+          if (kalibDuty[idx] < 0) kalibDuty[idx] = 0;
+          if (kalibDuty[idx] > 255) kalibDuty[idx] = 255;
+        } else if (kalibDCCursor == 2) {
+          int delta = (t == P_KANAN) ? 1 : -1;
+          kalibMl[idx] += delta;
+          if (kalibMl[idx] < 0) kalibMl[idx] = 0;
+          if (kalibMl[idx] > 999) kalibMl[idx] = 999;
+        }
+        break;
+      }
+      if (t == P_ENTER) {
+        if (kalibDCCursor == 0) {
+          if (kalibMotorIdx == 3) pompaSabunSet(true);
+          else pompaLimbahSet(true);
+          kalibMotorRunning = true;
+          kalibMotorStartMs = millis();
+          tampilToast("Running...");
+        }
+      }
+      break;
+
+    // ---------- Kalibrasi Agitasi ----------
+    case HAL_KALIB_AGITASI:
+      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_ATAS || t == P_BAWAH) {
+        kalibDCCursor = (kalibDCCursor + 1) % 4;
+        break;
+      }
+      if (t == P_KIRI || t == P_KANAN) {
+        int delta = (t == P_KANAN) ? 5 : -5;
+        if (kalibDCCursor < 3) {
+          kalibDuty[kalibDCCursor + 2] = constrain(kalibDuty[kalibDCCursor + 2] + delta, 0, 255);
+        }
+        break;
+      }
+      if (t == P_ENTER) {
+        if (kalibDCCursor == 3) {
+          // Test all speeds
+          for (int s = 1; s <= 3; s++) {
+            agitasiSet(s);
+            delay(1000);
+          }
+          agitasiSet(0);
+          tampilToast("Done");
+        } else {
+          agitasiSet(kalibDCCursor + 1);
+          delay(2000);
+          agitasiSet(0);
+          tampilToast("Done");
+        }
+      }
+      break;
+
+    // ---------- Kalibrasi Fan ----------
+    case HAL_KALIB_FAN:
+      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+      if (t == P_ATAS || t == P_BAWAH) {
+        kalibDCCursor = (kalibDCCursor + 1) % 2;
+        break;
+      }
+      if (t == P_KIRI || t == P_KANAN) {
+        if (kalibDCCursor == 0) {
+          int delta = (t == P_KANAN) ? 5 : -5;
+          kalibDuty[6] = constrain(kalibDuty[6] + delta, 0, 255);
+        }
+        break;
+      }
+      if (t == P_ENTER) {
+        if (kalibDCCursor == 1) {
+          fanSet(true);
+          delay(2000);
+          fanSet(false);
+          tampilToast("Done");
+        }
+      }
+      break;
+
+    // ---------- Kalibrasi Sensor Suhu: Pilih Kanal ----------
+    case HAL_KALIB_SUHU_LIST:
+      if (t == P_ATAS)  listGeser(L_AKSI, -1, JUMLAH_KANAL_SUHU);
+      if (t == P_BAWAH) listGeser(L_AKSI, +1, JUMLAH_KANAL_SUHU);
+      if (t == P_ENTER) {
+        kalibSuhuIdx   = lsSel[L_AKSI];
+        kalibSuhuBaris = 0;
+        pindahHalaman(HAL_KALIB_SUHU);
+      }
+      if (t == P_BACK) pindahHalaman(HAL_KALIB_MAIN);
+      break;
+
+    // ---------- Kalibrasi Sensor Suhu (DS18B20) ----------
+    case HAL_KALIB_SUHU:
+      if (dialogCfg == DLG_SIMPAN) {
+        if (t == P_ENTER) {
+          dialogCfg = DLG_NONE;
+          pindahHalaman(HAL_KALIB_SUHU_LIST);
+          tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
+        } else if (t == P_BACK) {
+          dialogCfg = DLG_NONE;
+          muatKalib2();          // buang perubahan, kembali ke nilai tersimpan
+          pindahHalaman(HAL_KALIB_SUHU_LIST);
+        }
+      } else {
+        bool berubah = false;
+        if (t == P_KIRI || t == P_KANAN) {
+          int arah = (t == P_KANAN) ? 1 : -1;
+          dsOffsetX10[kalibSuhuIdx] = constrain(dsOffsetX10[kalibSuhuIdx] + arah, -500, 500);
+          berubah = true;
+          char tb[20];
+          int o = dsOffsetX10[kalibSuhuIdx];
+          snprintf(tb, sizeof(tb), "offset %s%d.%d C", (o < 0 ? "-" : ""),
+                   abs(o) / 10, abs(o) % 10);
+          tampilToast(tb);
+        }
+        if (t == P_BACK) {
+          if (berubah) dialogCfg = DLG_SIMPAN;
+          else pindahHalaman(HAL_KALIB_SUHU_LIST);
+        }
+      }
+      break;
+
+    // ---------- Kalibrasi Sensor Udara (MQ-135) ----------
+    case HAL_KALIB_UDARA:
+      if (dialogCfg == DLG_SIMPAN) {
+        if (t == P_ENTER) {
+          dialogCfg = DLG_NONE;
+          pindahHalaman(HAL_KALIB_MAIN);
+          tampilToast(simpanKalib2() ? "Kalibrasi tersimpan" : "Gagal simpan!");
+        } else if (t == P_BACK) {
+          dialogCfg = DLG_NONE;
+          muatKalib2();
+          pindahHalaman(HAL_KALIB_MAIN);
+        }
+      } else {
+        bool berubah = false;
+        if (t == P_ATAS)  kalibUdaraBaris = max(0, kalibUdaraBaris - 1);
+        if (t == P_BAWAH) kalibUdaraBaris = min(1, kalibUdaraBaris + 1);
+        if (t == P_KIRI || t == P_KANAN) {
+          int arah = (t == P_KANAN) ? 1 : -1;
+          if (kalibUdaraBaris == 0) {
+            mq135Baseline = constrain(mq135Baseline + arah * 5, 0, 4095);
+            char tb[16];
+            snprintf(tb, sizeof(tb), "baseline %d", mq135Baseline);
+            tampilToast(tb);
+          } else {
+            mq135Margin = constrain(mq135Margin + arah * 5, 0, 4095);
+            char tb[16];
+            snprintf(tb, sizeof(tb), "margin %d", mq135Margin);
+            tampilToast(tb);
+          }
+          berubah = true;
+        }
+        // ENTER: baseline diambil dari bacaan saat ini (tunggu hangus dulu)
+        if (t == P_ENTER && kalibUdaraBaris == 0) {
+          if (!udaraSiap()) {
+            tampilToast("Tunggu hangus");
+          } else {
+            mq135Baseline = constrain(udaraBaca(), 0, 4095);
+            berubah = true;
+            char tb[16];
+            snprintf(tb, sizeof(tb), "base %d", mq135Baseline);
+            tampilToast(tb);
+          }
+        }
+        if (t == P_BACK) {
+          if (berubah) dialogCfg = DLG_SIMPAN;
+          else pindahHalaman(HAL_KALIB_MAIN);
+        }
+      }
       break;
 
     // ---------- Kalibrasi Sensor Level: Pilih Cairan ----------
@@ -335,6 +595,8 @@ void setup() {
 
   muatPreset();
   muatKalib();
+  muatKalib2();
+  muatKalibStepper();
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(I2C_CLOCK);
@@ -345,6 +607,8 @@ void setup() {
 
   if (!sensorInit())
     dbg.println(F("!! Sensor level tidak siap. Cek wiring GPIO."));
+  suhuInit();          // DS18B20 (GPIO10)
+  udaraInit();         // MQ-135 (GPIO9) + mulai hitung waktu hangus 60 dtk
 
   motorInit();
   dcmotorInit();
@@ -404,6 +668,19 @@ void loop() {
   if (toastAktif && (long)(millis() - toastSampai) >= 0) {
     toastAktif = false;
     perluGambar = true;
+  }
+
+  // Halaman Kalib Suhu/Udara menampilkan angka live (bacaan ADC, sisa waktu
+  // hangus MQ-135, suhu DS18B20) -> refresh berkala. DS18B20 sendiri sudah
+  // dibatasi 1x per 2 detik per kanal di dalam suhuBaca() supaya tidak
+  // blocking terus.
+  if (halaman == HAL_KALIB_SUHU || halaman == HAL_KALIB_UDARA ||
+      halaman == HAL_KALIB_SUHU_LIST) {
+    static unsigned long liveKalibMs = 0;
+    if ((long)(millis() - liveKalibMs) >= 300) {
+      liveKalibMs = millis();
+      perluGambar = true;
+    }
   }
 
   unsigned long sekarang = millis();

@@ -95,8 +95,10 @@
 // Lain-lain
 #define PIN_BUZZER      6
 #define PIN_LED_STRIP   7
-#define PIN_DS18B20     10    // 1-Wire (suhu)
+#define PIN_DS_CHAMBER   10    // 1-Wire DS18B20: suhu ruangan chamber
+#define PIN_DS_CAIRAN    45    // 1-Wire DS18B20: suhu cairan dalam chamber
+#define PIN_DS_MOTOR     36    // 1-Wire DS18B20: suhu motor agitasi
 #define PIN_MQ135       9     // analog (kualitas udara)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.4"
+#define FW_VERSI  "v0.5.7"
