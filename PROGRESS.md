@@ -20,10 +20,10 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ 5 GPIO sensor level (11/12/13/14/3) `INPUT` (`sensor.h:37`)
 - [x] ✅ 4 PWM TB6612FNG (15/16/17/18) (`dcmotor.h:10`)
 - [x] ✅ Buzzer pasif GPIO 6 via LEDC (`buzzer.h:14`)
+- [x] ✅ **LED status WS2812 GPIO 7** — file baru `led_strip.h`, mode Boot/Idle/Proses/Jeda/Selesai/Error/E-stop/Warning, animasi non-blocking di `ledStripUpdate()`, integrasi di `process.h` (`aksiFase`, `prosesToggleJeda`, `prosesBatal`, `prosesKeluarSelesai`) + `.ino` (`setup()` init, `loop()` update, handler E-stop)
 - [x] ✅ DS18B20 di GPIO 10, 3 sensor pada satu bus 1-Wire (`sensor.h:116`)
 - [x] ✅ MQ-135 analog GPIO 9 + divider (`config.h:99`, `sensor.h:210`)
 - [x] ✅ E-stop GPIO 8 `INPUT_PULLUP` (`.ino:582`)
-- [ ] ⬜ **LED status / LED strip (GPIO 7)** — `#define` ada, tidak pernah dipakai kode
 - [ ] ⬜ RGB WS2812 indikator per sensor (rencana awal GPIO 48 — kini bentrok dengan DIR HCl)
 
 ---
@@ -232,7 +232,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 
 | Kategori | ✅ | ⚠️ | ⬜ |
 |---|---|---|---|
-| GPIO & Hardware | 9 | 0 | 4 |
+| GPIO & Hardware | 10 | 0 | 3 |
 | Modul UI | 16 | 0 | 12 |
 | Modul Dosing | 8 | 2 | 9 |
 | Modul Etching | 5 | 1 | 6 |
@@ -244,7 +244,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 83 ✅ · 11 ⚠️ · 72 ⬜**
+**Total: 84 ✅ · 11 ⚠️ · 71 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar), tetapi **belum ada proteksi proses**

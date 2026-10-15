@@ -4,10 +4,12 @@
 #include "motor.h"
 #include "dcmotor.h"
 #include "buzzer.h"
+#include "led_strip.h"
 
-// ================= STATE MACHINE PROSES (masih simulasi) =================
+// ================= STATE MACHINE PROSES =================
 // Logika proses berjalan di prosesUpdate() (dipanggil tiap loop),
-// TERPISAH dari render. Aktuator belum ada: fase hanya label + log.
+// TERPISAH dari render. Tiap transisi fase juga mengubah mode LED strip
+// (biru breathing = kerja, merah = E-stop/gagal, hijau = selesai).
 
 enum FaseProses {
   FASE_IDLE,
@@ -26,20 +28,24 @@ void aksiFase(FaseProses f) {
   Preset &p = daftarPreset[presetTerpilih];
   switch (f) {
     case FASE_DOSING:
+      ledProses();                    // biru breathing: kerja
       dcmotorStopAll();
       pompaMulai(0, p.mlHCl);   // HCl
       pompaMulai(1, p.mlH2O2);  // H2O2
       pompaMulai(2, p.mlH2O);   // H2O
       break;
     case FASE_ETCHING:
+      ledProses();
       pompaStopAll();
       agitasiSet(p.agitasiSpeed);
       break;
     case FASE_DRAINING:
+      ledProses();
       agitasiSet(0);
       pompaLimbahSet(true);
       break;
     case FASE_RINSING:
+      ledProses();
       pompaLimbahSet(false);
       agitasiSet(p.agitasiSpeed);
       pompaMulai(2, 100);       // bilas dengan air
@@ -97,6 +103,8 @@ void prosesToggleJeda() {
   if (!prosesJalan || prosesSelesai()) return;
   prosesJeda = !prosesJeda;
   dbg.println(prosesJeda ? F("[PROSES] Jeda") : F("[PROSES] Lanjut"));
+  ledJeda();                      // kuning breathing saat dijeda
+  if (!prosesJeda) aksiFase(prosesFase);   // lanjut: kembalikan LED ke biru breathing
   perluGambar = true;
 }
 
@@ -113,6 +121,7 @@ void prosesBatal() {
   pompaSabunSet(false);
   fanSet(false);
   pompaStopAll();
+  ledError();                     // merah kelap-kelip: proses dibatalkan/gagal
   perluGambar = true;
 }
 
@@ -120,6 +129,7 @@ void prosesBatal() {
 void prosesKeluarSelesai() {
   prosesJalan = false;
   prosesFase = FASE_IDLE;
+  ledIdle();                     // hijau redup: siap lagi
   perluGambar = true;
 }
 
@@ -148,8 +158,11 @@ void prosesUpdate() {
     dbg.print(F("[PROSES] Fase: "));
     dbg.println(namaFase[f]);
     aksiFase(f);
-    if (f == FASE_SELESAI) buzzerSelesai();   // nada selesai proses
-    if (f == FASE_SELESAI) dialogBatal = false;   // selesai -> dialog batal tidak relevan
+    if (f == FASE_SELESAI) {
+      buzzerSelesai();              // nada selesai proses
+      ledSelesai();                 // hijau solid 2 detik
+      dialogBatal = false;          // selesai -> dialog batal tidak relevan
+    }
     perluGambar = true;
   }
 }

@@ -5,6 +5,45 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-15] v0.5.8 — LED status WS2812 (GPIO 7)
+
+`PIN_LED_STRIP 7` sudah ada di `config.h` sejak lama tapi tidak pernah dipakai
+kode. Sekarang diisi modul LED status supaya operator bisa melihat status sistem
+tanpa harus melihat OLED.
+
+**File baru `led_strip.h`** — WS2812/NeoPixel 1 LED di GPIO 7, 8 mode:
+
+| Mode | Warna | Animasi | Kapan |
+|---|---|---|---|
+| `LED_BOOT` | biru | kelap-kelip 300 ms | selama boot |
+| `LED_IDLE` | hijau redup | solid | siap, tidak ada proses |
+| `LED_PROSES` | biru | breathing (sinus ~1.6 s) | DOSING/ETCHING/DRAINING/RINSING |
+| `LED_JEDA` | kuning | breathing lambat (~2 s) | proses dijeda |
+| `LED_SELESAI` | hijau | solid 2 detik → IDLE | proses tamat |
+| `LED_ERROR` | merah | kelap-kelip cepat 120 ms | proses dibatalkan |
+| `LED_ESTOP` | merah | solid | pin GPIO 8 LOW |
+| `LED_WARNING` | kuning | solid | tersedia untuk proteksi gas/suhu |
+
+**Non-blocking** — semua animasi dijalankan di `ledStripUpdate()` (dipanggil di
+`loop()`), berbasis `millis()`. Breathing memakai `sinf()` supaya kecerahan
+naik-turun halus, bukan menyala-mati bergantian.
+
+**Integrasi**
+- `.ino`: `#include "led_strip.h"`, `setup()` → `ledStripInit()` + `ledBoot()`,
+  akhir `setup()` → `ledIdle()`, `loop()` → `ledStripUpdate()` tiap iterasi,
+  handler E-stop → `ledEstop()`.
+- `process.h`: `aksiFase()` → `ledProses()` di tiap fase kerja;
+  `prosesToggleJeda()` → `ledJeda()` dan `aksiFase()` ulang saat dilanjut;
+  `prosesBatal()` → `ledError()`; `prosesKeluarSelesai()` → `ledIdle()`;
+  `prosesUpdate()` saat `FASE_SELESAI` → `ledSelesai()`.
+
+**Library baru:** Adafruit NeoPixel.
+
+**`PROGRESS.md`** — item "LED status / LED strip (GPIO 7)" dicentang; ringkasan
+GPIO & Hardware 9 ✅ → 10 ✅.
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

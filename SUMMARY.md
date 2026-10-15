@@ -26,6 +26,9 @@ OLED 128x64 + 6 tombol (PCF8574).
 - **Penyimpanan NVS:** preset via `Preferences` dengan checksum.
 - **Keamanan:** E-stop (GPIO), abort proses, semua aktuator mati saat batal/selesai.
 - **UI:** header, list dengan animasi, toast, dialog, halaman proses dengan progress.
+- **LED status WS2812 (GPIO 7):** indikator visual — biru breathing saat proses,
+  kuning saat jeda, hijau solid 2 detik saat selesai, merah saat E-stop/gagal,
+  hijau redup saat idle. 8 mode, animasi non-blocking.
 
 ## Struktur File
 
@@ -41,6 +44,7 @@ OLED 128x64 + 6 tombol (PCF8574).
 | `motor.h` | Stepper DRV8825 non-blocking (pompa peristaltik) |
 | `dcmotor.h` | DC motor via TB6612FNG (agitasi, pompa sabun, pompa limbah, fan) |
 | `buzzer.h` | Buzzer non-blocking (state machine berbasis millis) |
+| `led_strip.h` | LED status WS2812 GPIO 7, 8 mode (Boot/Idle/Proses/Jeda/Selesai/Error/E-stop/Warning), animasi non-blocking |
 | `process.h` | State machine proses etching, jeda/batal/selesai |
 | `ui.h` | Rendering OLED: semua halaman, dialog, toast, animasi |
 | `fontmini.h` | Font data untuk OLED |

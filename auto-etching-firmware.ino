@@ -31,6 +31,7 @@
 #include "sensor.h"
 #include "storage.h"
 #include "buzzer.h"
+#include "led_strip.h"
 #include "process.h"
 #include "ui.h"
 
@@ -613,6 +614,8 @@ void setup() {
   motorInit();
   dcmotorInit();
   buzzerInit();
+  ledStripInit();
+  ledBoot();               // LED biru kelap-kelip selama boot
   pinMode(PIN_ESTOP, INPUT_PULLUP);
 
   if (!oled.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
@@ -633,6 +636,7 @@ void setup() {
   // Nada boot diputar di akhir setup(): kalau dipanggil lebih awal, melodi
   // akan tertahan oleh delay() di atas (buzzerUpdate baru jalan di loop).
   buzzerBoot();
+  ledIdle();               // boot selesai -> LED hijau redup (siap)
 }
 
 // ================= LOOP =================
@@ -644,9 +648,11 @@ void loop() {
   motorUpdate();                             // stepper non-blocking
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
+  ledStripUpdate();                          // animasi LED status (non-blocking)
 
   // E-stop: hentikan semua aktuator & batalkan proses
   if (digitalRead(PIN_ESTOP) == LOW) {
+    ledEstop();                              // LED merah solid selama E-stop ditekan
     if (prosesJalan) {
       prosesBatal();
       tampilToast("E-STOP!");
