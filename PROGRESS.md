@@ -9,7 +9,8 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 
 ## 1. GPIO & Hardware
 
-- [ ] ⬜ **Migrasi ke TMC2209 (rencana, belum dikerjakan)** — kode saat ini masih pakai DRV8825 (`config.h:86-94`: `PIN_SLP1/2/3`, `PIN_STEP1/2/3`, `PIN_DIR1/2/3`). Rencana pin map TMC2209 (STEP HCl=38, DIR HCl=48, STEP H2O2=40, DIR H2O2=39, STEP Air=42, DIR Air=41, TMC_EN=1, TMC_PDN=2) ada di `PROCESS.md` §1.2 — butuh konfirmasi: (a) `EN`/`PDN` GPIO 1 & 2 shared 3 channel atau per-channel, (b) step/rev mikrostep TMC2209 untuk hitung `langkahPerMl`.
+- [x] ✅ **Migrasi stepper DRV8825 → TMC2209 (v0.6.0)** — pin map baru di `config.h`: `PIN_TMC_EN=1`, `PIN_TMC_PDN=2` (1 pasang, **shared 3 driver**), `PIN_STEP1/2/3 = 38/40/42`, `PIN_DIR1/2/3 = 48/39/41`. `PIN_SLP1/2/3` **dihapus**. Polaritas: `TMC_EN_AKTIF_LOW=1` (EN aktif LOW — kebalikan dari SLP DRV8825), reset pulse PDN `TMC_PDN_RESET_US=5`. `motorInit()` urut: pin mode → `stepperSleep(true)` → pulse reset PDN → `stepperSleep(false)` → `hitungLangkahPerMl()`. Mikrostep **1/16 → `STEP_PER_REV 3200`** (rumus umum `200 × 2^n`). Driver bisa dimatikan total: `stepperSleep(bool)` + `pompaMatikanTotal()` (EN = HIGH) dipakai `semuaAktuatorMati()`. GPIO **21 & 47 kini bebas** (dari `PIN_DIR3`/`PIN_STEP3` lama).
+- [x] ✅ **Kalibrasi dosing wajib diulang** — `langkahPerMl` berubah dari basis 7200 (DRV8825 1/36) ke 3200 step/rev (TMC2209 1/16). Nilai kalibrasi lama di NVS blob `"kal3"` **tidak valid** — jalankan ulang `Kalibrasi → Motor HCl/H2O2/Air`.
 - [x] ✅ I2C SDA=4, SCL=5, 400 kHz (`config.h:5-7`, `.ino:601-602`)
 - [x] ✅ OLED SSD1306 0x3C 128×64 terinisialisasi (`.ino:618`)
 - [x] ✅ PCF8574 0x20 — 6 tombol, inisialisasi tulis `0xFF` (`.ino:604`)
@@ -21,7 +22,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ DS18B20 **x3 pada satu bus 1-Wire GPIO 10** (`PIN_DS18B20` = 10, `config.h`), 3 DeviceAddress hardcode (`sensor.h:119-123`), non-blocking `setWaitForConversion(false)`, offset kalibrasi per blok `suhuOffsetX10[3]` + pilih address `kalibSuhuAddr[3]`, halaman kalibrasi `HAL_KALIB_SUHU` (`ui.h:gambarKalibSuhu()`) & `HAL_KALIB_UDARA` (`ui.h:gambarKalibUdara()`), NVS blob `"kal2"` versi 2 — **catatan:** `PIN_DS_CAIRAN=45` & `PIN_DS_MOTOR=36` di `config.h` **tidak dipakai** (sisa desain lama 3-bus)
 - [x] ✅ MQ-135 analog GPIO 9 + divider R1=10k/R2=15k (`config.h:109-114`, `sensor.h:210-228`), rekam acuan `mq135Normal`/`mq135Kotor` di halaman kalibrasi
 - [x] ✅ E-stop GPIO 8 `INPUT_PULLUP` (`.ino:616`)
-- [ ] ⬜ RGB WS2812 indikator per sensor (5 sensor) — **kode sudah lengkap** di `led_strip.h` (`ledSensorInit`/`ledSensorUpdate`, bar level + warna hijau/kuning/merah, non-blocking, gating `SENSOR_LED_ENABLE`) tetapi **belum diaktifkan**: `config.h` `SENSOR_LED_ENABLE = 0` karena GPIO 47 masih dipakai DRV8825 sebagai `PIN_STEP3`. Aktifkan setelah ada GPIO bebas (setelah migrasi TMC2209 → GPIO 21/47 bebas, atau pilih pin lain) — cukup set `SENSOR_LED_ENABLE 1` + `PIN_LED_SENSOR`, tidak perlu ubah logika.
+- [x] ✅ **RGB WS2812 indikator per sensor (5 sensor)** — aktif di `config.h` (`SENSOR_LED_ENABLE 1`, `PIN_LED_SENSOR 47` — bebas sejak migrasi TMC2209). `led_strip.h`: `ledSensorInit()`/`ledSensorUpdate()`, 5 pixel, warna hijau ≥20% / kuning 5–19% / merah <5%, tiap komponen warna diskalakan level sehingga kecerahan = bar liquid, throttle 250 ms + redraw hanya bila sensor berubah ≥2%. Non-blocking, hook di `.ino` `setup()` + `loop()`.
 
 ---
 
@@ -59,24 +60,24 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 
 ## 3. Modul Dosing (`process.h` § DOSING, `motor.h`, `presetops.h`)
 
-- [x] ✅ Driver stepper non-blocking (puls STEP tiap `LANGKAH_INTERVAL_US`) (`motor.h:50`)
-- [x] ✅ Konversi ml → jumlah langkah (`targetLangkah = ml × langkahPerMl`) (`motor.h:34`)
-- [x] ✅ 3 pompa (HCl/H2O2/H2O) dijalankan **paralel** saat fase DOSING (`process.h:28-33`)
+- [x] ✅ Driver stepper non-blocking (puls STEP tiap `LANGKAH_INTERVAL_US`) (`motor.h:motorUpdate()`)
+- [x] ✅ Konversi ml → jumlah langkah (`targetLangkah = ml × langkahPerMl`) (`motor.h:pompaMulai()`)
+- [x] ✅ 3 pompa (HCl/H2O2/H2O) dijalankan **paralel** saat fase DOSING (`process.h:aksiFase()`)
 - [x] ✅ `pompaMulai()` / `pompaStopAll()` / `pompaSelesai()` tersedia
-- [x] ✅ Hitung otomatis %H2O dan ml tiap bahan dari %HCl/%H2O2 + volume (`presetops.h:17`)
-- [x] ✅ Validasi rentang semua field preset (`presetops.h:49`)
-- [x] ✅ Halaman kalibrasi stepper: uji pompa + set ml/rotasi (`ino:222`)
-- [ ] ⚠️ `langkahPerMl` **hardcode `{1200,1200,1200}`** — hasil asumsi DRV8825 7200 step/rev (`motor.h:14`)
-- [ ] ⚠️ `kalibStepperMl[]` diubah dari UI tapi **tidak pernah dipakai** `pompaMulai()` (`data.h:99`, `ino:231`)
-- [ ] ⬜ `langkahPerMl = stepPerRev / mlPerRotasi` (mikrostep TMC2209)
-- [ ] ⬜ Simpan kalibrasi ml/rotasi ke NVS (key `pompa`, `FORMAT_VERSI_KALIB` → 2)
+- [x] ✅ `pompaMatikanTotal()` — stop + `stepperSleep(true)` (EN = HIGH) supaya driver TMC2209 benar-benar tidur
+- [x] ✅ Hitung otomatis %H2O dan ml tiap bahan dari %HCl/%H2O2 + volume (`presetops.h:hitungUlang()`)
+- [x] ✅ Validasi rentang semua field preset (`presetops.h:validasiPreset()`)
+- [x] ✅ Halaman kalibrasi stepper: uji pompa + set ml/rotasi + simpan ke NVS (`HAL_KALIB_STEPPER`)
+- [x] ✅ `langkahPerMl = STEP_PER_REV / mlPerRotasi` — `hitungLangkahPerMl()` memakai `STEP_PER_REV` (3200, TMC2209 1/16) bukan asumsi tetap 7200
+- [x] ✅ `kalibStepperMl[]` **dipakai** `pompaMulai()` — dibaca `muatKalibStepper()` saat boot, dihitung di `motorInit()`, ditulis `simpanKalibStepper()` saat BACK dari halaman kalibrasi
+- [x] ✅ Simpan kalibrasi ml/rotasi ke NVS — blob `"kal3"` (`DataKalib3`: versi + `float stepperMl[3]` + CRC32), terpisah dari `"kal"`/`"kal2"`
+- [x] ✅ `STEP_INTERVAL_US` 400 → **1200 µs** (aman 3 pompa paralel, ~830 Hz)
 - [ ] ⬜ Fase `FASE_CEK` pre-flight: validasi sensor & volume tangki
 - [ ] ⬜ Hitung ml yang dibutuhkan = target − sisa cairan di tangki (dari sensor)
 - [ ] ⬜ Cek ketersediaan cairan → `ERR_LEVEL_KURANG` sebelum pompa nyala
 - [ ] ⬜ Selesai dosing berbasis kondisi (saat ini masih berbasis fraksi waktu)
 - [ ] ⬜ Deteksi pompa macet (langkah tidak bertambah > 3 s)
 - [ ] ⬜ Watchdog timeout dosing (90 s)
-- [ ] ⬜ Naikkan `STEP_INTERVAL_US` 400 → 1200 µs (aman 3 pompa paralel)
 - [ ] ⬜ Volume tangki (`VOL_TANGKI_*`) sebagai data, bukan `#define` statis
 
 ---
@@ -229,9 +230,9 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 
 | Kategori | ✅ | ⚠️ | ⬜ |
 |---|---|---|---|
-| GPIO & Hardware | 10 | 0 | 3 |
+| GPIO & Hardware | 13 | 0 | 0 |
 | Modul UI | 16 | 0 | 12 |
-| Modul Dosing | 8 | 2 | 9 |
+| Modul Dosing | 14 | 0 | 6 |
 | Modul Etching | 5 | 1 | 6 |
 | Modul Draining & Rinsing | 5 | 3 | 6 |
 | Modul Emergency Stop | 8 | 0 | 10 |
@@ -241,12 +242,14 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Dokumentasi | 6 | 0 | 2 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 84 ✅ · 11 ⚠️ · 71 ⬜**
+**Total: 93 ✅ · 9 ⚠️ · 65 ⬜**
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
-preset, dosing, agitasi, drain, e-stop dasar), tetapi **belum ada proteksi proses**
-(watchdog, validasi level, latch e-stop, proteksi suhu/gas) dan **akurasi dosing
-belum memakai hasil kalibrasi**.
+preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai
+hasil kalibrasi tersimpan di NVS** (`langkahPerMl` dari `kalibStepperMl[]` ×
+`STEP_PER_REV`), tetapi **harus dikalibrasi ulang** setelah migrasi TMC2209.
+Yang masih belum ada: **proteksi proses** (watchdog per fase, validasi level
+sebelum dosing, latch e-stop, proteksi suhu/gas, deteksi pompa macet).
 
 ---
 

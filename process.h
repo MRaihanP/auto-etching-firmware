@@ -23,6 +23,18 @@ const char* namaFase[] = {
   "IDLE", "DOSING", "ETCHING", "DRAINING", "RINSING", "SELESAI"
 };
 
+// ================= SEMUA AKTUATOR MATI =================
+// Satu-satunya jalan untuk mematikan semua output. Dipakai oleh aksiFase
+// (SELESAI), prosesBatal(), dan handler E-stop di .ino — ketiga tempat
+// sebelumnya punya 4 baris stop yang identik (duplikasi).
+void semuaAktuatorMati() {
+  agitasiSet(0);
+  pompaLimbahSet(false);
+  pompaSabunSet(false);
+  fanSet(false);
+  pompaMatikanTotal();          // pompaStopAll() + stepperSleep(true) -> EN = HIGH
+}
+
 // Aksi hardware saat memasuki sebuah fase
 void aksiFase(FaseProses f) {
   Preset &p = daftarPreset[presetTerpilih];
@@ -51,11 +63,7 @@ void aksiFase(FaseProses f) {
       pompaMulai(2, 100);       // bilas dengan air
       break;
     case FASE_SELESAI:
-      agitasiSet(0);
-      pompaLimbahSet(false);
-      pompaSabunSet(false);
-      fanSet(false);
-      pompaStopAll();
+      semuaAktuatorMati();
       break;
     default: break;
   }
@@ -116,11 +124,7 @@ void prosesBatal() {
   prosesJeda = false;
   dialogBatal = false;
   prosesFase = FASE_IDLE;
-  agitasiSet(0);
-  pompaLimbahSet(false);
-  pompaSabunSet(false);
-  fanSet(false);
-  pompaStopAll();
+  semuaAktuatorMati();           // agitasi + pompa + fan + stepper EN=LOW->HIGH
   ledError();                     // merah kelap-kelip: proses dibatalkan/gagal
   perluGambar = true;
 }

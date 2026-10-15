@@ -81,27 +81,38 @@
 #define PIN_PWA_D2          17    // driver 2 PWA: pompa limbah (drain)
 #define PIN_PWB_D2          18    // driver 2 PWB: exhaust fan
 
-// ===== PIN MAP (ESP32-S3) - dipakai mulai Step 5/6 =====
-// Stepper DRV8825 (pompa peristaltik)
-#define PIN_SLP1        1     // HCl
-#define PIN_STEP1       2
-#define PIN_DIR1        42
-#define PIN_SLP2        41    // H2O2
-#define PIN_STEP2       40
-#define PIN_DIR2        39
-#define PIN_SLP3        38    // H2O
-#define PIN_STEP3       47
-#define PIN_DIR3        21
+// ===== PIN MAP (ESP32-S3) =====
+// Stepper TMC2209 x3 (pompa peristaltik) — pengganti DRV8825.
+// EN & PDN di-OR-kan ke ketiga driver (1 pasang pin untuk 3 channel).
+#define PIN_TMC_EN      1      // enable seluruh driver (AKTIF LOW)
+#define PIN_TMC_PDN     2      // power-down / reset seluruh driver (AKTIF LOW)
+#define PIN_STEP1       38     // HCl
+#define PIN_DIR1        48     // HCl
+#define PIN_STEP2       40     // H2O2
+#define PIN_DIR2        39     // H2O2
+#define PIN_STEP3       42     // Air / H2O
+#define PIN_DIR3        41     // Air / H2O
+
+// TMC2209: EN aktif LOW (driver menyala saat LOW, mati saat HIGH).
+// Konstanta ini hanya penanda polaritas supaya tidak salah tulis di motor.h —
+// jangan diubah kecuali memang memakai driver dengan polaritas kebalikan.
+#define TMC_EN_AKTIF_LOW    1
+// Durasi pulse reset PDN saat init (us) — datasheet TMC2209 butuh reset >= 1 us.
+#define TMC_PDN_RESET_US    5
+
+// Mikrostep TMC2209 = 1/16 -> 200 step x 16 = 3200 step/putaran.
+// PENTING: kalau jumper MS1/MS2 diubah, angka ini harus ikut disesuaikan.
+// Rumus umum: 200 * (2^n) untuk mikrostep 1/2^n.
+#define STEP_PER_REV    3200
 // Lain-lain
 #define PIN_BUZZER      6
 #define PIN_LED_STRIP   7    // WS2812 status sistem (1 LED) - lihat led_strip.h
 
 // ===== RGB WS2812 indikator per sensor (5 sensor) =====
-// Set SENSOR_LED_ENABLE = 1 setelah ada pin bebas (GPIO 21 atau 47 — keduanya
-// baru bebas setelah migrasi stepper ke TMC2209; saat ini masih dipakai
-// DRV8825 sbbg PIN_DIR3 / PIN_STEP3).
-#define SENSOR_LED_ENABLE  0
-#define PIN_LED_SENSOR     47   // tentative — ubah sesuai pin yang benar-benar bebas
+// GPIO 47 (dari PIN_STEP3 DRV8825 lama) + GPIO 21 (dari PIN_DIR3) kini bebas
+// setelah migrasi ke TMC2209.
+#define SENSOR_LED_ENABLE  1
+#define PIN_LED_SENSOR     47   // bebas sejak migrasi TMC2209
 #define SENSOR_LED_PIXELS  5    // HCl, H2O2, H2O, Sabun, Limbah
 #define SENSOR_LED_BRI     40   // 0-255 (lebih redup dari status supaya tidak menyilaukan)
 // Periode redraw indikator sensor (ms). 250 ms = 4x per detik, cukup untuk
@@ -127,4 +138,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.9"
+#define FW_VERSI  "v0.6.0"

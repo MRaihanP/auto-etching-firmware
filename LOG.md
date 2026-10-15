@@ -84,6 +84,87 @@ diperbarui, item RGB per sensor dicatat "kode ada, belum diaktifkan".
 
 ---
 
+## [2026-10-15] v0.6.0 — Migrasi stepper DRV8825 → TMC2209
+
+Driver pompa peristaltik diganti dari DRV8825 ke TMC2209. Ini **breaking change**
+di pin map: firmware lama tidak akan lagi cocok dengan wiring PCB baru.
+
+**Konfirmasi hardware (dari pemilik repo):**
+- `EN` / `PDN` di-OR-kan ke ketiga driver — **1 pasang pin untuk 3 channel**
+- Mikrostep **1/16** → 3200 step/rev (rumus umum `200 × 2ⁿ`)
+
+### Pin map baru (`config.h`)
+
+| Fungsi | GPIO | Lama (DRV8825) |
+|---|---|---|
+| TMC_EN (shared 3 driver) | 1 | `PIN_SLP1` |
+| TMC_PDN (shared 3 driver) | 2 | `PIN_STEP1` |
+| STEP HCl | 38 | `PIN_SLP3` |
+| DIR HCl | 48 | `PIN_DIR1` (42) |
+| STEP H2O2 | 40 | `PIN_STEP2` (sama) |
+| DIR H2O2 | 39 | `PIN_DIR2` (sama) |
+| STEP Air | 42 | `PIN_DIR1` |
+| DIR Air | 41 | `PIN_SLP2` |
+
+`PIN_SLP1/2/3` dihapus. GPIO **21 & 47** kini bebas.
+
+### ⚠️ Jebakan polaritas
+
+DRV8825 `SLP`: **HIGH = aktif**. TMC2209 `EN`: **LOW = aktif** — kebalikan.
+Kalau tidak dibalik, driver akan selalu tidur dan pompa diam total tanpa error.
+
+Konstanta konfirmasi polaritas supaya tidak terbalik lagi:
+```cpp
+#define TMC_EN_AKTIF_LOW  1     // penanda di config.h
+#define TMC_PDN_RESET_US  5     // pulse reset PDN (datasheet: >= 1 us)
+#define STEP_PER_REV      3200  // mikrostep 1/16
+```
+
+### `motor.h`
+
+- `motorInit()` — urutan: pin mode STEP/DIR → pin mode EN/PDN →
+  `stepperSleep(true)` → pulse reset PDN (LOW 5 µs → HIGH) → `stepperSleep(false)`
+  → `hitungLangkahPerMl()`. Print konfirmasi ke Serial.
+- `stepperSleep(bool)` — **`true` = tidur** (EN = HIGH), `false` = aktif (EN = LOW).
+- `pompaMatikanTotal()` — `pompaStopAll()` + `stepperSleep(true)`. Driver benar-benar
+  tidur, motor tidak menahan torsi, catu daya tidak terbuang sia-sia.
+- `hitungLangkahPerMl()` — ganti konstanta `7200.0` → `(float)STEP_PER_REV`.
+- `LANGKAH_INTERVAL_US` **400 → 1200 µs** (~830 Hz). 400 µs dengan 3 pompa paralel
+  berisiko step-loss pada ESP32-S3 yang menambah jitter dari render OLED.
+- `pompaMulai()` kini memanggil `stepperSleep(false)` — aman dipanggil ulang.
+
+### `process.h` — `semuaAktuatorMati()`
+
+Tiga tempat (aksiFase SELESAI, prosesBatal, handler E-stop) sebelumnya punya 4
+baris stop identik. Sekarang satu fungsi tunggal, dipanggil dari ketiganya dan
+menggunakan `pompaMatikanTotal()` sehingga driver ikut tidur.
+
+### Indikator RGB per sensor — diaktifkan
+
+`SENSOR_LED_ENABLE 0 → 1`, `PIN_LED_SENSOR 47`. GPIO 47 bebas sejak migrasi.
+5 pixel WS2812: hijau ≥20%, kuning 5–19%, merah <5%; tiap komponen warna
+diskalakan level sehingga kecerahan = bar liquid. Throttle 250 ms + redraw hanya
+bila sensor berubah ≥2%.
+
+### ⚠️ Kalibrasi dosing WAJIB diulang
+
+`langkahPerMl` berubah dari basis 7200 step/rev ke 3200 step/rev. Nilai kalibrasi
+lama di NVS blob `"kal3"` **tidak valid**. Jalankan ulang:
+`Kalibrasi → Motor HCl / H2O2 / Air` → set ml/rotasi → BACK (otomatis simpan).
+
+### Dokumentasi
+
+- `PROGRESS.md` §1: TMC2209 → ✅, RGB per sensor → ✅. §3: 8 item lama yang sudah
+  terpecahkan (langkahPerMl dari kalibrasi, NVS blob `kal3`, STEP_INTERVAL_US)
+  dicentang.
+- `PROCESS.md` §1.2 ditulis ulang sebagai "SUDAH DITERAPKAN (v0.6.0)". §12
+  pertanyaan terbuka #1 & #2 ditandai TERJAWAB.
+- `SUMMARY.md`: pin map TMC2209 lengkap + GPIO 21/36/45/47 status.
+
+**Compile:** sukses — 471253 bytes (35%) program, 58648 bytes (17%) RAM.
+
+---
+
 ## [2026-10-14] v0.5.4 — Kerangka 9 halaman Kalibrasi (menu 10 item, tanpa logika test)
 
 Tahap ini **hanya kerangka + penyimpanan**: semua item Kalibrasi sudah punya

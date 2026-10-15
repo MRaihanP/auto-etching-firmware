@@ -633,14 +633,10 @@ void loop() {
   if (digitalRead(PIN_ESTOP) == LOW) {
     ledEstop();                              // LED merah solid selama E-stop ditekan
     if (prosesJalan) {
-      prosesBatal();
+      prosesBatal();                         // sudah memanggil semuaAktuatorMati()
       tampilToast("E-STOP!");
     }
-    agitasiSet(0);
-    pompaLimbahSet(false);
-    pompaSabunSet(false);
-    fanSet(false);
-    pompaStopAll();
+    semuaAktuatorMati();                     // idempotent: aman dipanggil setiap iterasi
   }
 
   bool animasiBerjalan = false;
