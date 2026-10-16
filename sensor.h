@@ -34,7 +34,8 @@ int  sensorKalibPenuh[JUMLAH_SENSOR];   // nilai saat 100% (penuh)
 // terlalu tebal) masih bergerak sedikit, jadi TIDAK terdeteksi di sini. Yang
 // bisa ditangkap hanya kasus "nilai beku total" — cukup untuk mencegah FASE_CEK
 // nanti memercayai angka 0% yang palsu.
-#define SENSOR_BEKU_MS 60000UL   // nilai harus beku selama ini sebelum dicurigai mati
+//
+// Ambang `SENSOR_BEKU_MS` didefinisikan di `config.h`.
 
 bool sensorMati[JUMLAH_SENSOR] = { false, false, false, false, false };
 bool sensorMatiDilaporkan[JUMLAH_SENSOR] = { false, false, false, false, false };

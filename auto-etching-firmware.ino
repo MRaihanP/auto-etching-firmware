@@ -32,7 +32,9 @@
 #include "storage.h"
 #include "buzzer.h"
 #include "led_strip.h"
+#include "watchdog.h"
 #include "process.h"
+#include "serialcmd.h"
 #include "ui.h"
 
 unsigned long waktuRenderTerakhir = 0;
@@ -650,6 +652,7 @@ void setup() {
   buzzerInit();
   ledStripInit();
   ledBoot();               // LED biru kelap-kelip selama boot
+  watchdogInit();          // jaring pengaman kalau loop() hang
 #if SENSOR_LED_ENABLE
   ledSensorInit();         // RGB indikator per sensor (5 LED)
 #endif
@@ -686,6 +689,9 @@ void loop() {
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
   upkeepKalibrasiMotor();                   // test motor kalibrasi (non-blocking)
+  i2cUpkeep();                              // recovery bus I2C kalau PCF8574 hang
+  serialCmdUpkeep();                        // perintah dari Serial Monitor
+  watchdogFeed();                           // reset watchdog (tiap 1 detik)
   ledStripUpdate();                          // animasi LED status (non-blocking)
 #if SENSOR_LED_ENABLE
   ledSensorUpdate();                       // RGB level 5 tangki (non-blocking)

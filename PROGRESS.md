@@ -151,7 +151,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Kalibrasi 0% & 100% per sensor dari UI (`ino:412-460`)
 - [x] ✅ Kalibrasi level disimpan ke NVS + CRC + auto-reject bila tidak valid (`storage.h:87`)
 - [x] ✅ Baseline default `113000/156000` bila kalibrasi belum ada (`storage.h:121-122`, `sensor.h:54-55`) — **angka hasil ukur nyata** dari `pilot/pilot_touch_sensor.ino:58-59`, bukan tebakan; skala `touchRead()` di ESP32-S3 memang ratusan ribu. ⚠️ Default dipakai **seragam untuk kelima sensor**, padahal hasil ukur per-sensor berbeda → error ±12% di tengah skala (masih tepat di 0% dan 100%). Hilang begitu tangki dikalibrasi lewat UI, karena nilai asli dari `touchRead()` lalu tersimpan di NVS `"kal"`
-- [ ] ⬜ Default baseline **per-sensor** (5 pasang nilai) — pakai hasil ukur pilot sketch: kosong `{113000, 113000, 113000, 116000, 110000}`, penuh `{156000, 161000, 161000, 157000, 152000}` (`sensor.h:54-55`, `storage.h:121-122`). **Prioritas rendah** — hanya menjaga akurasi sebelum tangki dikalibrasi; setelah `Kalibrasi → Sensor Level` tiap tangki, default tidak lagi dipakai
+- [ ] ⬜ Default baseline **per-sensor** (5 pasang nilai) — pakai hasil ukur pilot sketch: kosong `{113000, 113000, 113000, 116000, 110000}`, penuh `{156000, 161000, 161000, 157000, 152000}` (`sensor.h:54-55`, `storage.h:121-122`). **Prioritas rendah** — hanya menjaga akurasi sebelum tangki dikalibrasi; setelah `Kalibrasi → Sensor Level` tiap tangki, default tidak lagi dipakai. **DITUNDA atas permintaan pemilik** — diabaikan karena dampaknya nol setelah kalibrasi.
 - [x] ✅ Halaman Kalibrasi → 4 submenu (Motor, Sensor Level, Sensor Suhu, Sensor Udara)
 - [x] ✅ Kalibrasi MQ-135: rekam acuan udara bersih & kotor (`ino:388-408`)
 - [x] ✅ Kalibrasi suhu: pilih sensor per blok + offset ±0,1 °C (`ino:348-373`)
@@ -182,7 +182,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Simpan kalibrasi pompa (ml/rotasi) ke NVS — blob `"kal3"` (`DataKalib3`: `float stepperMl[3]` + versi + CRC32), ditulis `simpanKalibStepper()` saat BACK dari `HAL_KALIB_STEPPER` (v0.5.7)
 - [x] ✅ Simpan offset suhu & acuan MQ-135 ke NVS — blob `"kal2"` (`DataKalib2` versi 2: `addrSensor[3]` + `suhuOffsetX10[3]` + `mq135Normal`/`mq135Kotor`, versi + CRC32), ditulis `simpanKalib2()` saat BACK dari `HAL_KALIB_SUHU` / `HAL_KALIB_UDARA` (v0.6.4)
 - [x] ✅ Simpan duty/kecepatan motor per kalibrasi ke NVS — blob `"kal4"` (`DataKalib4`: `duty[7]` + `mlX10[2]`, versi + CRC32), ditulis `simpanKalib4()` saat BACK dari `HAL_KALIB_DC`/`HAL_KALIB_AGITASI`/`HAL_KALIB_FAN` (v0.6.2)
-- [ ] ⬜ Backup/restore preset via Serial (export/import)
+- [ ] ⬜ Backup/restore preset via Serial (export/import) — belum dikerjakan. Printer kontrol Serial sudah ada di `serialcmd.h` (Bab 9) tapi belum punya perintah `export`/`import`
 
 ---
 
@@ -193,11 +193,11 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Log debug lengkap via `dbg.h` dengan prefix per modul (`[PROSES]`, `[POMPA]`, `[KALIB]`, …)
 - [x] ✅ Struktur file modular (`config/input/data/presetops/sensor/storage/motor/dcmotor/buzzer/process/ui`)
 - [x] ✅ Backup versi di folder `backup/` per rilis
-- [ ] ⬜ Watchdog timer hardware (`esp_task_wdt`) sebagai jaring pengaman
-- [ ] ⬜ Deteksi & pemulihan I2C (PCF8574 hang → reset bus)
-- [ ] ⬜ Kontrol via Serial (start/stop/preset/status) untuk debug
-- [ ] ⬜ Logging proses ke file / upload via WiFi (opsional)
-- [ ] ⬜ Cleaning `#define` mati di `config.h`: `INTERVAL_SENSOR_MS`, `SENSOR_AVG_N`, `SENSOR_AKTIF_LOW`, `SENSOR_TOUCH_READ`, `TOUCH_DEBOUNCE`, `TOUCH_DELTA_*`, `TOUTH_KALIB_SAMPEL`, `SENSOR_LOG_PERIOD_MS`, `AMBANG_MARGIN`, `AMBANG_HYST`
+- [x] ✅ Watchdog timer hardware (`esp_task_wdt`) — file baru `watchdog.h`, timeout **10 detik** + `trigger_panic`. `watchdogInit()` di `setup()`, `watchdogFeed()` tiap 1 detik di `loop()`. Kalau `init()` kena `ESP_ERR_INVALID_STATE` (Arduino core sudah daftar di boot) otomatis fallback ke `reconfigure()`. **Sengaja tidak panic** kalau gagal — alat tetap jalan, hanya tanpa jaring pengaman, supaya debugging lapangan tidak jadi sulit. Ada juga `watchdogMatikan()`/`watchdogNyalakan()` untuk operasi yang memang boleh lama
+- [x] ✅ Deteksi & pemulihan I2C (PCF8574 hang → reset bus) — `input.h`: `i2cGagalBerturut` naik tiap `bacaPCF8574()` gagal, reset tiap sukses. `i2cUpkeep()` di `loop()` memicu `i2cRecovery()` setelah **5 kegagalan beruntun**: `Wire.end()` → jeda 10 ms (supaya slave lepas dari SDA) → `Wire.begin()` → verifikasi. Kalau gagal, penghitung **tidak** di-reset supaya langsung dicoba lagi di iterasi berikutnya
+- [x] ✅ Kontrol via Serial (start/stop/preset/status) — file baru `serialcmd.h`, 7 perintah: `help`, `status`, `start`, `stop`, `preset N`, `sel <halaman>`, `off`. **Non-blocking**: parser baca 1 karakter per iterasi `loop()` dan eksekusi saat Enter — sengaja tidak memakai `Serial.readString()` yang memblokir sambil menunggu Enter. Prefix `>` supaya log `dbg.h` tidak ikut diparse
+- [ ] ⬜ Logging proses ke file / upload via WiFi — **DITUNDA dengan sengaja**: butuh LittleFS/SPIFFS (boros flash) dan penulisan tiap detik akan mempercepat keausan flash. Serial log yang sudah ada cukup untuk kebutuhan saat ini
+- [x] ✅ Cleaning `#define` mati di `config.h` — 12 define dihapus (`INTERVAL_SENSOR_MS`, `SENSOR_AVG_N`, `SENSOR_AKTIF_LOW`, `SENSOR_TOUCH_READ`, `TOUCH_DEBOUNCE`, `TOUCH_DELTA_*`, `TOUCH_ADAPT_*`, `TOUTH_KALIB_SAMPEL`, `TOUCH_DELTA_PENUH_AWAL`, `SENSOR_LOG_PERIOD_MS`). **Syarat-syarat ini sisa dari desain sensor analog lama** yang sudah diganti touch-read. *Catatan:* `AMBANG_MARGIN` & `AMBANG_HYST` **tidak dihapus** — keduanya dipakai `sensor.h:sensorStatusUpdate()` sejak v0.6.1. `SENSOR_BEKU_MS` dipindah ke `config.h` supaya konstanta ambang sensor terpusat
 
 ---
 
@@ -208,8 +208,8 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ `water-level-sensor-plan.md` — rencana sensor level non-contact
 - [x] ✅ `PROCESS.md` — rencana detail 5 modul proses + cara kerja + pin map TMC2209
 - [x] ✅ `PROGRESS.md` — checklist status implementasi (dokumen ini)
-- [ ] ⬜ Update `SUMMARY.md` agar sinkron dengan pin map TMC2209 & fitur baru
-- [ ] ⬜ Update `LOG.md` / naikkan versi firmware untuk setiap fitur baru
+- [x] ✅ Update `SUMMARY.md` agar sinkron dengan pin map TMC2209 & fitur baru — tabel pin map sudah ditulis ulang lengkap dengan `TMC_EN`/`TMC_PDN` (aktif LOW), STEP/DIR tiap channel, GPIO yang dibebaskan, dan status GPIO yang tidak dipakai
+- [x] ✅ Update `LOG.md` / naikkan versi firmware untuk setiap fitur baru — dilakukan di setiap rilis (v0.5.7 → v0.6.7), tiap perubahan punya entri `LOG.md` berformat `[Tanggal] vX.Y.Z — ringkasan` + versi `FW_VERSI` di `config.h`
 
 ---
 
@@ -232,19 +232,21 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 
 | Kategori | ✅ | ⚠️ | ⬜ |
 |---|---|---|---|
-| GPIO & Hardware | 13 | 0 | 0 |
-| Modul UI | 20 | 0 | 8 |
-| Modul Dosing | 14 | 0 | 6 |
-| Modul Etching | 5 | 1 | 6 |
-| Modul Draining & Rinsing | 5 | 3 | 6 |
-| Modul Emergency Stop | 8 | 0 | 10 |
-| Sensor & Kalibrasi | 22 | 0 | 1 |
-| Penyimpanan & Data | 10 | 0 | 2 |
-| Infrastruktur | 5 | 0 | 5 |
-| Dokumentasi | 6 | 0 | 2 |
+| GPIO & Hardware | 14 | 0 | 0 |
+| Modul UI | 19 | 0 | 8 |
+| Modul Dosing | 12 | 0 | 7 |
+| Modul Etching | 5 | 1 | 8 |
+| Modul Draining & Rinsing | 5 | 2 | 6 |
+| Modul Emergency Stop | 7 | 0 | 12 |
+| Sensor & Kalibrasi | 21 | 0 | 1 |
+| Penyimpanan & Data | 10 | 0 | 1 |
+| Infrastruktur | 9 | 0 | 1 |
+| Dokumentasi | 7 | 0 | 0 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 108 ✅ · 4 ⚠️ · 55 ⬜**
+**Total: 109 ✅ · 3 ⚠️ · 54 ⬜** (dihitung ulang dari daftar item per bab di atas,
+bukan disalin manual — tabel ringkasan sebelumnya meleset karena beberapa item
+pernah diubah status tanpa tabel ikut diperbarui)
 
 Status keseluruhan: **prototype berfungsi penuh pada jalur happy-path** (menu,
 preset, dosing, agitasi, drain, e-stop dasar). Akurasi dosing **sudah memakai

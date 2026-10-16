@@ -5,6 +5,51 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-16] v0.7.0 — Watchdog, recovery I2C, kontrol Serial (Bab 9)
+
+Menutup 4 dari 5 item infrastruktur firmware.
+
+**Watchdog hardware** (`watchdog.h`, baru). `esp_task_wdt` dengan timeout 10
+detik + `trigger_panic`, sehingga `loop()` yang hang akibat bug / I2C macet
+tetap menghasilkan reset otomatis — sebelumnya alat hanya bisa dipulihkan dengan
+mematikan listrik manual. `watchdogInit()` dipanggil di `setup()`,
+`watchdogFeed()` di `loop()` (maksimal tiap 1 detik, cukup sering). Kalau
+Arduino core sudah mendaftarkan task ini saat boot (`init()` kena
+`ESP_ERR_INVALID_STATE`), otomatis fallback ke `reconfigure()` timeout yang ada
+— bukan membuat konfigurasi kedua. Kegagalan aktivasi **tidak dianggap fatal** — alat tetap jalan tanpa jaring
+pengaman, supaya debugging lapangan tidak jadi sulit. 10 detik dipilih karena siklus loop terburuk hanya ~30 ms
+(`oled.display()` memblokir I2C); jalur proses sudah bebas `delay()` panjang
+sejak v0.6.1.
+
+**Recovery bus I2C** (`input.h`). `bacaPCF8574()` sekarang menghitung
+kegagalan beruntun; setelah 5 kali berturut-turut `i2cUpkeep()` (dipanggil tiap
+iterasi `loop()`) memicu `i2cRecovery()`: `Wire.end()` → jeda 10 ms supaya slave
+melepaskan SDA → `Wire.begin()` → verifikasi baca. Kalau recovery gagal,
+penghitung sengaja **tidak** di-reset supaya langsung dicoba lagi di iterasi
+berikutnya, bukan menunggu 5 kegagalan baru. Tujuannya: PCF8574 yang hiccup tidak
+lagi membuat alat sepenuhnya tanpa kontrol.
+
+**Kontrol via Serial** (`serialcmd.h`, baru). 7 perintah, format `>perintah` +
+Enter: `help`, `status`, `start`, `stop`, `preset N`, `sel <halaman>`, `off`.
+Parser membaca **satu karakter per iterasi `loop()`** dan mengeksekusi begitu
+Enter masuk — sengaja tidak memakai `Serial.readString()` yang memblokir
+sembari menunggu Enter. Prefix `>` dipilih supaya log `dbg.h` tidak ikut
+diparse sebagai perintah.
+
+**Cleaning `config.h`.** 12 `#define` mati dihapus: sisa dari desain sensor
+analog yang sudah diganti touch-read (`INTERVAL_SENSOR_MS`, `SENSOR_AVG_N`,
+`SENSOR_AKTIF_LOW`, `SENSOR_TOUCH_READ`, `TOUCH_DEBOUNCE`, `TOUCH_DELTA_*`,
+`TOUCH_ADAPT_*`, `TOUTH_KALIB_SAMPEL`, `TOUCH_DELTA_PENUH_AWAL`,
+`SENSOR_LOG_PERIOD_MS`). **`AMBANG_MARGIN` / `AMBANG_HYST` tidak dihapus** —
+keduanya dipakai `sensor.h:sensorStatusUpdate()` untuk histeresis status ISI /
+KOSONG. `SENSOR_BEKU_MS` dipindahkan ke `config.h` supaya konstanta ambang
+sensor terpusat di satu tempat.
+
+**Tidak dikerjakan:** logging ke file (butuh LittleFS dan mempercepat keausan flash,
+ditunda dengan sengaja), `>export` / `>import` preset.
+
+---
+
 ## [2026-10-15] v0.5.8 — LED status WS2812 (GPIO 7)
 
 `PIN_LED_STRIP 7` sudah ada di `config.h` sejak lama tapi tidak pernah dipakai

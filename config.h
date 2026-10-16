@@ -56,24 +56,16 @@
 #define PIN_LEVEL_H2O       13
 #define PIN_LEVEL_SABUN     14
 #define PIN_LEVEL_LIMBAH    3
-#define INTERVAL_SENSOR_MS  50     // periode baca sensor
-#define SENSOR_AVG_N        4      // rata-rata bergerak (sampel)
-#define AMBANG_MARGIN       10     // ENTER di Level Cairan: ambang = nilai sekarang - margin
-#define AMBANG_HYST         3      // histeresis di sekitar ambang
-#define SENSOR_AKTIF_LOW    1      // 1 = sensor aktif saat LOW (untuk mode digitalRead)
-#define SENSOR_TOUCH_READ   1      // 1 = touchReadRaw (strip nikel langsung ke pin sentuh)
-#define TOUCH_DEBOUNCE      3      // jumlah sampel berturut-turut sebelum state berubah
-// Ambang relatif (persen dari baseline) + kecepatan adaptasi baseline.
-// Tidak ada asumsi arah: nilai bisa naik ATAU turun saat ada cairan/sentuhan.
-#define TOUCH_DELTA_PERSEN  6      // dianggap berubah bila |raw-baseline| > 6% baseline
-#define TOUCH_DELTA_MIN     300    // minimal selisih absolut (untuk raw kecil)
-#define TOUCH_ADAPT_CEPAT   8      // adaptasi baseline saat nilai dekat
-#define TOUCH_ADAPT_LAMBAT  512    // adaptasi baseline saat nilai jauh (jangan serap sentuhan)
-#define TOUTH_KALIB_SAMPEL  40     // jumlah sampel awal untuk mencari baseline (kering)
-// Nilai |delta| touch yang dianggap 100% level (hanya sampai tangki dikalibrasi
-// di halaman Level Cairan; nilai ini hanya nilai awal saat belum dikalibrasi).
-#define TOUCH_DELTA_PENUH_AWAL 600
-#define SENSOR_LOG_PERIOD_MS 1000  // cetak diagnostik raw semua sensor (0 = mati)
+
+// Ambang status ISI/KOSONG (dipakai `sensor.h:sensorStatusUpdate()`):
+// naik ke ADA saat persen >= MARGIN, turun lagi saat < MARGIN - HYST, supaya
+// indikator tidak berkedip saat level berdiri tepat di ambang.
+#define AMBANG_MARGIN       10     // %
+#define AMBANG_HYST         3      // %
+
+// Berapa lama `touchRead()` harus beku di 0 sebelum sensor dicurigai mati
+// (kabel putus / strip copot). Dipakai `sensor.h:sensorMatiUpdate()`.
+#define SENSOR_BEKU_MS      60000UL
 
 // Driver TB6612FNG x2 (1 arah: INA->3.3V, INB->GND)
 #define PIN_PWA_D1          15    // driver 1 PWA: motor agitasi
@@ -138,4 +130,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.6.6"
+#define FW_VERSI  "v0.7.0"
