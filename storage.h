@@ -75,6 +75,57 @@ void muatPreset() {
   }
 }
 
+// ================= SNAPSHOT / ROLLBACK (v0.7.1) =================
+// Slot cadangan berisi daftar preset SEBELUM import Serial terakhir. Satu slot
+// saja (bukan arsip) karena tujuannya cuma "batalkan import yang barusan salah",
+// bukan menyimpan histori. Format & checksum identik dengan key "cfg", jadi
+// bisa dipakai ulang struktur `DataSimpan` di atas.
+#define NVS_KEY_PREV "prev"
+
+bool simpanSnapshot() {
+  DataSimpan d;
+  memset(&d, 0, sizeof(d));
+  d.versi  = FORMAT_VERSI;
+  d.jumlah = jumlahPreset;
+  for (int i = 0; i < jumlahPreset; i++) d.p[i] = daftarPreset[i];
+  d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
+
+  bool ok = false;
+  if (prefs.begin(PREF_NS, false)) {
+    ok = (prefs.putBytes(NVS_KEY_PREV, &d, sizeof(d)) == sizeof(d));
+    prefs.end();
+  }
+  dbg.print(F("[STORE] Snapshot "));
+  dbg.print(jumlahPreset);
+  dbg.println(ok ? F(" preset disimpan") : F(" preset GAGAL disimpan"));
+  return ok;
+}
+
+// Muat snapshot ke slot "prev". Return true kalau slot ada & valid.
+// TIDAK menyentuh daftarPreset — pemanggil yang memutuskan mau applying atau tidak.
+bool muatSnapshot(Preset* keluar, int* jumlahKeluar) {
+  DataSimpan d;
+  bool valid = false;
+
+  if (prefs.begin(PREF_NS, false)) {
+    size_t len = prefs.getBytesLength(NVS_KEY_PREV);
+    if (len == sizeof(d)) {
+      prefs.getBytes(NVS_KEY_PREV, &d, sizeof(d));
+      valid = (d.versi == FORMAT_VERSI) &&
+              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc))) &&
+              (d.jumlah >= 1) && (d.jumlah <= MAKS_PRESET);
+      for (uint32_t i = 0; valid && i < d.jumlah; i++)
+        if (!validasiPreset(d.p[i])) valid = false;
+      if (valid) {
+        *jumlahKeluar = d.jumlah;
+        for (uint32_t i = 0; i < d.jumlah; i++) keluar[i] = d.p[i];
+      }
+    }
+    prefs.end();
+  }
+  return valid;
+}
+
 // ================= KALIBRASI SENSOR LEVEL =================
 #define FORMAT_VERSI_KALIB 1
 

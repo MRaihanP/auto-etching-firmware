@@ -182,7 +182,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Simpan kalibrasi pompa (ml/rotasi) ke NVS — blob `"kal3"` (`DataKalib3`: `float stepperMl[3]` + versi + CRC32), ditulis `simpanKalibStepper()` saat BACK dari `HAL_KALIB_STEPPER` (v0.5.7)
 - [x] ✅ Simpan offset suhu & acuan MQ-135 ke NVS — blob `"kal2"` (`DataKalib2` versi 2: `addrSensor[3]` + `suhuOffsetX10[3]` + `mq135Normal`/`mq135Kotor`, versi + CRC32), ditulis `simpanKalib2()` saat BACK dari `HAL_KALIB_SUHU` / `HAL_KALIB_UDARA` (v0.6.4)
 - [x] ✅ Simpan duty/kecepatan motor per kalibrasi ke NVS — blob `"kal4"` (`DataKalib4`: `duty[7]` + `mlX10[2]`, versi + CRC32), ditulis `simpanKalib4()` saat BACK dari `HAL_KALIB_DC`/`HAL_KALIB_AGITASI`/`HAL_KALIB_FAN` (v0.6.2)
-- [ ] ⬜ Backup/restore preset via Serial (export/import) — belum dikerjakan. Printer kontrol Serial sudah ada di `serialcmd.h` (Bab 9) tapi belum punya perintah `export`/`import`
+- [x] ✅ Backup/restore preset via Serial (export/import) — `serialcmd.h` v0.7.1: `>export` (cetak blok teks ber-header `#AE1` + footer `#OK <crc32>`), `>import` (terapkan), `>rollback` (kembalikan daftar sebelum import terakhir), `>abort`. Snapshot otomatis ke key NVS `"prev"` sebelum overwrite. Import ditolak kalau proses jalan; setiap baris divalidasi (jumlah field, indeks berurutan, angka benar-benar angka via `strtol` + cek sisa string, `validasiPreset()`, nama unik); CRC mismatch = batal total, preset lama utuh. Baris >80 B ditandai dan ditolak, tidak dipotong diam-diam. Parser non-blocking per karakter; baris berawalan `>` membatalkan import **dan** jadi perintah (tidak ada kondisi buntu). Cakupan **preset saja** — blob kalibrasi `kal`…`kal5` sengaja tidak ikut karena terikat alat fisik
 
 ---
 
@@ -239,12 +239,12 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Modul Draining & Rinsing | 5 | 2 | 6 |
 | Modul Emergency Stop | 7 | 0 | 12 |
 | Sensor & Kalibrasi | 21 | 0 | 1 |
-| Penyimpanan & Data | 10 | 0 | 1 |
+| Penyimpanan & Data | 11 | 0 | 0 |
 | Infrastruktur | 9 | 0 | 1 |
 | Dokumentasi | 7 | 0 | 0 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 109 ✅ · 3 ⚠️ · 54 ⬜** (dihitung ulang dari daftar item per bab di atas,
+**Total: 110 ✅ · 3 ⚠️ · 53 ⬜** (dihitung ulang dari daftar item per bab di atas,
 bukan disalin manual — tabel ringkasan sebelumnya meleset karena beberapa item
 pernah diubah status tanpa tabel ikut diperbarui)
 

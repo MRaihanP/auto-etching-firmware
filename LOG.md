@@ -5,6 +5,64 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-16] v0.7.1 — Backup/restore preset via Serial (Bab 8)
+
+Menutup item terakhir Bab 8. Tiga perintah baru di `serialcmd.h`: `>export`,
+`>import`, `>rollback` (plus `>abort` untuk keluar dari mode import).
+
+**Format blok** — teks, bukan binary, supaya bisa dibaca dan diedit manusia:
+
+```
+#AE1
+1|Preset 1|100|80|33|17|50|120|60|180|5|3|270
+2|Preset 2|80|60|40|20|40|100|50|100|8|4|330
+3|Preset 3|150|100|25|25|50|150|150|300|4|2|420
+4|Preset 4|60|40|50|10|40|90|18|72|10|5|210
+5|Preset 5|120|90|30|20|50|135|90|225|6|3|360
+#OK 454F211E
+```
+
+`#AE1` = header + versi format. Satu baris per preset: `indeks|nama|11 int`
+sesuai urutan field di `struct Preset`. `#OK <crc32>` = footer, FNV-1a atas
+seluruh karakter baris data — menangkap paste terpotong atau karakter rusak.
+CRC di atas dihitung dari 5 preset default dan sudah diverifikasi: 13 field per
+baris, baris terpanjang 47 B (buffer import 80 B).
+
+Pakai `|` sebagai separator aman karena nama preset tidak bisa diketik bebas
+(hanya 4 tombol). `namaAman()` tetap menyaring `|` dan karakter kontrol kalau
+suatu saat nama datang dari sumber lain.
+
+**Pengaman** — bagian yang membuat fitur ini berguna:
+
+1. `>import` ditolak kalau proses sedang jalan. Mengubah daftar preset di tengah
+   etching akan membuat satu siklus mencampur dua preset berbeda.
+2. Snapshot otomatis ke key NVS `"prev"` **sebelum** overwrite. Kalau hasilnya
+   salah, `>rollback` mengembalikan daftar preset lama. Satu slot saja — tujuannya
+   membatalkan import yang barusan salah, bukan menyimpan histori.
+3. Validasi per baris: jumlah field harus tepat, indeks harus berurutan mulai 1,
+   semua angka harus benar-benar angka (`strtol` dengan pemeriksaan sisa string,
+   supaya `"abc"` tidak diam-diam jadi 0 lalu lolos), `validasiPreset()` untuk
+   rentang, nama tidak kosong, nama unik.
+4. CRC harus cocok. Kalau tidak, import dibatalkan total dan preset lama tidak
+   disentuh.
+5. Baris data hanya diterima **setelah** header `#AE1`, jadi log `dbg.h` atau
+   teks acak yang ikut ter-paste tidak langsung jadi preset.
+6. Baris yang melebihi 80 B ditandai `impPanjang` dan ditolak saat baris
+   berikutnya — buffer penuh tidak boleh jadi pemotongan diam-diam.
+
+Semua penolakan disertai alasan spesifik di Serial
+(mis. `indeks 4 tidak berurutan (harusnya 3)`), karena menyalin blok ke alat
+yang salah adalah kesalahan yang mahal.
+
+**Non-blocking.** Import menumpuk karakter per iterasi `loop()` ke buffer 80 B
+dan memproses per Enter, jadi `loop()` tetap responsif selama transfer.
+Escape hatch: mengetik baris berawalan `>` membatalkan import **dan** menjalankan
+perintah itu — jadi tidak ada kondisi buntu di mode import. Export mencetak
+~11 baris sekaligus (±5 ms di 115200 baud), dianggap wajar karena `dbg.h` sudah
+mencetak di dalam `loop()`.
+
+---
+
 ## [2026-10-16] v0.7.0 — Watchdog, recovery I2C, kontrol Serial (Bab 9)
 
 Menutup 4 dari 5 item infrastruktur firmware.
