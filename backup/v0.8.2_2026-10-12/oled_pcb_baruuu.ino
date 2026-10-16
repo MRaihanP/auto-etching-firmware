@@ -102,8 +102,10 @@ void tanganiTombol(int t) {
 
     // ATAS/BAWAH: scroll baris; KIRI/KANAN: pilih baris
     case HAL_CADANGAN:
-      if (t == P_ATAS)  uiScrollAtur(-1);
-      if (t == P_BAWAH) uiScrollAtur(+1);
+      // ATAS/BAWAH scroll per 1 baris cairan (BARIS_LVL, bukan BARIS_H)
+      if (t == P_ATAS)  uiScrollAtur(-1, BARIS_LVL);
+      if (t == P_BAWAH) uiScrollAtur(+1, BARIS_LVL);
+      // KIRI/KANAN pindah baris terpilih; layar ikut ter-scroll
       if (t == P_KIRI)  levelSel = max(0, levelSel - 1);
       if (t == P_KANAN) levelSel = min(JUMLAH_SENSOR - 1, levelSel + 1);
       if (t == P_BACK) pindahHalaman(HAL_MENU_UTAMA);

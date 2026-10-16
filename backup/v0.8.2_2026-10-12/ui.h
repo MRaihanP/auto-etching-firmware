@@ -71,21 +71,24 @@ const int HEADER_H     = 12;
 // Dipakai halaman yang isinya lebih tinggi dari area tampil (ATAS/BAWAH)
 int uiScrollPx = 0, uiScrollMaks = 0, uiScrollArea = 0;
 
-void uiScrollSet(int topBaris, int tinggiIsi) {
+// Parameter `langkah` = jarak scroll per 1 "tombol" (default BARIS_H).
+// Halaman dengan tinggi baris sendiri (mis. Level Cairan memakai BARIS_LVL)
+// mengoper langkahnya supaya scroll melompat 1 baris utuh, bukan setengah baris.
+void uiScrollSet(int topBaris, int tinggiIsi, int langkah = BARIS_H) {
   uiScrollArea = AREA_BAWAH - topBaris;
   int kurang = max(0, tinggiIsi - uiScrollArea);
-  uiScrollMaks = ((kurang + BARIS_H - 1) / BARIS_H) * BARIS_H;   // bulatkan ke atas
-  uiScrollPx = constrain((uiScrollPx / BARIS_H) * BARIS_H, 0, uiScrollMaks);
+  uiScrollMaks = ((kurang + langkah - 1) / langkah) * langkah;   // bulatkan ke atas
+  uiScrollPx = constrain((uiScrollPx / langkah) * langkah, 0, uiScrollMaks);
 }
-void uiScrollAtur(int delta) {   // +1/-1 baris (dari .ino)
-  uiScrollPx = constrain(((uiScrollPx + delta * BARIS_H) / BARIS_H) * BARIS_H,
+void uiScrollAtur(int delta, int langkah = BARIS_H) {   // +1/-1 langkah (dari .ino)
+  uiScrollPx = constrain(((uiScrollPx + delta * langkah) / langkah) * langkah,
                          0, uiScrollMaks);
   perluGambar = true;
 }
-void uiScrollKe(int yRel, int tinggi) {   // auto-scroll: pastikan item terlihat
+void uiScrollKe(int yRel, int tinggi, int langkah = BARIS_H) {   // auto-scroll: pastikan item terlihat
   if (yRel < uiScrollPx) uiScrollPx = yRel;
   if (yRel + tinggi > uiScrollPx + uiScrollArea) uiScrollPx = yRel + tinggi - uiScrollArea;
-  uiScrollPx = constrain((uiScrollPx / BARIS_H) * BARIS_H, 0, uiScrollMaks);
+  uiScrollPx = constrain((uiScrollPx / langkah) * langkah, 0, uiScrollMaks);
 }
 void gambarScrollbar() {
   if (uiScrollMaks <= 0) return;
@@ -323,33 +326,59 @@ void gambarProses() {
   teksKanan(buf, SCREEN_WIDTH - 2, 39);
 }
 
-// ================= HALAMAN: CADANGAN SENYAWA =================
+// ================= HALAMAN: LEVEL CAIRAN =================
+// Satu baris per cairan: nama (kiri) + persentase (kanan, sejajar),
+// lalu bar progress di bawahnya. 5 baris x 13px = 65px tidak muat di
+// area konten 38px, jadi halaman ini di-scroll per baris.
+const int BARIS_LVL   = 13;              // teks 8px + jeda 1px + bar 4px
+const int LEVEL_TEKS_H = 8;
+const int LEVEL_BAR_H  = 4;
+
 void gambarCadangan() {
-  gambarHeader("Cadangan Senyawa");
+  gambarHeader("Level Cairan");
   oled.setTextSize(1);
   oled.setTextColor(WHITE);
-  uiScrollSet(HEADER_H, JUMLAH_SENSOR * BARIS_H);
+
+  const int tinggiIsi = JUMLAH_SENSOR * BARIS_LVL;
+  uiScrollSet(HEADER_H, tinggiIsi, BARIS_LVL);
+  // Baris terpilih selalu terlihat (KIRI/KANAN geser baris + scroll ikut)
+  uiScrollKe(levelSel * BARIS_LVL, BARIS_LVL, BARIS_LVL);
+
+  const int bx = 2;                       // x kiri bar progress
+  const int bw = SCREEN_WIDTH - 8;        // lebar bar, berhenti di x=122
+                                          // (scrollbar ada di x=126)
   for (int i = 0; i < JUMLAH_SENSOR; i++) {
-    int y = HEADER_H + i * BARIS_H - uiScrollPx;
-    if (y < HEADER_H || y > AREA_BAWAH - BARIS_H) continue;
-    bool sel = (i == levelSel);
+    int y = HEADER_H + i * BARIS_LVL - uiScrollPx;
+
+    // Culling: hanya baris yang utuh ditampilkan (tanpa teks/bar terpotong)
+    if (y + LEVEL_TEKS_H <= HEADER_H) continue;
+    if (y + LEVEL_TEKS_H + LEVEL_BAR_H > AREA_BAWAH) continue;
+
+    bool valid  = kalibrasiSensorValid[i];
+    int  persen = constrain(sensorPersen[i], 0, 100);
+    bool sel    = (i == levelSel);
+
+    // --- Baris teks: nama kiri, persentase kanan (sejajar) ---
     if (sel) oled.fillRect(0, TY(y) - 1, SCREEN_WIDTH - 4, 9, WHITE);
     oled.setTextColor(sel ? BLACK : WHITE);
-    teksKiri(namaSensor[i], 1, y);
-    char buf[20];
-    if (kalibrasiSensorValid[i]) {
-      if (i == 4) {
-        int ruangSisa = kalibrasiSensor[i].kapasitasMl - sensorMl[i];
-        snprintf(buf, sizeof(buf), "sisa %3dml", ruangSisa);
-      } else {
-        snprintf(buf, sizeof(buf), "%3dml %2d%%", sensorMl[i], sensorPersen[i]);
-      }
-    } else {
-      snprintf(buf, sizeof(buf), "uncal");
+    teksKiri(namaSensor[i], bx, y);
+
+    char buf[12];
+    if (valid) snprintf(buf, sizeof(buf), "%d%%", persen);
+    else       strcpy(buf, "uncal");
+    teksKanan(buf, SCREEN_WIDTH - 6, y);
+    oled.setTextColor(WHITE);
+
+    // --- Bar progress di bawah kedua teks ---
+    int by = y + LEVEL_TEKS_H + 1;
+    uint16_t warna = sel ? BLACK : WHITE;
+    oled.drawRect(bx, TY(by), bw, LEVEL_BAR_H, warna);
+    if (valid && persen > 0) {
+      int isi = (bw - 2) * persen / 100;
+      if (isi > 0) oled.fillRect(bx + 1, TY(by) + 1, isi, LEVEL_BAR_H - 2, warna);
     }
-    teksKanan(buf, SCREEN_WIDTH - 5, y);
   }
-  oled.setTextColor(WHITE);
+
   gambarScrollbar();
 }
 

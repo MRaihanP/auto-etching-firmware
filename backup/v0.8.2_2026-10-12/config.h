@@ -86,4 +86,4 @@
 #define BUZZER_PWM_FREQ     2000
 #define BUZZER_PWM_RES      8
 
-#define FW_VERSI  "v0.8.2"
+#define FW_VERSI  "v0.8.3"
