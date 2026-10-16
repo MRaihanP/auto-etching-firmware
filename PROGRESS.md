@@ -128,18 +128,18 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Semua aktuator mati saat proses dibatalkan (`.ino:110-116`)
 - [x] ✅ Dialog konfirmasi batal saat proses berjalan (`ino:121-141`)
 - [x] ✅ Log Serial untuk setiap transisi fase & pembatalan
-- [ ] ⬜ Estop dipindah ke **baris pertama `loop()`** (saat ini setelah `tanganiTombol()`, `prosesUpdate()`, `motorUpdate()`, `sensorUpdate()`)
-- [ ] ⬜ Latch `estopAktif` — tidak auto-reset saat pin kembali HIGH
-- [ ] ⬜ Reset latch hanya lewat BACK di `HAL_ALARM`, dan hanya bila pin HIGH
-- [ ] ⬜ Fungsi tunggal `semuaAktuatorMati()` (saat ini 4× duplikasi di 3 tempat)
-- [ ] ⬜ Cut power driver stepper (TMC_PDN LOW) saat stop
-- [ ] ⬜ `prosesGagal(kode)` sebagai satu-satunya jalan keluar kondisi abnormal
-- [ ] ⬜ Timeout/watchdog per fase (DOSING, DRAINING, RINSE)
-- [ ] ⬜ Buzzer nada alarm (berulang) berbeda dari nada "selesai"
-- [ ] ⬜ Halaman alarm + instruksi pemulihan
-- [ ] ⬜ Jeda (`prosesToggleJeda`) ikut mematikan output, bukan hanya timer
-- [ ] ⬜ Deteksi kegagalan sensor saat proses (DS18B20/touch) → abort aman
-- [ ] ⬜ Fail-safe saat OLED/PCF8574 hilang (hanya E-stop berfungsi, beri peringatan)
+- [x] ✅ Estop dipindah ke **baris pertama `loop()`** (v0.7.3) - cek `estopAktif || digitalRead(PIN_ESTOP)==LOW` jadi baris pertama `.ino:loop()` dengan `return`, sehingga tombol/proses/motor/sensor/render dilewati (sebelumnya di `.ino:701`, SETELAH `tanganiTombol()`, `prosesUpdate()`, `motorUpdate()`, `sensorUpdate()`). **Tiga hal tetap jalan saat latch aktif** karena dilewatkannya justru merusak fail-safe: `buzzerUpdate()` (nada alarm membeku di satu nada selama 10 detik), `ledStripUpdate()`, dan `watchdogFeed()` (tanpa ini menahan E-stop >10 detik memicu reset, dan reset justru ME-CLEAR latch)
+- [x] ✅ Latch `estopAktif` - tidak auto-reset saat pin kembali HIGH (v0.7.3) - E-stop adalah sakelar putar yang dikunci operator; melepasnya otomatis hanya dengan pin bergoyang membuka jalan bagi proses yang mulai lagi dengan tangan masih di tombol
+- [x] ✅ Reset latch hanya lewat BACK di `HAL_ALARM`, dan hanya bila pin HIGH (v0.7.3) - `case HAL_ALARM:` di `tanganiTombol()`. Kalau pin masih LOW, BACK diabaikan + toast "E-stop masih ditekan" dan layar menampilkan "E-STOP MASIH DITEKAN" supaya operator tahu kenapa tombol tidak merespons
+- [x] ✅ Fungsi tunggal `semuaAktuatorMati()` - **SUDAH ADA SEJAK LAMA, item ini basi** (v0.7.3). Ada di `process.h:30`, dipanggil dari 4 tempat: `aksiFase` FASE_SELESAI, `prosesBatal`, handler E-stop, dan `>off`. Teks item menggambarkan kondisi SEBELUM refactor. Tidak dikerjakan ulang, hanya ditandai benar
+- [x] ✅ Cut power driver stepper saat stop - **SUDAH TERPENUHI, tapi item aslinya salah paham** (v0.7.3). `TMC_PDN` adalah pin *reset*, bukan enable power; `LOW` = mode reset, bukan mati listrik. Dan `PROCESS.md:231` yang menulis `digitalWrite(TMC_EN, LOW)` terbalik: sejak migrasi TMC2209 (v0.6.0) EN **aktif LOW**, jadi tidur = EN **HIGH** - sudah dikerjakan `stepperSleep(true)` di dalam `pompaMatikanTotal()`. Menjalankan `TMC_PDN LOW` saat stop justru akan membuat driver dalam mode reset. Tidak diimplementasikan, alasannya dicatat di `LOG.md`
+- [x] ✅ `prosesGagal(kode)` sebagai satu-satunya jalan keluar kondisi abnormal (v0.7.3) - `process.h`, dengan `enum KodeError` 8 nilai + `namaError[]` + `pesanError[]` di `data.h`. Alarm ditandai `prosesError != ERR_NONE`, **bukan** nilai baru di `enum FaseProses` (menambah `FASE_GAGAL` berarti menyentuh semua `switch` pada fase). Panggilan kedua diabaikan supaya kode pertama yang paling informatif tidak tertimpa. `prosesMulai()` menolak jalan selama alarm/E-stop aktif
+- [x] ✅ Timeout/watchdog per fase (DOSING, DRAINING, RINSE) (v0.7.3) - `TIMEOUT_FASE_MS[]` per fase di `process.h`, dibandingkan terhadap `prosesMasukFaseMs`. Jaring pengaman terakhir untuk timer kacau / fase tidak pernah berganti. Diisi juga `ERR_STEP_MACET`: `pompaJalan[i]` true tapi `jalanLangkah[i]` beku >3 detik - pada pompa peristaltik "nyala tapi tidak memompa" (selang putus, rotor macet) tidak terlihat dari driver
+- [x] ✅ Buzzer nada alarm (berulang) berbeda dari nada "selesai" (v0.7.3) - `N_ALARM` = 3 beep panjang 400 Hz + jeda, berulang sampai di-reset. Scheduler `buzzerPutar()` dapat parameter `ulang` supaya alarm bisa berjalan tanpa batas tanpa membuat `buzzerUpdate()` blocking
+- [x] ✅ Halaman alarm + instruksi pemulihan (v0.7.3) - `HAL_ALARM` (enum `Halaman` + `namaHalaman[]`), `ui.h:gambarAlarm()` menampilkan kode dalam kotak text size 2, `pesanError[]` sebagai instruksi, detik ke-berapa proses berhenti, dan petunjuk tombol
+- [x] ✅ Jeda (`prosesToggleJeda`) ikut mematikan output, bukan hanya timer (v0.7.3) - **bug nyata yang sudah lama ada**: agitasi/pompa/fan tetap berputar selama jeda. Sekarang `semuaAktuatorMati()` saat jeda, `aksiFase()` saat lanjut (shadow state v0.7.2 membuat ikon di layar proses ikut benar)
+- [x] ✅ Deteksi kegagalan sensor saat proses (DS18B20/touch) → abort aman (v0.7.3) - `sensorMati[]` (v0.6.5) dipakai di `prosesUpdate()`: sensor mati saat proses jalan → `prosesGagal(ERR_SENSOR)`. Level dipakai untuk keputusan dosing dan cek akhir, jadi sensor mati berarti keputusan diambil dari data palsu. Hanya saat proses aktif & tidak dijeda
+- [x] ✅ Fail-safe saat OLED/PCF8574 hilang (v0.7.3) - **sebagian sudah terpenuhi sejak dulu**: E-stop di `PIN_8` GPIO langsung, tidak lewat I2C, jadi tetap mematikan aktuator walau seluruh bus I2C mati. Yang ditambahkan: `>status` melaporkan `i2cGagalBerturut`, jumlah recovery, dan status watchdog. Peringatan tidak bisa tampil di OLED justru karena OLED itulah yang hilang - jadi lewat Serial
 
 ---
 
@@ -237,14 +237,14 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Modul Dosing | 12 | 0 | 7 |
 | Modul Etching | 5 | 1 | 8 |
 | Modul Draining & Rinsing | 5 | 2 | 6 |
-| Modul Emergency Stop | 7 | 0 | 12 |
+| Modul Emergency Stop | 19 | 0 | 0 |
 | Sensor & Kalibrasi | 21 | 0 | 1 |
 | Penyimpanan & Data | 11 | 0 | 0 |
 | Infrastruktur | 9 | 0 | 1 |
 | Dokumentasi | 7 | 0 | 0 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 114 ✅ · 3 ⚠️ · 49 ⬜** (dihitung ulang dari daftar item per bab di atas,
+**Total: 126 ✅ · 3 ⚠️ · 37 ⬜** (dihitung ulang dari daftar item per bab di atas,
 bukan disalin manual — tabel ringkasan sebelumnya meleset karena beberapa item
 pernah diubah status tanpa tabel ikut diperbarui)
 

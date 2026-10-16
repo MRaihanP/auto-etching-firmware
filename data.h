@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <Arduino.h>
 
 // ================= DATA PRESET =================
@@ -61,17 +61,60 @@ enum Halaman {
   HAL_KALIB_AGITASI,
   HAL_KALIB_FAN,
   HAL_KALIB_SUHU,
-  HAL_KALIB_UDARA
+  HAL_KALIB_UDARA,
+  HAL_ALARM
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
   "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN",
-  "KALIB_SUHU", "KALIB_UDARA"
+  "KALIB_SUHU", "KALIB_UDARA", "ALARM"
+};
+
+// ================= KODE ERROR / ALARM (v0.7.3) =================
+// Setiap kondisi abnormal punya SATU kode, dan `prosesGagal(kode)` adalah satu-
+// satu-satunya jalan keluarnya. Tujuannya: tidak ada lagi jalur "mati mendadak"
+// yang punya efek samping berbeda-beda.
+//
+// Sengaja TIDAK menambah nilai baru ke `enum FaseProses` (mis. FASE_GAGAL):
+// `namaFase[]` diindeks oleh enum itu di beberapa tempat, dan menambah nilai
+// berarti menyentuh setiap switch pada fase. `prosesError != ERR_NONE` sudah
+// cukup sebagai penanda alarm, dengan `prosesFase` tetap FASE_IDLE.
+enum KodeError {
+  ERR_NONE = 0,
+  ERR_ESTOP,          // tombol E-stop ditekan
+  ERR_SENSOR,         // sensor level / DS18B20 mati atau tidak valid
+  ERR_LEVEL_KURANG,   // volume tangki tidak cukup
+  ERR_STEP_MACET,     // pompa jalan tapi langkah tidak bertambah
+  ERR_TIMEOUT,        // fase berjalan melebihi batas waktu
+  ERR_OVERFLOW,       // tangki limbah hampir penuh
+  ERR_SUHU            // suhu melebihi batas aman
+};
+
+const char* namaError[] = {
+  "OK", "E-STOP", "SENSOR", "LEVEL KURANG",
+  "POMPA MACET", "TIMEOUT", "OVERFLOW", "SUHU"
+};
+
+// Apa yang harus dilakukan operator. Satu kalimat, ditampilkan di HAL_ALARM.
+const char* pesanError[] = {
+  "",
+  "Tekan E-stop. Lepas tombol, lalu BACK.",
+  "Sensor tidak terbaca. Periksa kabel & power sensor.",
+  "Cairan tangki kurang. Isi ulang lalu ulangi.",
+  "Pompa tidak bergerak. Cek selang, konektor, dan motor.",
+  "Fase berjalan terlalu lama. Proses dihentikan demi keamanan.",
+  "Tangki limbah hampir penuh. Kosongkan lalu ulangi.",
+  "Suhu terlalu tinggi. Tunggu turun lalu ulangi."
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
 int presetTerpilih = 0;
+
+// Kode alarm aktif. != ERR_NONE berarti proses berhenti abnormally dan layar
+// HAL_ALARM yang harus tampil. Di-reset hanya lewat jalur pemulihan (BACK),
+// bukan otomatis.
+KodeError prosesError = ERR_NONE;
 
 // Dirty flag: layar hanya digambar ulang kalau true
 bool perluGambar = true;

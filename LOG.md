@@ -1,7 +1,113 @@
-# Log Perubahan
+﻿# Log Perubahan
 
 Format entri: `[Tanggal] vX.Y.Z — ringkasan`
 Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dilakukan.
+
+---
+
+## [2026-10-16] v0.7.3 — Fail-safe: prosesGagal, latch E-stop, HAL_ALARM (Bab 6)
+
+Menutup 9 item Bab 6. Satu item ditandai stale dan satu lagi sengaja di-skip
+(dijelaskan di bawah).
+
+### Tulang punggung: `prosesGagal(kode)`
+
+Semua kondisi abnormal sekarang lewat **satu** fungsi. Sebelumnya tiap jalur
+"mati mendadak" punya efek samping sendiri-sendiri, sehingga tidak bisa diuji
+di satu titik dan mudah ada yang terlewat.
+
+`enum KodeError` (8 nilai) + `namaError[]` + `pesanError[]` di `data.h`.
+Alarm ditandai `prosesError != ERR_NONE`, **bukan** lewat nilai baru di
+`enum FaseProses`. Alasannya: `namaFase[]` diindeks oleh enum itu di beberapa
+tempat, jadi menambah `FASE_GAGAL` berarti menyentuh setiap `switch` pada fase.
+`prosesFase` tetap `FASE_IDLE`.
+
+`prosesMulai()` juga kini menolak jalan selama `prosesError != ERR_NONE ||
+estopAktif` — tanpa itu, `>start` dari Serial bisa memulai proses baru dari
+dalam kondisi gagal.
+
+### E-stop dipindah ke baris pertama `loop()`
+
+Tadinya ada di `.ino:701`, **setelah** `tanganiTombol()`, `prosesUpdate()`,
+`motorUpdate()`, dan `sensorUpdate()`. Sekarang paling atas, dengan `return`
+sehingga tombol/proses/motor/sensor/render semuanya dilewati.
+
+Yang **tetap** jalan selama latch aktif — dan ketiganya penting:
+
+- `buzzerUpdate()` — kalau dilewati, nada alarm membeku di satu nada dan
+  berbunyi tanpa henti selama 10 detik (tidak pernah maju ke jeda)
+- `ledStripUpdate()` — animasi merah E-stop
+- `watchdogFeed()` — menahan E-stop >10 detik akan memicu reset, dan reset
+  justru **me-clear** latch `estopAktif`. Latch yang justru harus bertahan
+  sampai operator mereset secara sadar. Ini jebakan yang mudah terlewat:
+  `continue`/`return` yang "aman" justru bisa membatalkan fail-safe-nya sendiri.
+
+### Latch `estopAktif`
+
+Tidak otomatis lepas saat pin kembali HIGH. Pemulihan hanya lewat BACK di
+`HAL_ALARM`, dan **hanya** kalau pin sudah HIGH — kalau masih ditekan, BACK
+diabaikan dan layar menampilkan "E-STOP MASIH DITEKAN". E-stop adalah sakelar
+putar yang dikunci operator; melepasnya otomatis hanya dengan pin bergoyang
+akan membuka jalan bagi proses yang mulai lagi dengan tangan masih di tombol.
+
+### Jeda akhirnya mematikan output
+
+Bug nyata: `prosesToggleJeda()` hanya menghentikan timer, jadi agitasi, pompa,
+dan fan **tetap berputar** selama jeda. Tombol jeda terlihat bekerja tapi tidak
+punya efek. Sekarang `semuaAktuatorMati()` dipanggil saat jeda, dan `aksiFase()`
+yang memulihkan saat lanjut — shadow state v0.7.2 otomatis membuat ikon di
+layar proses ikut benar.
+
+### Buzzer alarm berulang
+
+`N_ALARM` = 3 beep panjang 400 Hz + jeda, berulang sampai di-reset.
+Scheduler `buzzerPutar()` dapat parameter `ulang` supaya alarm bisa berjalan
+tanpa batas tanpa membuat `buzzerUpdate()` blocking.
+
+### Halaman `HAL_ALARM`
+
+Kode error dalam kotak (text size 2), instruksi pemulihan, detik ke-berapa
+proses berhenti, dan petunjuk tombol. `HAL_ALARM` ditambah ke `enum Halaman`
+dan `namaHalaman[]`.
+
+### Deteksi otomatis di `prosesUpdate()`
+
+Tiga pemeriksaan, semua hanya saat proses aktif & tidak dijeda:
+
+1. **Pompa macet** (`ERR_STEP_MACET`) — `pompaJalan[i]` masih true tapi
+   `jalanLangkah[i]` beku >3 detik. Pada pompa peristaltik "nyala tapi tidak
+   memompa" adalah kegagalan yang paling sering (selang putus, rotor macet)
+   dan tidak terlihat dari driver.
+2. **Sensor mati** (`ERR_SENSOR`) — `sensorMati[]` dari v0.6.5. Level dipakai
+   untuk keputusan dosing dan cek akhir, jadi sensor mati saat proses jalan
+   berarti keputusan diambil dari data palsu.
+3. **Timeout per fase** (`ERR_TIMEOUT`) — `TIMEOUT_FASE_MS[]` per fase. Ini
+   jaring pengaman terakhir untuk kasus timer kacau / fase tidak pernah berganti.
+
+### Item yang tidak dikerjakan
+
+- **"Fungsi tunggal `semuaAktuatorMati()`" — SUDAH ADA sejak lama.** Tersimpan
+  di `process.h:30`, dipanggil dari 4 tempat (`aksiFase` FASE_SELESAI,
+  `prosesBatal`, handler E-stop, `>off`). Teks item menggambarkan kondisi
+  *sebelum* refactor. Diubah jadi ✅, bukan dikerjakan ulang.
+- **"Cut power driver stepper (TMC_PDN LOW) saat stop" — di-skip.** `TMC_PDN`
+  adalah pin *reset*, bukan enable power; `LOW` berarti masuk mode reset, bukan
+  mati listrik. `PROCESS.md:231` yang menulis `digitalWrite(TMC_EN, LOW)` juga
+  terbalik: sejak migrasi TMC2209 (v0.6.0) EN **aktif LOW**, jadi tidur = EN
+  **HIGH** — dan itu sudah dikerjakan `stepperSleep(true)` di dalam
+  `pompaMatikanTotal()`. Menjalankan item itu justru akan membuat driver
+  dalam mode reset saat stop. Ditandai sebagai salah paham di `PROCESS.md`.
+- **ERR_LEVEL_KURANG / ERR_OVERFLOW / ERR_SUHU** - kodenya sudah ada dan siap,
+  tapi pemicunya belum ada: cek volume tangki ada di Bab 3, guard overfill
+  di Bab 5, ambang suhu di Bab 4. Nanti diisi pemicunya, bukan dari sini.
+
+### Fail-safe OLED/PCF8574
+
+Sebagian sudah terpenuhi sejak dulu: E-stop di `PIN_8` GPIO langsung, tidak
+lewat I2C, jadi tetap mematikan aktuator walau seluruh bus I2C mati. Yang
+ditambahkan: `>status` melaporkan `i2cGagalBerturut`, jumlah recovery, dan
+status watchdog. Peringatan **tidak bisa** tampil di OLED justru karena OLED
+itulah yang hilang — jadi lewat Serial.
 
 ---
 

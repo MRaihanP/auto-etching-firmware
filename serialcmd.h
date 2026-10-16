@@ -106,6 +106,30 @@ void cmdPrintStatus() {
   dbg.print(F("jumlah   : "));
   dbg.print(jumlahPreset);
   dbg.println(F(" buah preset"));
+
+  // Fail-safe I2C. OLED dan PCF8574 satu bus, jadi kalau keduanya hilang
+  // `i2cGagalBerturut` naik dan seluruh tombol mati. E-stop tetap berfungsi
+  // karena pin-nya GPIO langsung. Peringatan TIDAK bisa tampil di OLED (itulah
+  // yang hilang), jadi dilaporkan lewat Serial + LED strip.
+  dbg.print(F("i2c      : "));
+  if (i2cGagalBerturut > 0) {
+    dbg.print(F("GAGAL "));
+    dbg.print(i2cGagalBerturut);
+    dbg.print(F("x berturut, recovery "));
+    dbg.print(i2cJumlahRecovery);
+    dbg.println(F("x - tombol & OLED kemungkinan mati"));
+  } else {
+    dbg.println(F("OK"));
+  }
+
+  dbg.print(F("wdt      : "));
+  dbg.println(wdtAktif ? F("aktif") : F("tidak aktif"));
+  dbg.print(F("alarm    : "));
+  if (prosesError == ERR_NONE) {
+    dbg.println(estopAktif ? F("E-stop terkunci") : F("tidak"));
+  } else {
+    dbg.println(namaError[prosesError]);
+  }
 }
 
 // ---------- Backup / restore preset (v0.7.1) ----------
@@ -443,6 +467,9 @@ void cmdJalankan(char* baris) {
   if (cmdCocok("start")) {
     if (prosesJalan) { dbg.println(F("proses sudah berjalan")); return; }
     prosesMulai();
+    // `prosesMulai()` menolak kalau alarm aktif / E-stop belum direset — jangan
+    // Jangan pindah halaman kalau memang tidak jadi mulai.
+    if (!prosesJalan) { dbg.println(F("[CMD] Start ditolak (lihat pesan alarm)")); return; }
     pindahHalaman(HAL_PROSES);
     dbg.print(F("[CMD] Mulai: "));
     dbg.println(daftarPreset[presetTerpilih].nama);

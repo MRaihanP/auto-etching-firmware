@@ -1,4 +1,4 @@
-/*
+﻿/*
   Menu OLED 6 Tombol - v0.5.0
   Perubahan dari v0.4.1:
     - sensor.h: sensor level sekarang baca GPIO langsung (ganti MPR121 I2C)
@@ -117,6 +117,21 @@ void tanganiTombol(int t) {
   perluGambar = true;
 
   switch (halaman) {
+
+    case HAL_ALARM:
+      // Pemulihan DIBATASI: E-stop hanya bisa dilepas lewat BACK di sini, dan
+      // hanya kalau pin sudah HIGH. Kalau masih ditekan, BACK diabaikan supaya
+      // operator tidak bisa me-reset latch dengan tangan masih di tombol.
+      if (t == P_BACK) {
+        if (digitalRead(PIN_ESTOP) == LOW) {
+          dbg.println(F("[ALARM] BACK diabaikan: E-stop masih ditekan"));
+          tampilToast("E-stop masih ditekan");
+        } else {
+          dbg.println(F("[ALARM] Dipulihkan oleh operator"));
+          prosesPulihkan();
+        }
+      }
+      break;
 
     case HAL_MENU_UTAMA:
       if (t == P_ATAS)  listGeser(L_UTAMA, -1, JUMLAH_MENU);
@@ -681,6 +696,38 @@ void setup() {
 
 // ================= LOOP =================
 void loop() {
+  // ============ E-STOP: PALING ATAS LOOP (v0.7.3) ============
+  // Harus dicek SEBELUM apa pun. Kalau ada urutan lain yang sudah memompa,
+  // menggambar, atau memproses tombol lebih dulu, jeda antara tekanan tombol
+  // dan seluruh aktuator mati bisa mencapai puluhan milidetik — cukup untuk
+  // memompa cairan berbahaya atau membuat motor tetap berputar.
+  //
+  // `continue` berarti selama E-stop aktif tidak ada tombol, proses, motor,
+  // sensor, maupun render yang jalan. Konsekuensinya: layar membeku (tidak
+  // ada render baru) selama tombol ditekan — ini disengaja, operator tidak
+  // butuh layar saat sedang menekan stop.
+  if (estopAktif || digitalRead(PIN_ESTOP) == LOW) {
+    if (!estopAktif) {
+      estopAktif = true;
+      prosesGagal(ERR_ESTOP);       // latch: tidak otomatis lepas
+    }
+    semuaAktuatorMati();            // idempotent - aman tiap iterasi
+    ledEstop();
+
+    // Tiga hal yang TETAP harus jalan selama latch aktif, padahal sisanya
+    // dilewati. Melewatkannya justru merusak keselamatan:
+    //  - buzzerUpdate: kalau dilewati, nada alarm membeku di satu nada
+    //    (tidak pernah maju ke jeda) dan berbunyi tanpa henti selama 10 detik.
+    //  - ledStripUpdate: animasi merah E-stop butuh frame baru.
+    //  - watchdogFeed: menahan E-stop >10 detik akan memicu reset, dan
+    //    reset justru ME-CLEAR latch `estopAktif` - latch yang harus
+    //    bertahan sampai operator mereset secara sadar.
+    buzzerUpdate();
+    ledStripUpdate();
+    watchdogFeed();
+    return;                         // lewati sisa loop
+  }
+
   int t = bacaTombolBaru();
   if (t != TIDAK_ADA) tanganiTombol(t);
 
@@ -696,16 +743,6 @@ void loop() {
 #if SENSOR_LED_ENABLE
   ledSensorUpdate();                       // RGB level 5 tangki (non-blocking)
 #endif
-
-  // E-stop: hentikan semua aktuator & batalkan proses
-  if (digitalRead(PIN_ESTOP) == LOW) {
-    ledEstop();                              // LED merah solid selama E-stop ditekan
-    if (prosesJalan) {
-      prosesBatal();                         // sudah memanggil semuaAktuatorMati()
-      tampilToast("E-STOP!");
-    }
-    semuaAktuatorMati();                     // idempotent: aman dipanggil setiap iterasi
-  }
 
   bool animasiBerjalan = false;
   for (int L = 0; L < JUMLAH_LIST; L++) {

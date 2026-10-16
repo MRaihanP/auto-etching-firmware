@@ -293,6 +293,45 @@ void gambarDialog(const char* l1, const char* l2, const char* l3) {
   teksTengah(l3, 41, 1);
 }
 
+// ================= HALAMAN: ALARM (v0.7.3) =================
+// Satu-satunya tempat yang menjelaskan kondisi gagal ke operator. Isinya
+// statis-ish (kode + instruksi), jadi digambar penuh tiap render — tidak
+// perlu animasi.
+// BACK hanya bekerja kalau pin E-stop sudah dilepas; kalau masih ditekan,
+// layar menampilkan "$( E-STOP masih ditekan )" supaya operator tahu kenapa
+// tombolnya tidak merespons.
+void gambarAlarm() {
+  oled.setTextColor(WHITE);
+
+  // --- Kode error, dibingkai supaya mencolok --------------------------------
+  char kode[20];
+  snprintf(kode, sizeof(kode), "%s", namaError[prosesError]);
+  oled.setTextSize(2);                       // 16 px per baris - sebesar mungkin
+  int w = strlen(kode) * 12 + 12;
+  if (w > SCREEN_WIDTH) w = SCREEN_WIDTH;
+  oled.drawRoundRect((SCREEN_WIDTH - w) / 2, 2, w, 20, 4, WHITE);
+  oled.setCursor((SCREEN_WIDTH - strlen(kode) * 12) / 2, 6);
+  oled.print(kode);
+
+  // --- Instruksi pemulihan -------------------------------------------------
+  oled.setTextSize(1);
+  oled.setCursor(0, 26);
+  oled.print(pesanError[prosesError]);
+
+  // --- Konteks: kapan & fase apa -------------------------------------------
+  char info[32];
+  snprintf(info, sizeof(info), "berhenti detik ke-%d", (int)(prosesAkumMs / 1000));
+  oled.setCursor(0, 40);
+  oled.print(info);
+
+  // --- Petunjuk -------------------------------------------------------------
+  if (digitalRead(PIN_ESTOP) == LOW) {
+    teksMiniTengah(oled, "E-STOP MASIH DITEKAN", 52, WHITE);
+  } else {
+    teksMiniTengah(oled, "BACK: acknowledge lalu reset", 52, WHITE);
+  }
+}
+
 // Definisi ada di bawah `gambarProses()`. Diperakai duluan karena
 // `gambarProses()` memanggilnya saat proses sudah selesai.
 void gambarSelesai();
@@ -991,6 +1030,7 @@ void gambarLayar() {
     case HAL_KALIB_FAN:        gambarKalibFan();        break;
 case HAL_KALIB_SUHU:       gambarKalibSuhu();       break;
 case HAL_KALIB_UDARA:      gambarKalibUdara();      break;
+    case HAL_ALARM:         gambarAlarm();        break;
   }
   // Overlay
   if (halaman == HAL_PROSES && dialogBatal)
