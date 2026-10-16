@@ -79,6 +79,14 @@ void cmdPrintStatus() {
     dbg.print(pompaJalan[0] ? "HCl " : "-- ");
     dbg.print(pompaJalan[1] ? "H2O2 " : "-- ");
     dbg.println(pompaJalan[2] ? "H2O" : "--");
+    // Total ml terpompa dipakai untuk memverifikasi akumulator tanpa harus
+    // menunggu layar OLED.
+    dbg.print(F("  ml     : HCl "));
+    dbg.print(pompaTerpumpa(0));
+    dbg.print(F("  H2O2 "));
+    dbg.print(pompaTerpumpa(1));
+    dbg.print(F("  H2O "));
+    dbg.println(pompaTerpumpa(2));
   } else {
     dbg.println(F("proses   : tidak berjalan"));
   }

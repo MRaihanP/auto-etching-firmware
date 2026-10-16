@@ -72,7 +72,12 @@ void aksiFase(FaseProses f) {
 bool prosesJalan = false;          // true = proses aktif (termasuk saat jeda)
 bool prosesJeda  = false;
 bool dialogBatal = false;          // dialog konfirmasi batal sedang tampil
-unsigned long prosesAkumMs      = 0;   // waktu proses berjalan (tanpa waktu jeda)
+unsigned long prosesAkumMs      = 0;   // waktu proses, DIBATASI totalMs (progress & fase)
+// Waktu proses sebenarnya tanpa batas. `prosesAkumMs` dijepit ke totalMs supaya
+// fraksi progress selalu 0..1, tapi justru karena itu ia selalu identik dengan
+// `totalDetik` di akhir proses — tidak berguna untuk laporan "durasi aktual".
+// Variabel ini yang dipakai layar selesai.
+unsigned long prosesWaktuMs     = 0;
 unsigned long prosesTerakhirMs  = 0;
 int  prosesDetikTerakhir        = -1;
 FaseProses prosesFase           = FASE_IDLE;
@@ -88,11 +93,45 @@ FaseProses faseDariFrac(float f) {
   return FASE_RINSING;
 }
 
+// Batas tiap fase sebagai fraksi dari total preset. Tunggal dengan
+// `faseDariFrac()` supaya progress bar per fase dan perpindahan fase tidak
+// pernah bertentangan (mis. bar menunjukkan 100% sementara fase belum
+// berganti). Index = nilai enum FaseProses.
+const float FASE_AWAL_F[6]  = { 0.00, 0.10, 0.75, 0.88, 1.00, 1.00 };
+const float FASE_AKHIR_F[6] = { 0.10, 0.75, 0.88, 1.00, 1.00, 1.00 };
+
+// Progres keseluruhan proses, 0..1. Dijepit supaya tidak pernah > 1 walau
+// waktu nyata melampaui total preset.
+float prosesFraksiTotal() {
+  int total = prosesTotalDetik();
+  if (total <= 0) return 0;
+  float f = (float)prosesAkumMs / ((float)total * 1000.0f);
+  if (f < 0) f = 0;
+  if (f > 1) f = 1;
+  return f;
+}
+
+// Progres 0..1 DI DALAM fase yang sedang berjalan — inilah yang dipakai
+// loading bar, supaya operator melihat "tinggal berapa lama fase ini"
+// alih-alih barra yang selalu terlihat di paruh atas selama fase panjang.
+float prosesFraksiFase() {
+  int k = prosesFase;
+  if (k < 0 || k > FASE_SELESAI) return 0;
+  float a = FASE_AWAL_F[k], z = FASE_AKHIR_F[k];
+  if (z - a < 0.0001f) return 1.0f;          // fase SELESAI/IDLE = sudah penuh
+  float v = (prosesFraksiTotal() - a) / (z - a);
+  if (v < 0) v = 0;
+  if (v > 1) v = 1;
+  return v;
+}
+
 void prosesMulai() {
   prosesJalan = true;
   prosesJeda = false;
   dialogBatal = false;
   prosesAkumMs = 0;
+  prosesWaktuMs = 0;
+  pompaResetTotal();              // total ml terpompa dihitung ulang tiap proses
   prosesTerakhirMs = millis();
   prosesDetikTerakhir = -1;
   prosesFase = FASE_DOSING;
@@ -142,11 +181,15 @@ void prosesUpdate() {
   if (!prosesJalan) return;
 
   unsigned long now = millis();
-  if (!prosesJeda && !prosesSelesai()) prosesAkumMs += now - prosesTerakhirMs;
+  if (!prosesJeda && !prosesSelesai()) {
+    unsigned long d = now - prosesTerakhirMs;
+    prosesWaktuMs += d;
+    prosesAkumMs  += d;
+  }
   prosesTerakhirMs = now;
 
   unsigned long totalMs = (unsigned long)prosesTotalDetik() * 1000UL;
-  if (prosesAkumMs > totalMs) prosesAkumMs = totalMs;
+  if (prosesAkumMs > totalMs) prosesAkumMs = totalMs;   // progress selalu 0..1
 
   int d = prosesAkumMs / 1000;
   if (d != prosesDetikTerakhir) {

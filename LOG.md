@@ -5,6 +5,72 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-16] v0.7.2 — Layar proses & layar selesai (Bab 2, 4 dari 8 item)
+
+Menutup 4 item Bab 2 yang tidak bergantung Bab 3/4/6. Sisa 4 item Bab 2
+menunggu `HAL_ALARM` + `estopAktif` (Bab 6) dan ambang MQ-135/suhu +
+`prosesSiklus` (Bab 4).
+
+### 🐛 Bug: ml H2O dari fase DOSING terhapus
+
+`pompaMulai()` melakukan `jalanLangkah[idx] = 0`, sementara
+`aksiFase(FASE_RINSING)` memanggil `pompaMulai(2, 100)` untuk bilas **tanpa
+menghentikan pompa H2O lebih dulu**. Jadi begitu fase RINSE dimulai,
+penogonalan ml H2O dari fase DOSING hilang — dan karena itu "total ml terpompa"
+tidak boleh dibaca dari `jalanLangkah[]`.
+
+Perbaikannya: akumulator `totalMlTerpompa[3]` yang bertambah di
+`pompaRekamHasil()`, dipanggil tepat saat pompa berhenti — dari tiga titik:
+
+- `motorUpdate()` saat target langkah tercapai
+- `pompaStopAll()` (dipakai `pompaMatikanTotal()` → `semuaAktuatorMati()`, jadi
+  ml yang sudah keluar sebelum E-stop/batal tetap tercatat — cairan itu memang
+  benar-benar keluar dari tangki)
+- `pompaMulai()` **sebelum** me-reset `jalanLangkah` — ini yang menutup celah
+  pompa yang masih jalan saat RINSE dimulai
+
+Kalibrasi stepper juga memanggil `pompaMulai(idx, 1)` untuk ditimbang dan ikut
+terekam, tapi tidak masalah karena `prosesMulai()` selalu
+`pompaResetTotal()` lebih dulu.
+
+### Progress per fase
+
+Bar lama memakai fraksi **total**. Selama fase ETCHING — yang memakan 65% dari
+total waktu preset — bar terlihat nyaris beku di "~10%" selama hampir dua thirds
+durasi. Sekarang bar menampilkan progres **di dalam fase yang sedang berjalan**,
+dinormalisasi dengan batas `FASE_AWAL_F[]` / `FASE_AKHIR_F[]` yang nilainya
+tunggal dengan `faseDariFrac()`, jadi bar 100% dan pergantian fase tidak pernah
+bertentangan. Persen **total** tetap di kanan atas supaya konteks tidak hilang.
+
+### Durasi aktual
+
+Ditemukan saat mengerjakan: `prosesAkumMs` dijepit ke `totalMs` di
+`prosesUpdate()` supaya fraksi progress selalu 0..1. Konsekuensinya di akhir
+proses nilainya **identik dengan `totalDetik`** — jadi "durasi aktual" dari
+variabel itu tidak akan pernah memberi informasi apa pun. Ditambah
+`prosesWaktuMs` yang tidak dijepit, khusus untuk laporan.
+
+### Shadow state aktuator
+
+`analogWrite()` menulis langsung ke register PWM — tidak ada cara membaca
+kembali "apakah agitasi jalan" tanpa menyimpan state. Ditambah
+`agitasiDutyAktif`, `pompaSabunOn`, `pompaLimbahOn`, `fanOn` di `dcmotor.h`,
+dicatat di setiap setter. Di layar proses ditampilkan sebagai 4 ikon
+`AGI/LIM/FAN/SBN`; OLED monochrome jadi motor aktif ditandai **kotak** di
+sekeliling label.
+
+### Layar selesai
+
+`gambarSelesai()` — mode gambar dari `HAL_PROSES`, bukan halaman baru (isinya
+statis, jadi tidak perlu menambah enum `Halaman`). Menampilkan durasi aktual vs
+rencana, total ml, rincian per bahan, dan petunjuk keluar. Baris 43–63 OLED
+sebelumnya tidak terpakai sama sekali.
+
+`>status` di Serial sekarang ikut mencetak total ml terpompa, supaya akumulator
+bisa diverifikasi tanpa menunggu layar.
+
+---
+
 ## [2026-10-16] v0.7.1 — Backup/restore preset via Serial (Bab 8)
 
 Menutup item terakhir Bab 8. Tiga perintah baru di `serialcmd.h`: `>export`,

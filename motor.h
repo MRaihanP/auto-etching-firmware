@@ -85,8 +85,61 @@ void motorInit() {
 }
 
 // Mulai memompa idx: 0=HCl, 1=H2O2, 2=H2O. ml dalam ml.
+// Definisi sebenarnya ada di bawah, setelah akumulator ml.
+
+bool pompaSelesai(int idx) { return !pompaJalan[idx]; }
+
+// ================= AKUMULATOR ML TERPUMPA (v0.7.2) =================
+// Total ml yang benar-benar keluar per bahan selama satu proses.
+//
+// Kenapa tidak baca `jalanLangkah[]` langsung: `pompaMulai()` me-reset
+// `jalanLangkah[idx] = 0`, dan `aksiFase(FASE_RINSING)` memanggil
+// `pompaMulai(2, 100)` untuk bilas. Jadi penogonalan ml H2O dari fase DOSING
+// akan terhapus begitu fase RINSE dimulai. Nilai `jalanLangkah[]` hanya valid
+// sampai pompa itu dijalankan lagi — makanya rekaman harus terjadi di moment
+// pompa berhenti, bukan dibaca belakangan.
+float totalMlTerpompa[3] = { 0, 0, 0 };
+
+// Rekam ml yang sudah keluar dari pompa `idx`. Aman dipanggil berkali-kali:
+// hanya berefek kalau pompa sedang jalan.
+void pompaRekamHasil(int idx) {
+  if (idx < 0 || idx > 2) return;
+  if (!pompaJalan[idx]) return;
+  if (langkahPerMl[idx] <= 0) return;
+  totalMlTerpompa[idx] += (float)jalanLangkah[idx] / (float)langkahPerMl[idx];
+  pompaJalan[idx] = false;            // rekaman sekaligus berarti pompa berhenti
+}
+
+float pompaTerpumpa(int idx) {
+  if (idx < 0 || idx > 2) return 0;
+  return totalMlTerpompa[idx];
+}
+
+float pompaTerpumpaTotal() {
+  return totalMlTerpompa[0] + totalMlTerpompa[1] + totalMlTerpompa[2];
+}
+
+void pompaResetTotal() {
+  for (int i = 0; i < 3; i++) totalMlTerpompa[i] = 0;
+}
+
+void pompaStopAll() {
+  // Rekam dulu: pompa yang sedang jalan sudah memompa sebagian ml, dan cairan
+  // itu benar-benar keluar dari tangki walau proses dihentikan mendadak.
+  for (int i = 0; i < 3; i++) pompaRekamHasil(i);
+}
+
 void pompaMulai(int idx, int ml) {
   if (idx < 0 || idx > 2 || ml <= 0) return;
+  // Rekaman HARUS di sini sebelum `jalanLangkah` di-reset. Pompa H2O dipakai
+  // ulang untuk bilas di fase RINSE tanpa dihentikan lebih dulu, jadi tanpa
+  // baris ini sisa ml H2O dari DOSING hilang begitu pompa dijalankan lagi.
+  //
+  // Kalibrasi stepper (`.ino` HAL_KALIB_STEPPER) juga memanggil fungsi ini
+  // dengan 1 ml untuk ditimbang. Itu ikut terekam, tapi tidak masalah:
+  // `prosesMulai()` memanggil `pompaResetTotal()` sehingga angkanya selalu
+  // bersih di awal setiap proses.
+  pompaRekamHasil(idx);
   stepperSleep(false);                // pastikan driver aktif
   targetLangkah[idx] = (long)ml * langkahPerMl[idx];
   jalanLangkah[idx]  = 0;
@@ -98,20 +151,16 @@ void pompaMulai(int idx, int ml) {
   dbg.println(F(" ml"));
 }
 
-bool pompaSelesai(int idx) { return !pompaJalan[idx]; }
-
-void pompaStopAll() {
-  for (int i = 0; i < 3; i++) pompaJalan[i] = false;
-}
-
 void motorUpdate() {
   unsigned long now = micros();
   for (int i = 0; i < 3; i++) {
     if (!pompaJalan[i]) continue;
     if (jalanLangkah[i] >= targetLangkah[i]) {
-      pompaJalan[i] = false;
+      pompaRekamHasil(i);             // sekaligus set pompaJalan = false
       dbg.print(F("[POMPA] Selesai idx "));
-      dbg.println(i);
+      dbg.print(i);
+      dbg.print(F(": "));
+      dbg.println(totalMlTerpompa[i]);
       continue;
     }
     if (now - langkahTerakhirUs[i] >= LANGKAH_INTERVAL_US) {
@@ -128,6 +177,6 @@ void motorUpdate() {
 // Dipakai saat E-stop / batal / selesai supaya motor tidak panas dan CurrentScale
 // tidak menguras catu daya.
 void pompaMatikanTotal() {
-  pompaStopAll();
+  pompaStopAll();                     // merekam ml tersisa sebelum driver dimatikan
   stepperSleep(true);
 }

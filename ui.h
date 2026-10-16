@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "config.h"
@@ -293,22 +293,60 @@ void gambarDialog(const char* l1, const char* l2, const char* l3) {
   teksTengah(l3, 41, 1);
 }
 
+// Definisi ada di bawah `gambarProses()`. Diperakai duluan karena
+// `gambarProses()` memanggilnya saat proses sudah selesai.
+void gambarSelesai();
+
+// Panel ml terpompa per bahan (font mini 3x5). Angka adalah akumulator
+// `totalMlTerpompa[]`, bukan `jalanLangkah[]` - yang kedua sudah dihapus
+// ulang oleh `pompaMulai()` di fase RINSE.
+void gambarPanelMl() {
+  char buf[24];
+  snprintf(buf, sizeof(buf), "HCl %d  H2O2 %d  H2O %d",
+           (int)(pompaTerpumpa(0) + 0.5f),
+           (int)(pompaTerpumpa(1) + 0.5f),
+           (int)(pompaTerpumpa(2) + 0.5f));
+  teksMiniTengah(oled, buf, 45, WHITE);                   // 45..49
+}
+
+// Ikon status aktuator. OLED monochrome tidak punya warna, jadi motor yang
+// aktif ditandai KOTAK di sekeliling label, yang mati hanya label polos.
+// Membaca shadow state di `dcmotor.h`, bukan register PWM.
+void gambarIkonAktuator() {
+  const char* label[4] = { "AGI", "LIM", "FAN", "SBN" };
+  bool aktif[4] = {
+    agitasiDutyAktif > 0,
+    pompaLimbahOn,
+    fanOn,
+    pompaSabunOn
+  };
+  oled.setTextSize(1);
+  for (int i = 0; i < 4; i++) {
+    int x = 3 + i * 31;                                  // 3, 34, 65, 96
+    if (aktif[i]) oled.drawRoundRect(x - 3, 52, 26, 10, 3, WHITE);
+    oled.setCursor(x, 54);
+    oled.print(label[i]);
+  }
+}
+
 void gambarProses() {
   Preset &p = daftarPreset[presetTerpilih];
 
-  unsigned long totalMs = (unsigned long)p.totalDetik * 1000UL;
+  // Layar selesai adalah mode gambar dari halaman yang sama, bukan halaman
+  // baru: isinya statis, jadi tidak perlu menambah enum Halaman.
+  if (prosesSelesai()) { gambarSelesai(); return; }
+
   int lewatDetik = prosesAkumMs / 1000;
-  float frac = (float)prosesAkumMs / (float)totalMs;
-  if (frac < 0) frac = 0;
-  if (frac > 1) frac = 1;
+  float fracTotal = prosesFraksiTotal();
+  float fracFase  = prosesFraksiFase();
 
   // Tanpa header. Urutan dari atas: timer, loading bar, status (paling kecil).
   oled.setTextColor(WHITE);
 
   char buf[24];
-  int persen = (int)(frac * 100);
+  int persen = (int)(fracTotal * 100);
 
-  // --- Baris 1: nama layer singkat (kiri) + persen (kanan) -------------
+  // --- Baris 1: nama layer singkat (kiri) + persen total (kanan) -------
   char layer[8];
   strncpy(layer, p.nama, sizeof(layer) - 1);
   layer[sizeof(layer) - 1] = '\0';
@@ -322,10 +360,13 @@ void gambarProses() {
   formatMMSS(lewatDetik, buf);
   teksTengah(buf, 10, 1);                                // 10..17
 
-  // --- Loading bar ------------------------------------------------------
+  // --- Loading bar: progres DI DALAM fase sekarang ----------------------
+  // Bar lama memakai fraksi total, jadi selama fase ETCHING (65% dari total
+  // waktu) bar terlihat nyaris beku di "~10%". Sekarang bar menunjukkan sisa
+  // fase ini; persen total tetap di kanan atas supaya konteks tidak hilang.
   int barX = 0, barY = 20, barW = SCREEN_WIDTH, barH = 7;  // 20..26
   oled.drawRoundRect(barX, barY, barW, barH, 3, WHITE);
-  int isi = (int)((barW - 6) * frac);
+  int isi = (int)((barW - 6) * fracFase);
   if (isi > 0) oled.fillRect(barX + 3, barY + 1, isi, barH - 2, WHITE);
 
   // --- Sisa waktu, tetap di bawah timer, sebelum bar -------------------
@@ -334,9 +375,66 @@ void gambarProses() {
   sprintf(buf, "sisa %s", sisa);
   teksTengah(buf, 28, 1);                                // 28..35
 
-  // --- Status, ukuran paling kecil (font mini 3x5) ---------------------
-  const char* st = prosesJeda ? "JEDA" : namaFase[prosesFase];
-  teksMiniTengah(oled, st, 38, WHITE);                   // 38..42
+  // --- Nama fase + persen di dalam fase (font mini) -------------------
+  if (prosesJeda) {
+    teksMiniTengah(oled, "JEDA", 38, WHITE);             // 38..42
+  } else {
+    snprintf(buf, sizeof(buf), "%s %d%%", namaFase[prosesFase],
+             (int)(fracFase * 100));
+    teksMiniTengah(oled, buf, 38, WHITE);                // 38..42
+  }
+
+  gambarPanelMl();                                       // 45..49
+  gambarIkonAktuator();                                  // 52..61
+}
+
+// Layar selesai: total ml terpompa + durasi AKTUAL (bukan `totalDetik` preset).
+// Proses berbasis fraksi waktu murni, jadi `prosesAkumMs` selalu jatuh persis
+// di batas dan identik dengan `totalDetik` - tidak ada informasi baru.
+// `prosesWaktuMs` yang benar-benar diukur, tanpa dijepit.
+void gambarSelesai() {
+  Preset &p = daftarPreset[presetTerpilih];
+  oled.setTextColor(WHITE);
+  oled.setTextSize(1);
+
+  char buf[24];
+
+  // --- Nama preset ------------------------------------------------------
+  strncpy(buf, p.nama, sizeof(buf) - 1);
+  buf[sizeof(buf) - 1] = '\0';
+  oled.setCursor(0, 0);
+  oled.print(buf);
+  teksKanan("SELESAI", SCREEN_WIDTH, 0);
+
+  // --- Durasi aktual vs durasi rencana ---------------------------------
+  oled.setCursor(0, 14);
+  oled.print("aktual ");
+  formatMMSS((int)(prosesWaktuMs / 1000), buf);
+  oled.print(buf);
+  oled.print(" dtk");
+
+  oled.setCursor(0, 26);
+  oled.print("rencana ");
+  formatMMSS(p.totalDetik, buf);
+  oled.print(buf);
+  oled.print(" dtk");
+
+  // --- Total ml terpompa ------------------------------------------------
+  oled.setCursor(0, 38);
+  oled.print("total ");
+  oled.print((int)(pompaTerpumpaTotal() + 0.5f));
+  oled.print(" ml");
+
+  // --- Rincian per bahan (font mini) ------------------------------------
+  char r[24];
+  snprintf(r, sizeof(r), "HCl %d  H2O2 %d  H2O %d",
+           (int)(pompaTerpumpa(0) + 0.5f),
+           (int)(pompaTerpumpa(1) + 0.5f),
+           (int)(pompaTerpumpa(2) + 0.5f));
+  teksMiniTengah(oled, r, 49, WHITE);                    // 49..53
+
+  // --- Petunjuk keluar --------------------------------------------------
+  teksMiniTengah(oled, "BACK: keluar", 58, WHITE);      // 58..62
 }
 
 // ================= HALAMAN: KONFIGURASI PRESET =================

@@ -20,6 +20,16 @@
 // Default semua slot 128 (~50% duty) sampai kalibrasi diisi — motor tetap
 // berputar normal, tidak diam total.
 
+// ================= SHADOW STATE AKTUATOR (v0.7.2) =================
+// Semua motor DC ditulis langsung ke register PWM lewat `analogWrite()`, jadi
+// tidak ada cara membaca kembali "apakah agitasi sedang jalan" tanpa Shadow
+// state. Variabel di bawah dicatat di setiap setter — satu-satunya cara yang
+// sinkron dengan apa yang benar-benar ditulis ke pin.
+int  agitasiDutyAktif = 0;   // PWM terakhir di PIN_PWA_D1 (0 = mati)
+bool pompaSabunOn      = false;
+bool pompaLimbahOn     = false;
+bool fanOn             = false;
+
 void dcmotorInit() {
   pinMode(PIN_PWA_D1, OUTPUT);
   pinMode(PIN_PWB_D1, OUTPUT);
@@ -29,6 +39,10 @@ void dcmotorInit() {
   analogWrite(PIN_PWB_D1, 0);
   analogWrite(PIN_PWA_D2, 0);
   analogWrite(PIN_PWB_D2, 0);
+  agitasiDutyAktif = 0;
+  pompaSabunOn  = false;
+  pompaLimbahOn = false;
+  fanOn         = false;
 }
 
 // Ambil duty terkalibrasi sebuah motor (indeks ke kalibDuty[]).
@@ -55,23 +69,45 @@ int agitasiPwm(int speed) {
 void agitasiSet(int speed) {
   int pwm = (speed <= 0) ? 0 : agitasiPwm(speed);
   analogWrite(PIN_PWA_D1, pwm);
+  agitasiDutyAktif = pwm;
 }
 
 // Duty langsung 0..255 (dipakai halaman Kalibrasi Agitasi + test manual)
 void agitasiSetDuty(int duty) {
-  analogWrite(PIN_PWA_D1, constrain(duty, 0, 255));
+  int pwm = constrain(duty, 0, 255);
+  analogWrite(PIN_PWA_D1, pwm);
+  agitasiDutyAktif = pwm;
 }
 
-void pompaSabunSet(bool on) { analogWrite(PIN_PWB_D1, on ? dutyKalib(0) : 0); }
-void pompaLimbahSet(bool on) { analogWrite(PIN_PWA_D2, on ? dutyKalib(1) : 0); }
-void fanSet(bool on) { analogWrite(PIN_PWB_D2, on ? dutyKalib(6) : 0); }
+void pompaSabunSet(bool on) {
+  analogWrite(PIN_PWB_D1, on ? dutyKalib(0) : 0);
+  pompaSabunOn = on;
+}
+
+void pompaLimbahSet(bool on) {
+  analogWrite(PIN_PWA_D2, on ? dutyKalib(1) : 0);
+  pompaLimbahOn = on;
+}
+
+void fanSet(bool on) {
+  analogWrite(PIN_PWB_D2, on ? dutyKalib(6) : 0);
+  fanOn = on;
+}
 
 // PWM langsung 0..255 (dipakai halaman Kalibrasi Exhaust Fan)
-void fanSetAt(int pwm) { analogWrite(PIN_PWB_D2, constrain(pwm, 0, 255)); }
+void fanSetAt(int pwm) {
+  int v = constrain(pwm, 0, 255);
+  analogWrite(PIN_PWB_D2, v);
+  fanOn = (v > 0);
+}
 
 void dcmotorStopAll() {
   analogWrite(PIN_PWA_D1, 0);
   analogWrite(PIN_PWB_D1, 0);
   analogWrite(PIN_PWA_D2, 0);
   analogWrite(PIN_PWB_D2, 0);
+  agitasiDutyAktif = 0;
+  pompaSabunOn  = false;
+  pompaLimbahOn = false;
+  fanOn         = false;
 }

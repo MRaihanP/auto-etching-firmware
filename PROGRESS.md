@@ -1,4 +1,4 @@
-# PROGRESS — Checklist Implementasi Firmware Etching Otomatis
+﻿# PROGRESS — Checklist Implementasi Firmware Etching Otomatis
 
 Firmware: **Etching v0.5.0** · Board: **ESP32-S3 DevKitC**
 Rencana teknis lengkap: `PROCESS.md`
@@ -48,13 +48,13 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 - [x] ✅ Halaman `HAL_PLACEHOLDER` & `gambarPlaceholder()` dihapus —enum `data.h`, `namaHalaman[]`, `case` di `ui.h` & `.ino`, fungsi `gambarPlaceholder()` tidak pernah terjangkau sejak v0.5.2
 - [x] ✅ Halaman Kalibrasi Agitasi/Fan tidak lagi pakai `delay()` — `mulaiTestMotor(jenis, durasiMs)` + `upkeepKalibrasiMotor()` dijadwalkan via `millis()`, dicek di `loop()`. `kalibMotorRunning` yang tadinya di-set tapi tidak pernah dibaca kini jadi flag aktif. BACK saat test sedang jalan mematikan motor
 - [ ] ⬜ **Halaman ALARM baru** (`HAL_ALARM`) untuk semua kondisi gagal — butuh `prosesGagal()` + `KodeError` dari Bab 6
-- [ ] ⬜ Layar proses: progress **per fase** (bukan persen total) — butuh durasi per fase
-- [ ] ⬜ Layar proses: panel ml terpompa per bahan (HCl/H2O2/H2O) — butuh `pompaProgres(i)` dari Bab 3
-- [ ] ⬜ Layar proses: ikon status aktuator (agitasi/drain/fan/soap) — butuh status aktuator live
+- [x] ✅ Layar proses: progress **per fase** (bukan persen total) (v0.7.2) - loading bar menormalisasi `frac` ke dalam band fase yang sedang jalan via `process.h:prosesFraksiFase()` + `FASE_AWAL_F[]`/`FASE_AKHIR_F[]` (tunggal dengan `faseDariFrac()`, jadi bar 100% tidak pernah bertentangan dengan pergantian fase). Masalahnya: bar lama memakai fraksi total, sehingga selama fase ETCHING - 65% dari total waktu preset - bar terlihat beku di ~10% hampir dua thirds durasi. Persen total tetap di kanan atas supaya konteks tidak hilang
+- [x] ✅ Layar proses: panel ml terpompa per bahan (HCl/H2O2/H2O) (v0.7.2) - `ui.h:gambarPanelMl()` baris 45-49 (font mini). **Butuh perbaiki bug lebih dulu:** `pompaMulai()` me-reset `jalanLangkah[]`, dan `aksiFase(FASE_RINSING)` memanggil `pompaMulai(2, 100)` tanpa menghentikan pompa H2O dulu, sehingga ml H2O dari DOSING terhapus diam-diam. Akumulator baru `motor.h:totalMlTerpompa[3]` bertambah di `pompaRekamHasil()` dari tiga titik: `motorUpdate()` saat target tercapai, `pompaStopAll()` (ml yang sudah keluar sebelum E-stop tetap tercatat - cairan itu benar-benar keluar dari tangki), dan `pompaMulai()` **sebelum** reset `jalanLangkah`. Dihapus `pompaResetTotal()` di `prosesMulai()`
+- [x] ✅ Layar proses: ikon status aktuator (agitasi/drain/fan/soap) (v0.7.2) - `ui.h:gambarIkonAktuator()` baris 52-61, 4 ikon `AGI/LIM/FAN/SBN`. Butuh shadow state di `dcmotor.h` (`agitasiDutyAktif`, `pompaSabunOn`, `pompaLimbahOn`, `fanOn`) karena `analogWrite()` menulis langsung ke register PWM dan tidak bisa dibaca balik. Dicatat di setiap setter termasuk `dcmotorStopAll()`. OLED monochrome jadi motor aktif ditandai kotak di sekeliling label
 - [ ] ⬜ Layar proses: badge peringatan gas MQ-135 / suhu tinggi — butuh ambang proteksi dari Bab 4
 - [ ] ⬜ Layar proses: tampilkan siklus agitasi ke berapa — butuh `prosesSiklus` dari Bab 4
 - [ ] ⬜ Badge permanen "E-STOP" di header saat latch aktif — butuh latch `estopAktif` dari Bab 6
-- [ ] ⬜ Layar selesai: ringkasan total ml terpompa + durasi aktual — butuh `totalMlTerpompa`
+- [x] ✅ Layar selesai: ringkasan total ml terpompa + durasi aktual (v0.7.2) - `ui.h:gambarSelesai()` sebagai **mode gambar dari `HAL_PROSES`** (bukan halaman baru; isinya statis jadi tidak perlu menambah enum `Halaman`), dipanggil dari `gambarProses()` saat `prosesSelesai()`. Menampilkan durasi aktual vs rencana, total ml, rincian per bahan, dan "BACK: keluar". Baris 43-63 OLED sebelumnya tidak terpakai sama sekali. **Temuan:** durasi aktual tidak bisa diambil dari `prosesAkumMs` karena dijepit ke `totalMs` di `prosesUpdate()` supaya fraksi progress selalu 0..1 - di akhir proses nilainya identik dengan `totalDetik` dan tidak ada informasi baru. Ditambah `prosesWaktuMs` yang tidak dijepit, khusus untuk laporan
 
 ---
 
@@ -233,7 +233,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Kategori | ✅ | ⚠️ | ⬜ |
 |---|---|---|---|
 | GPIO & Hardware | 14 | 0 | 0 |
-| Modul UI | 19 | 0 | 8 |
+| Modul UI | 23 | 0 | 4 |
 | Modul Dosing | 12 | 0 | 7 |
 | Modul Etching | 5 | 1 | 8 |
 | Modul Draining & Rinsing | 5 | 2 | 6 |
@@ -244,7 +244,7 @@ Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/ter
 | Dokumentasi | 7 | 0 | 0 |
 | Uji Hardware | 0 | 0 | 10 |
 
-**Total: 110 ✅ · 3 ⚠️ · 53 ⬜** (dihitung ulang dari daftar item per bab di atas,
+**Total: 114 ✅ · 3 ⚠️ · 49 ⬜** (dihitung ulang dari daftar item per bab di atas,
 bukan disalin manual — tabel ringkasan sebelumnya meleset karena beberapa item
 pernah diubah status tanpa tabel ikut diperbarui)
 
