@@ -103,7 +103,17 @@ Strip nikel di luar jerican HDPE + kabel AWG30/32 → pin touch ESP32-S3.
 | 16 | 15 | TB6612FNG #1 PWA — Motor Agitasi (PWM) | ✅ Sudah |
 | 17 | 16 | TB6612FNG #1 PWB — Pompa Air Sabun (PWM) | ✅ Sudah (hanya nyala saat kalibrasi) |
 | 18 | 17 | TB6612FNG #2 PWA — Pompa Limbah / drain (PWM) | ✅ Sudah |
-| 19 | 18 | TB6612FNG #2 PWB — Exhaust Fan (PWM) | ✅ Sudah (hanya nyala saat kalibrasi) |
+| 19 | ~~18~~ | ~~TB6612FNG #2 PWB — Exhaust Fan~~ | ❌ **Dihapus v0.5.1** — fan disambung langsung ke 12V (arus kipas > 1.2 A) dan menyala terus, GPIO 18 kini bebas |
+
+> **v0.5.1 — Exhaust fan pindah ke 12V langsung.**
+> Arus kipas melebihi kapasitas TB6612FNG (~1.2 A) sehingga kipas tidak terangkat
+> dan tidak bisa dikendalikan lewat PWM. Sekarang kipas disambung langsung ke
+> adaptor 12V dan menyala terus selama mesin dinyalakan.
+>
+> Konsekuensi firmware: `fanSet()` dihapus dari `dcmotor.h`, `process.h`, dan
+> loop E-stop; `PIN_PWB_D2` dihapus dari `config.h`; halaman Kalibrasi Kipas
+> dihapus dari UI (`JUMLAH_MENU_MOTOR` 7 → 6, `kalibDuty[7]` → `[5]`).
+> GPIO 18 kini **bebas** — kandidat untuk sensor tangki proses atau LED status.
 
 ### 1.5 Lain-lain
 
@@ -111,6 +121,7 @@ Strip nikel di luar jerican HDPE + kabel AWG30/32 → pin touch ESP32-S3.
 |---|---|---|---|
 | 20 | 6 | Buzzer pasif (LEDC tone) | ✅ Sudah |
 | 21 | 7 | LED strip / indicator status | ⬜ Belum — `#define` saja, tidak dipakai kode |
+| 21b | 18 | *(bebas)* — PWB driver 2 tidak dipakai sejak v0.5.1 | ⬜ Belum |
 | 22 | 8 | E-stop sense (`INPUT_PULLUP`, LOW = stop) | ✅ Sudah (non-latching, lihat Section 1) |
 | 23 | 9 | MQ-135 sensor udara (ADC 12-bit + divider R1=10k/R2=15k) | ✅ Sudah (hanya halaman Kalibrasi Udara) |
 | 24 | 10 | DS18B20 1-Wire (3 sensor: Motor / Komponen / Chamber) | ✅ Sudah (hanya halaman Kalibrasi Suhu) |
@@ -124,6 +135,7 @@ Strip nikel di luar jerican HDPE + kabel AWG30/32 → pin touch ESP32-S3.
 | 0 | Button boot |
 | 21, 47 | **Bebas** (dari pin map lama) |
 | 16–37, 45, 46 | Bebas / analog |
+| 18 | **Bebas sejak v0.5.1** (PWB driver 2 dilepas) |
 | 48 | Sekarang dipakai `DIR Pompa HCl` |
 
 ---
@@ -207,7 +219,8 @@ enum `Halaman` ditambah: `HAL_ALARM`.
 #define SUHU_MAKS_KOMPONEN    70.0f     // °C → turunkan speed agitasi
 #define SUHU_MAKS_STOP        85.0f     // °C → gagal
 #define GAS_AMANG_PPM         400       // MQ-135 → badge warning
-#define FAN_SELAMA_ETCHING    1         // 1 = fan nyala di fase etching
+// Exhaust fan TIDAK ada define: kipas langsung 12V, menyala terus
+// (arus kipas > 1.2 A sehingga tidak bisa lewat TB6612FNG)
 
 // ===== DRAINING & RINSING (fixed time) =====
 #define T_DRAINING_MS         45000UL
@@ -313,7 +326,7 @@ pengaman (ketersediaan, macet, watchdog).
 | No | Task | File | Detail |
 |---|---|---|---|
 | 3.1 | Siklus agitasi periodik | `process.h` | pakai `agitasiDetik`: agitasi ON `agitasiDetik` s → OFF `agitasiDetik` s → ulangi. Field ini sekarang **hanya tampil di UI dan tidak dipakai proses** |
-| 3.2 | Exhaust fan otomatis | `process.h` | fan ON selama ETCHING (asap HCl + panas) dan selama RINSE_SABUN. Sekarang `fanSet()` hanya dipanggil `false` |
+| 3.2 | ~~Exhaust fan otomatis~~ | — | **Dibatalkan v0.5.1** — fan langsung ke 12V & menyala terus, tidak perlu firmware. Cukup pastikan kipas menyala saat mesin dinyalakan |
 | 3.3 | Duty + ramp-up | `process.h`, `dcmotor.h` | speed 1–5 → PWM 80–255 (sudah ada) + ramp-up 1 s supaya motor tidak "shock" |
 | 3.4 | Proteksi suhu | `process.h`, `sensor.h` | `sensorSuhu(1) > 70 °C` → turunkan speed agitasi; `> 85 °C` → `ERR_SUHU` |
 | 3.5 | Proteksi gas | `process.h`, `sensor.h` | `mq135PPM() > GAS_AMANG_PPM` → badge warning di UI (belum auto-stop) |
@@ -349,7 +362,7 @@ panas dan cairan tetap mengalir; fan menyala terus sebagai exhaust.
 | 4.1 | Draining | `process.h` | pompa Limbah ON, agitasi OFF, fan OFF → selesai setelah `T_DRAINING_MS` (45 s) |
 | 4.2 | Guard overfill | `process.h` | `sensorPersen[LIMBAH] > LOKASI_LIMBAH_MAKS` (95%) → stop pompa + `ERR_OVERFLOW` |
 | 4.3 | Rinse air | `process.h` | `pompaMulai(2, ML_BILASAN)` + agitasi speed 2 → selesai bila `pompaSelesai(2)` **atau** `T_RINSE_AIR_MS` |
-| 4.4 | Rinse soap | `process.h` | `pompaSabunSet(true)` + agitasi + fan ON → `T_RINSE_SABUN_MS` (10 s). Pompa air sabun **belum pernah dipakai di proses** |
+| 4.4 | Rinse soap | `process.h` | `pompaSabunSet(true)` + agitasi → `T_RINSE_SABUN_MS` (10 s). Pompa air sabun **belum pernah dipakai di proses**. Fan sudah menyala otomatis (langsung 12V) |
 | 4.5 | Drain akhir | `process.h` | pompa Limbah ON → `T_DRAIN_AKHIR_MS` (15 s) |
 | 4.6 | Ringkasan hasil | `process.h`, `ui.h` | total ml terpompa + durasi aktual per fase → layar selesai |
 | 4.7 | Kalibrasi durasi | `storage.h` | (opsional tahap lanjut) simpan konstanta t drain/rinse agar bisa diubah dari UI |
@@ -364,7 +377,7 @@ FASE_DRAINING     pompa Limbah ON · agitasi OFF · fan OFF
 FASE_RINSE_AIR    pompaMulai(2, 200 ml air) · agitasi speed 2
    selesai?  pompaSelesai(2) ATAU t ≥ 30 s   → FASE_RINSE_SABUN
 
-FASE_RINSE_SABUN  pompaSabun ON · agitasi speed 2 · fan ON
+FASE_RINSE_SABUN  pompaSabun ON · agitasi speed 2   (fan sudah nyala sendiri)
    selesai?  t ≥ 10 s                        → FASE_DRAIN_AKHIR
 
 FASE_DRAIN_AKHIR  pompa Limbah ON
@@ -400,7 +413,7 @@ sesuai keputusan "fixed time".
 | `config.h` | pin map TMC2209 (Section 1.2) + 15 konstanta baru (Section 4) |
 | `data.h` | enum `FaseProses`, `KodeError`, `namaFase`, `pesanError`, variabel state baru, `HAL_ALARM` |
 | `motor.h` | pin EN/PDN, `langkahPerMl` dari kalibrasi, `STEP_INTERVAL_US` 1200 µs, `pompaProgres()` |
-| `dcmotor.h` | `stepperSleep(bool)`, `fanOn()/fanOff()` terpisah dari `fanSet(bool)` |
+| `dcmotor.h` | `stepperSleep(bool)` · ~~`fanOn()/fanOff()`~~ (dihapus v0.5.1) |
 | `buzzer.h` | `N_ALARM`, `buzzerAlarm()`, `buzzerAlarmStop()` |
 | `storage.h` | key `pompa`, naikkan `FORMAT_VERSI_KALIB` ke 2 |
 | `ui.h` | `gambarProses()` per-fase + ml terpompa + ikon aktuator + badge warning, `gambarAlarm()` baru, badge E-STOP di header |

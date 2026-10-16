@@ -1,39 +1,92 @@
 # Auto Etching Firmware
 
-Firmware untuk alat etching PCB otomatis berbasis Arduino. Menggunakan Arduino Uno/Nano dengan tambahan modul RTC, stepper motor, dan OLED display.
+Firmware untuk **mesin etching PCB otomatis** berbasis **ESP32-S3 DevKitC**.
+Dosing HCl/H₂O₂/H₂O (stepper peristaltik), agitasi, draining, rinsing, dan rinsing
+dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
+
+> **Lineage repo:** versi yang berjalan berasal dari lineage modular
+> (`auto-etching-firmware.ino` + `dcmotor.h`/`buzzer.h`/`motor.h`).
+> Lineage lama (`aktuator.h`, v0.5.0–v0.8.3) **rusak & dibatalkan**, snapshotnya
+> ada di `backup/`. Penjelasan lengkap di bagian atas [`LOG.md`](./LOG.md).
 
 ## Fitur Utama
 
-- **Proses etching otomatis** — timer, agitasi, dan suhu terkontrol
-- **OLED UI** — menampilkan status proses, timer, dan suhu
-- **Non-blocking buzzer** — feedback audio tanpa memblokir proses
-- **E-Stop** — emergency stop dengan ISR
-- **Preset operasi** — beberapa profil etching yang bisa dipilih
-- **EEPROM storage** — menyimpan konfigurasi dan terakhir digunakan
+- **Menu OLED 6 tombol** — preset, konfigurasi, level cairan, kalibrasi
+- **Preset CRUD (maks 10)** — tersimpan di NVS dengan versi + CRC32, auto-reject bila korup
+- **Proses etching 5 fase non-blocking** — `DOSING → ETCHING → DRAINING → RINSING → SELESAI`
+- **Dosing 3 pompa peristaltik paralel** (stepper, ml → jumlah langkah, non-blocking)
+- **3 aktuator DC via TB6612FNG PWM** — motor agitasi, pompa air sabun, pompa limbah
+- **5 sensor level non-contact** (strip nikel + `touchRead`, moving average)
+- **Sensor suhu DS18B20 ×3** pada satu bus 1-Wire, konversi non-blocking
+- **Sensor udara MQ-135** dengan divider analog & konversi ppm
+- **Kalibrasi** — stepper (ml/rotasi), DC (duty), agitasi, sensor level 0%/100%, suhu (offset), udara (acuan)
+- **E-stop** GPIO 8 — hentikan semua aktuator & batalkan proses
+- **Buzzer non-blocking** — nada boot, klik, mulai, batal, selesai
+- **Exhaust fan** disambung langsung ke 12V, menyala terus (tidak dikendalikan firmware)
 
 ## Struktur Project
 
 | File | Deskripsi |
 |------|-----------|
-| `auto-etching-firmware.ino` | File utama firmware (setup & loop) |
-| `config.h` | Konfigurasi pin, konstanta, dan version |
+| `auto-etching-firmware.ino` | Setup/loop utama, navigasi tombol, helper konfigurasi |
+| `config.h` | Pin map, konstanta global, `FW_VERSI` |
+| `dbg.h` | Helper log debug (`[PROSES]`, `[POMPA]`, …) |
+| `input.h` | Pembacaan 6 tombol PCF8574 + debounce |
+| `data.h` | Struct `Preset`, enum halaman, state global |
+| `presetops.h` | CRUD preset, kalkulasi ml, validasi |
+| `sensor.h` | Sensor level touch, DS18B20, MQ-135 |
+| `storage.h` | NVS (Preferences) + checksum untuk preset & kalibrasi |
+| `motor.h` | Driver stepper pompa peristaltik (non-blocking) |
+| `dcmotor.h` | Driver TB6612FNG (agitasi, pompa sabun, pompa limbah) |
+| `buzzer.h` | Buzzer pasif non-blocking (LEDC) + daftar melodi |
 | `process.h` | State machine proses etching |
-| `sensor.h` | Pembacaan sensor (suhu, arus) |
-| `input.h` | Penanganan input (tombol, encoder) |
-| `ui.h` | Tampilan OLED dan UI |
-| `storage.h` | Penyimpanan EEPROM |
-| `aktuator.h` | Kontrol aktuator (motor, pump, buzzer) |
-| `presetops.h` | Preset operasi etching |
+| `ui.h` | Rendering OLED: semua halaman, dialog, toast, animasi |
+| `fontmini.h` | Data font mini untuk OLED |
+| `test/` | Sketch uji mandiri per modul (mis. `test/tb6612fng/`) |
+| `backup/` | Snapshot versi lama (**lineage batal** — jangan di-flash) |
 
-## Panduan
+## Releases — Daftar Versi
 
-Lihat [`GUIDE.md`](./GUIDE.md) untuk panduan lengkap:
-- **Bagian A** — Panduan untuk Pemilik Repository
-- **Bagian B** — Panduan untuk Contributor
+Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md)**.
 
-## Changelog
+| Versi | Tanggal | Git tag | Ringkasan |
+|---|---|---|---|
+| **v0.5.1** | 2026-10-16 | `v0.5.1` | Exhaust fan dilepas dari TB6612FNG → langsung 12V; GPIO 18 bebas; sketch uji `test/tb6612fng/`; `PROCESS.md` + `PROGRESS.md` |
+| **v0.5.0** | 2026-10-13/14 | `v0.5.0` | Baseline lineage modular: menu, preset, dosing, sensor, kalibrasi, E-stop |
 
-Lihat [`LOG.md`](./LOG.md) untuk riwayat perubahan versi.
+Versi lineage lama (v0.5.0–v0.8.3, arsitektur `aktuator.h`) **dibatalkan** — ada di `backup/`.
+
+Rollback cepat:
+
+```bash
+git tag -l                              # lihat semua versi
+git checkout v0.5.0                     # kembali ke versi lama (aman, tidak hapus file)
+git checkout main                        # kembali ke versi terbaru
+```
+
+## Dokumentasi Lain
+
+| Dokumen | Isi |
+|---|---|
+| [`SUMMARY.md`](./SUMMARY.md) | Ringkasan firmware, fitur, pin map |
+| [`PROCESS.md`](./PROCESS.md) | Rencana detail 5 modul proses (UI, Dosing, Etching, Draining & Rinsing, Emergency Stop) + cara kerja tiap fase + tabel GPIO |
+| [`PROGRESS.md`](./PROGRESS.md) | Checklist status implementasi per fitur |
+| [`RELEASES.md`](./RELEASES.md) | Registri versi & panduan rollback |
+| [`LOG.md`](./LOG.md) | Changelog tiap versi |
+| [`GUIDE.md`](./GUIDE.md) | Panduan pemilik repo & kontributor |
+| `etching-otomatis.md` | Rencana awal (**usang** — sudah dianotasi) |
+| `water-level-sensor-plan.md` | Rencana sensor level non-contact |
+
+## Flash ke ESP32-S3
+
+| Setting | Nilai |
+|---|---|
+| Board | **ESP32S3 Dev Module** |
+| Upload speed | 921600 (turunkan ke 115200 bila gagal) |
+| Port | `/dev/ttyACM0` atau `/dev/ttyUSB0` |
+
+> Data preset & kalibrasi ada di NVS-flash, **tidak hilang** saat flash ulang.
+> Menghapus flash (`ESP32: Erase Flash`) hanya bila preset korup/berubah sendiri.
 
 ## License
 

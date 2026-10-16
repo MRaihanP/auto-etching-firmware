@@ -1,5 +1,24 @@
 # Plan Pengembangan: Mesin PCB Etching Otomatis
 
+> ## ⚠️ DOKUMEN INI USANG (ditandai 2026-10-16)
+>
+> Seluruh pin map dan rencana di bawah ini **sudah tidak berlaku**.
+> Pin map yang benar ada di `PROCESS.md` §1 dan `SUMMARY.md`.
+>
+> | Keterangan | Nilai lama (usang) | Nilai sekarang (benar) |
+> |---|---|---|
+> | Exhaust fan | TB6612FNG #2 PWB, **GPIO 18** | **langsung ke 12V, selalu menyala**; GPIO 18 kini **bebas** |
+> | Driver stepper | DRV8825, `SLP` aktif-tinggi | **TMC2209**, `EN` (GPIO 1) + `PDN` (GPIO 2), tanpa pin MS1/MS2/MS3 |
+> | Pin stepper HCl | SLP 1 / STEP 2 / DIR 42 | **STEP 38 / DIR 48** |
+> | Pin stepper H2O2 | SLP 41 / STEP 40 / DIR 39 | STEP 40 / DIR 39 (tetap) |
+> | Pin stepper Air | SLP 38 / STEP 47 / DIR 21 | **STEP 42 / DIR 41** |
+> | Kriteria selesai drain | "tangki kosong / timeout" | **fixed time** (`T_DRAINING_MS`), sensor hanya guard overfill |
+> | Dosis pompa | — | **paralel** (keputusan desain, `PROCESS.md` §0) |
+>
+> Rencana pembaruan firmware di §3–§5 **sebagian besar sudah dikerjakan** —
+> lihat `PROGRESS.md` untuk status lengkap per fitur.
+> Dokumen ini dipertahankan hanya sebagai catatan rencana awal.
+
 Tanggal: 2026-10-08
 Target: melengkapi firmware `Etching` (v0.4.1) menjadi alat etching PCB
 otomatis: dosing HCl/H2O2/H2O akurat (stepper + DRV8825, 1/36 step), agitasi

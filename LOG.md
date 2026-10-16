@@ -3,9 +3,74 @@
 Format entri: `[Tanggal] vX.Y.Z — ringkasan`
 Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dilakukan.
 
+> ## ⚠️ CATATAN LINEAGE (2026-10-16) — BACA DULU
+>
+> Repo ini punya **DUA lineage firmware**. Semua entri bertanggal
+> **2026-10-12 s.d. 2026-10-13** di bawah ini sudah ditandai
+> `❌ DIBATALKAN (lineage lama)` dan **tidak boleh dipakai sebagai acuan**.
+>
+> | | **Lineage LAMA (batal)** | **Lineage SAH (aktif)** |
+> |---|---|---|
+> | Rentang versi | v0.5.0 → v0.8.3 | v0.5.0 → v0.5.1 (dimulai ulang) |
+> | Berkas inti | `aktuator.h` + `oled_pcb_baruuu.ino` | `dcmotor.h` + `buzzer.h` + `motor.h` + `auto-etching-firmware.ino` |
+> | Driver motor | `PIN_PWM_FAN`, `fanSet(duty)` | `PIN_PWA_D1/D2`, `PIN_PWB_D1` |
+> | Status | ❌ **rusak, tidak pernah di-commit ke `main`, tidak pernah diuji fisik** | ✅ **berjalan di branch `main`, uji fisik terbukti** |
+> | Arsip | folder `backup/v0.5.0_2026-10-12/`–`v0.8.2_2026-10-12/` | branch `main` |
+>
+> Semua snapshot di `backup/` memakai `aktuator.h`, **termasuk** `v0.5.0` &
+> `v0.5.1` — sehingga entri 2026-10-12 untuk dua versi itu ditandai
+> `❌ LINEAGE LAMA` dan **bukan** versi yang sama dengan lineage aktif.
+> Nomor versi **direset** ketika rewrite dimulai; entri v0.5.1 tanggal
+> 2026-10-16 memakai arsitektur lineage aktif.
+>
+> Rujukan acuan yang benar: `PROCESS.md` (rencana) & `PROGRESS.md` (status).
+
 ---
 
-## [2026-10-13] v0.8.3 — Fix critical bugs, non-blocking buzzer, dua tone baru
+## [2026-10-16] v0.5.1 — Exhaust fan lepas dari TB6612FNG, GPIO 18 jadi bebas
+
+**Perubahan Hardware:**
+- **Exhaust fan tidak lagi dikendalikan firmware.** Arus kipas melebihi kapasitas
+  TB6612FNG (~1.2 A) sehingga kipas gagal terangkat dan PWM tidak berefek.
+  Kipas kini disambung **langsung ke adaptor 12V dan menyala terus** selama mesin
+  dinyalakan. Konsekuensi: E-stop **tidak lagi mematikan kipas**.
+
+**Perubahan Kode:**
+- `config.h` — `PIN_PWB_D2` (GPIO 18) dihapus, diganti komentar penjelasan.
+  GPIO 18 kini bebas (kandidat sensor tangki proses / LED status).
+- `dcmotor.h` — `fanSet()` dihapus; `dcmotorInit()` & `dcmotorStopAll()` tidak
+  lagi menyentuh GPIO 18.
+- `process.h` — `fanSet(false)` dihapus dari `aksiFase(FASE_SELESAI)` dan
+  `prosesBatal()`.
+- `auto-etching-firmware.ino` — `case HAL_KALIB_FAN` (±25 baris) dihapus;
+  `fanSet(false)` di loop E-stop dihapus; navigasi Kalibrasi Motor
+  disederhanakan (`kalibMotorIdx == 5` langsung ke Agitasi).
+- `data.h` — enum `HAL_KALIB_FAN` & entri `namaHalaman[]` dihapus (18 item,
+  tetap sinkron); `kalibDuty[7]` → `kalibDuty[5]`; komentar indeks motor diperbarui.
+- `ui.h` — `gambarKalibFan()` (±32 baris) dihapus; `menuMotor[]` 7 → 6 item;
+  case di `gambarLayar()` dihapus.
+- `FW_VERSI` → `v0.5.1`.
+
+**Fitur Baru:**
+- **`test/tb6612fng/tb6612fng.ino`** — sketch uji mandiri modul TB6612FNG.
+  Perintah Serial: `a 0-255`, `b 0-255`, `+`, `-`, `o`, `s` (urutan uji 14
+  tahap), `h`. Non-blocking, PWM 20 kHz 8-bit, `ledcAttach/ledcWrite`.
+  Tahap "step kecil" (duty 10/20/30) untuk mencari duty minimum motor.
+
+**Dokumentasi:**
+- `PROCESS.md` — tabel GPIO §1.4 diperbarui (GPIO 18 jadi bebas) + catatan v0.5.1;
+  task "Exhaust fan otomatis" dibatalkan; `FAN_SELAMA_ETCHING` dihapus.
+- `SUMMARY.md` — versi, pin map, dan daftar file disinkronkan.
+- `PROGRESS.md` — checklist diperbarui + status lineage versi (§0).
+
+**Catatan Teknis:**
+- Motor DC yang dikendalikan firmware kini hanya 3: agitasi (GPIO 15),
+  pompa air sabun (GPIO 16), pompa limbah (GPIO 17).
+- Semua `fanSet()` / `PIN_PWB_D2` / `HAL_KALIB_FAN` sudah bersih dari kode.
+
+---
+
+## [2026-10-13] v0.8.3 — ❌ DIBATALKAN (lineage lama)
 
 **Perbaikan Kritis:**
 - **Agitator tidak resume setelah pause** (`process.h`): saat unpause, agitasi tidak
@@ -45,8 +110,7 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
-## [2026-10-12] v0.8.2 — "Durasi total" dikembalikan dan berfungsi
-
+## [2026-10-12] v0.8.2 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `presetops.h`: `namaField` kembali 11 field — "Durasi total"
   (index 9) dan "Nama" (index 10)
@@ -69,8 +133,7 @@ tidak, berlaku lewat agitasi 10 detik).
 
 ---
 
-## [2026-10-12] v0.8.1 — Hapus field "Durasi total" yang mati di layar Edit
-
+## [2026-10-12] v0.8.1 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - **Bug:** field "Durasi total" masih bisa diedit di halaman Edit dan
   menyimpan toast "Tersimpan", tetapi sejak v0.7.1 nilainya tidak lagi
@@ -95,8 +158,7 @@ terlihat di halaman Detail pada baris `Etching` dan `Durasi proses`.
 
 ---
 
-## [2026-10-12] v0.8.0 — Halaman Detail Preset: volume total, waktu etching, durasi proses
-
+## [2026-10-12] v0.8.0 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h` (`gambarPresetDetail`) — tampilan baru:
   - header: nama preset (kiri) + ukuran PCB `100x80mm` (kanan)
@@ -117,8 +179,7 @@ terlihat di halaman Detail pada baris `Etching` dan `Durasi proses`.
 
 ---
 
-## [2026-10-12] v0.7.1 — Progress bar tidak lagi "stuck" (penyebut bar diperbaiki)
-
+## [2026-10-12] v0.7.1 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - **Bug**: bar progres membagi `prosesAkumMs` dengan `p.totalDetik`
   (durasi tebakan preset) sementara proses selesai berdasarkan
@@ -139,8 +200,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.7.0 — Kalibrasi berfungsi penuh: flag sensor, input volume stepper, edit kapasitas
-
+## [2026-10-12] v0.7.0 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - **P0-1 flag terkalibrasi** (`oled_pcb_baruuu.ino`): saat titik 100%
   (index terakhir) di-ENTER, `kalibrasiSensorValid[senyawa] = true` +
@@ -164,8 +224,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.6.1 — Switch senyawa & kapasitas dipin (tidak ikut scroll)
-
+## [2026-10-12] v0.6.1 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h` (`gambarKalibSensor`): switch senyawa `[ < HCl > ]` dan
   kapasitas `1000ml` dipindahkan ke area tetap di y=24–33, di atas
@@ -178,8 +237,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.6.0 — Offset 14px, 4 baris per halaman
-
+## [2026-10-12] v0.6.0 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `config.h`: `OLED_TOP_OFF` 20 → **14** (area logo y=14–63, 50px)
 - `ui.h`: dengan 6px ekstra, halaman sekarang muat **4 baris**
@@ -195,8 +253,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.9 — Jarak baris lebih lapang (BARIS_H 8→10)
-
+## [2026-10-12] v0.5.9 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h`: `BARIS_H` 8 → **10** — jarak antar baris 1px → 3px
   (teks tidak lagi rapat); 3 baris per layar, sisanya via scroll
@@ -217,8 +274,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.8 — Offset 20px + sistem scroll halaman (font tak dikecilkan)
-
+## [2026-10-12] v0.5.8 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `config.h`: `OLED_TOP_OFF` 10 → **20**
 - `ui.h`:
@@ -242,8 +298,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.7 — Geser seluruh UI 10px ke bawah (baris atas OLED rusak)
-
+## [2026-10-12] v0.5.7 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `config.h`: tambah `OLED_TOP_OFF 10`
 - `ui.h`: seluruh UI digeser 10px ke bawah memakai offset
@@ -269,8 +324,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.6 — Kembali ke layout v0.5.4 (switch y=14)
-
+## [2026-10-12] v0.5.6 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h` (`gambarKalibSensor`): dikembalikan ke
   layout v0.5.4 — switch senyawa (kotak putih penuh
@@ -285,8 +339,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.5 — Switch senyawa dipindahkan ke y=50 (bawah)
-
+## [2026-10-12] v0.5.5 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h` (`gambarKalibSensor`): susunan halaman diubah —
   5 titik kalibrasi di atas (y=13/20/27/34/41, jarak 7px),
@@ -300,8 +353,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.4 — Switch senyawa lebih menonjol (kotak putih penuh)
-
+## [2026-10-12] v0.5.4 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h` (`gambarKalibSensor`): selektor senyawa dari kotak
   berbingkai jadi **kotak putih penuh** (teks hitam) — lebih
@@ -313,8 +365,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.3 — Layout halaman kalibrasi sensor level (header + selector)
-
+## [2026-10-12] v0.5.3 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h` (`gambarKalibSensor`): susun ulang layout atas yang
   sebelumnya padat — header jadi bar status ("Kalibrasi *" kiri,
@@ -328,8 +379,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.2 — Perbaikan halaman kalibrasi sensor level
-
+## [2026-10-12] v0.5.2 — ❌ DIBATALKAN (lineage lama)
 **Perubahan:**
 - `ui.h` (`gambarKalibSensor`): layout diperbaiki — titik 75%/100% &
   "Raw now" sebelumnya di bawah layar; kini: header `Kalib: <senyawa>`
@@ -346,8 +396,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.1 — Migrasi sensor level ke GPIO langsung & pin TB6612FNG
-
+## [2026-10-12] v0.5.1 — ❌ LINEAGE LAMA — (lihat catatan lineage di atas)
 **Perubahan:**
 - `config.h`: hapus `MPR121_ADDR`; tambah `PIN_SENSOR_HCL/H2O2/H2O/SABUN/LIMBAH`
   (GPIO 11/12/13/14/3); pin TB6612FNG jadi 15 (agitasi), 16 (sabun), 17 (limbah),
@@ -381,8 +430,7 @@ halaman Detail, tetapi tidak lagi menentukan bar progres.
 
 ---
 
-## [2026-10-12] v0.5.0 — Baseline awal (kondisi sebelum migrasi)
-
+## [2026-10-12] v0.5.0 — ❌ LINEAGE LAMA — (lihat catatan lineage di atas)
 Snapshot kondisi firmware saat ini, dicatat sebagai baseline sebelum perubahan lanjutan.
 
 **File:** `oled_pcb_baruuu.ino` + `aktuator.h`, `config.h`, `data.h`, `input.h`, `presetops.h`, `process.h`, `sensor.h`, `storage.h`, `ui.h`

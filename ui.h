@@ -469,9 +469,9 @@ const int JUMLAH_MENU_KALIB = 4;
 // ================= HALAMAN: KALIBRASI MOTOR LIST =================
 const char* const menuMotor[] = {
   "Pompa HCl", "Pompa H2O2", "Pompa Air",
-  "Pompa Sabun", "Pompa Limbah", "Motor Agitasi", "Kipas Exhaust"
+  "Pompa Sabun", "Pompa Limbah", "Motor Agitasi"
 };
-const int JUMLAH_MENU_MOTOR = 7;
+const int JUMLAH_MENU_MOTOR = 6;
 
 void gambarKalibMotorList() {
   gambarHeader("Motor");
@@ -722,36 +722,6 @@ void gambarKalibUdara() {
   teksTengah(buf, y + 4, 1);
 }
 
-// ================= HALAMAN: KALIBRASI FAN =================
-void gambarKalibFan() {
-  gambarHeader("Kipas Exhaust");
-
-  oled.setTextSize(1);
-  oled.setTextColor(WHITE);
-
-  int y = HEADER_H + 4;
-  // START button dengan rounded corner
-  bool selStart = (kalibDCCursor == 1);
-  if (selStart) {
-    oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
-    oled.setTextColor(BLACK);
-  } else {
-    oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
-    oled.setTextColor(WHITE);
-  }
-  teksTengah("START", y + 2, 1);
-  y += 16;
-
-  bool sel = (kalibDCCursor == 0);
-  if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-  oled.setTextColor(sel ? BLACK : WHITE);
-  oled.setCursor(2, y);
-  oled.print(F("Duty"));
-  char buf[16];
-  sprintf(buf, "%d%%", kalibDuty[6] * 100 / 255);
-  teksKanan(buf, SCREEN_WIDTH - 2, y);
-}
-
 void gambarKalibMain() {
   gambarHeader("Kalibrasi");
   const char* item[JUMLAH_MENU_KALIB];
@@ -867,7 +837,6 @@ void gambarLayar() {
     case HAL_KALIB_STEPPER:    gambarKalibStepper();    break;
     case HAL_KALIB_DC:         gambarKalibDC();         break;
     case HAL_KALIB_AGITASI:    gambarKalibAgitasi();    break;
-    case HAL_KALIB_FAN:        gambarKalibFan();        break;
     case HAL_KALIB_SUHU:       gambarKalibSuhu();       break;
     case HAL_KALIB_UDARA:      gambarKalibUdara();      break;
   }

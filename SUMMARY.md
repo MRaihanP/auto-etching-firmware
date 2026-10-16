@@ -1,8 +1,14 @@
 # SUMMARY — Mesin PCB Etching Otomatis
 
-Firmware **Etching v0.5.0** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
-HCl/H2O2/H2O (stepper DRV8825), agitasi, draining, dan rinsing, dikendalikan lewat layar
+Firmware **Etching v0.5.1** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
+HCl/H2O2/H2O (stepper TMC2209), agitasi, draining, dan rinsing, dikendalikan lewat layar
 OLED 128x64 + 6 tombol (PCF8574).
+
+> **Catatan lineage:** repo ini punya dua lineage firmware. Lineage lama
+> (`aktuator.h` + `oled_pcb_baruuu.ino`, versi v0.5.0–v0.8.3) **rusak dan dibatalkan**;
+> snapshot-nya tersimpan di `backup/`. Lineage aktif (dokumen ini) =
+> `auto-etching-firmware.ino` + `dcmotor.h`/`buzzer.h`/`motor.h` di branch `main`.
+> Detailnya di bagian atas `LOG.md`.
 
 ## Fitur Utama
 
@@ -12,7 +18,9 @@ OLED 128x64 + 6 tombol (PCF8574).
 - **Proses otomatis 5 fase** (non-blocking): `DOSING → ETCHING → DRAINING → RINSING → SELESAI`.
 - **Sensor level GPIO langsung (5):** HCl/H2O2/H2O/sabun/limbah, rata-rata 4 sampel + histeresis.
 - **Dosing stepper non-blocking:** 3 pompa peristaltic (DRV8825), konversi ml -> step.
-- **Aktuator DC (PWM LEDC):** motor agitasi, pompa air sabun, pompa limbah, exhaust fan.
+- **Aktuator DC (PWM LEDC):** motor agitasi, pompa air sabun, pompa limbah.
+- **Exhaust fan:** disambung **langsung ke 12V** dan menyala terus (arus kipas
+  melebihi kapasitas TB6612FNG ~1.2 A). GPIO 18 kini bebas.
 - **Kalibrasi level cairan:** ambang tersimpan di NVS (Preferences).
 - **Penyimpanan NVS:** preset via `Preferences` dengan checksum.
 - **Keamanan:** E-stop (GPIO), abort proses, semua aktuator mati saat batal/selesai.
@@ -30,7 +38,8 @@ OLED 128x64 + 6 tombol (PCF8574).
 | `sensor.h` | Pembacaan 5 sensor GPIO, rata-rata, histeresis |
 | `storage.h` | Preferences (NVS), checksum, simpan/muat preset & ambang |
 | `motor.h` | Stepper DRV8825 non-blocking (pompa peristaltik) |
-| `dcmotor.h` | DC motor via TB6612FNG (agitasi, pompa sabun, pompa limbah, fan) |
+| `dcmotor.h` | DC motor via TB6612FNG (agitasi, pompa sabun, pompa limbah) |
+| `test/tb6612fng/tb6612fng.ino` | Sketch uji mandiri modul TB6612FNG (Serial Monitor) |
 | `buzzer.h` | Buzzer non-blocking (state machine berbasis millis) |
 | `process.h` | State machine proses etching, jeda/batal/selesai |
 | `ui.h` | Rendering OLED: semua halaman, dialog, toast, animasi |
@@ -51,7 +60,7 @@ OLED 128x64 + 6 tombol (PCF8574).
 | PWM agitasi | 15 | TB6612FNG Driver1 PWA |
 | PWM pompa sabun | 16 | TB6612FNG Driver1 PWB |
 | PWM pompa limbah | 17 | TB6612FNG Driver2 PWA |
-| PWM fan | 18 | TB6612FNG Driver2 PWB |
+| (bebas) | 18 | Driver2 PWB tidak dipakai — fan langsung 12V |
 | Buzzer | 6 | pasif, LEDC |
 | LED strip | 7 | |
 | E-stop | 8 | INPUT_PULLUP |

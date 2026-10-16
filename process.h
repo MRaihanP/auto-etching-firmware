@@ -48,7 +48,6 @@ void aksiFase(FaseProses f) {
       agitasiSet(0);
       pompaLimbahSet(false);
       pompaSabunSet(false);
-      fanSet(false);
       pompaStopAll();
       break;
     default: break;
@@ -111,7 +110,6 @@ void prosesBatal() {
   agitasiSet(0);
   pompaLimbahSet(false);
   pompaSabunSet(false);
-  fanSet(false);
   pompaStopAll();
   perluGambar = true;
 }

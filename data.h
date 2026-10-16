@@ -60,14 +60,13 @@ enum Halaman {
   HAL_KALIB_STEPPER,
   HAL_KALIB_DC,
   HAL_KALIB_AGITASI,
-  HAL_KALIB_FAN,
   HAL_KALIB_SUHU,
   HAL_KALIB_UDARA
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
-  "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI", "KALIB_FAN",
+  "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI",
   "KALIB_SUHU", "KALIB_UDARA"
 };
 
@@ -92,13 +91,13 @@ int kalibSetStep = 0;
 int kalibLevelScroll = 0;
 
 // State Kalibrasi Motor/Pompa
-int kalibMotorIdx = 0;        // 0=HCl, 1=H2O2, 2=Air, 3=Sabun, 4=Limbah, 5=Agitasi, 6=Fan
+int kalibMotorIdx = 0;        // 0=HCl, 1=H2O2, 2=Air, 3=Sabun, 4=Limbah, 5=Agitasi
 int kalibMotorScroll = 0;
 int kalibDCScroll = 0;        // scroll offset untuk halaman DC
 int kalibStepperCursor = 0;   // 0=START button, 1=ml value
 float kalibStepperMl[3] = {1.0, 1.0, 1.0};  // ml per rotasi untuk HCl, H2O2, Air
 int kalibDCCursor = 0;        // 0=START, 1=duty, 2=ml
-int kalibDuty[7] = {128, 128, 128, 128, 128, 128, 128};  // Sabun, Limbah, Agitasi SPD1-3, Fan
+int kalibDuty[5] = {128, 128, 128, 128, 128};  // Sabun, Limbah, Agitasi SPD1-3
 float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah
 bool kalibMotorRunning = false;  // true = motor sedang berjalan
 unsigned long kalibMotorStartMs = 0;

@@ -1,11 +1,15 @@
 /*
-  Menu OLED 6 Tombol - v0.5.0
+  Menu OLED 6 Tombol - v0.5.1
   Perubahan dari v0.4.1:
     - sensor.h: sensor level sekarang baca GPIO langsung (ganti MPR121 I2C)
     - motor.h (baru): driver stepper DRV8825 x3, non-blocking, ml -> langkah
-    - dcmotor.h (baru): PWM TB6612FNG x2 (agitasi 15, sabun 16, limbah 17, fan 18)
+    - dcmotor.h (baru): PWM TB6612FNG x2 (agitasi 15, sabun 16, limbah 17)
     - process.h: fase DOSING/ETCHING/DRAINING/RINSING kini menggerakkan aktuator
     - E-stop (GPIO8): hentikan semua aktuator & batalkan proses
+  Perubahan v0.5.1:
+    - Exhaust fan DIHAPUS dari driver TB6612FNG: arus kipas melebihi
+      kapasitas modul (~1.2 A), jadi kipas disambung langsung ke 12V dan
+      menyala terus. GPIO 18 kini bebas, halaman kalibrasi kipas dihapus.
   Perubahan dari v0.3:
     - Tombol KIRI/KANAN ditukar (config.h)
     - sensor.h: baca 6 sensor level cairan (MPR121), rata-rata + histeresis
@@ -207,12 +211,9 @@ void tanganiTombol(int t) {
           // Pompa Sabun, Limbah (DC)
           kalibDCScroll = 0;
           pindahHalaman(HAL_KALIB_DC);
-        } else if (kalibMotorIdx == 5) {
-          // Motor Agitasi
-          pindahHalaman(HAL_KALIB_AGITASI);
         } else {
-          // Kipas Exhaust
-          pindahHalaman(HAL_KALIB_FAN);
+          // Motor Agitasi (index 5, item terakhir)
+          pindahHalaman(HAL_KALIB_AGITASI);
         }
       }
       if (t == P_BACK) pindahHalaman(HAL_KALIB_MAIN);
@@ -315,30 +316,6 @@ void tanganiTombol(int t) {
           agitasiSet(kalibDCCursor + 1);
           delay(2000);
           agitasiSet(0);
-          tampilToast("Done");
-        }
-      }
-      break;
-
-    // ---------- Kalibrasi Fan ----------
-    case HAL_KALIB_FAN:
-      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
-      if (t == P_ATAS || t == P_BAWAH) {
-        kalibDCCursor = (kalibDCCursor + 1) % 2;
-        break;
-      }
-      if (t == P_KIRI || t == P_KANAN) {
-        if (kalibDCCursor == 0) {
-          int delta = (t == P_KANAN) ? 5 : -5;
-          kalibDuty[6] = constrain(kalibDuty[6] + delta, 0, 255);
-        }
-        break;
-      }
-      if (t == P_ENTER) {
-        if (kalibDCCursor == 1) {
-          fanSet(true);
-          delay(2000);
-          fanSet(false);
           tampilToast("Done");
         }
       }
@@ -639,7 +616,6 @@ void loop() {
     agitasiSet(0);
     pompaLimbahSet(false);
     pompaSabunSet(false);
-    fanSet(false);
     pompaStopAll();
   }
 

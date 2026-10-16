@@ -76,7 +76,11 @@
 #define PIN_PWA_D1          15    // driver 1 PWA: motor agitasi
 #define PIN_PWB_D1          16    // driver 1 PWB: pompa air sabun
 #define PIN_PWA_D2          17    // driver 2 PWA: pompa limbah (drain)
-#define PIN_PWB_D2          18    // driver 2 PWB: exhaust fan
+
+// GPIO 18 (driver 2 PWB) kini BEBIAS.
+// Exhaust fan disambung langsung ke 12V (arus kipas melebihi kapasitas
+// TB6612FNG ~1.2A) dan menyala terus selama mesin dinyalakan, sehingga
+// tidak perlu dikendalikan firmware lagi.
 
 // ===== PIN MAP (ESP32-S3) - dipakai mulai Step 5/6 =====
 // Stepper DRV8825 (pompa peristaltik)
@@ -106,4 +110,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.0"
+#define FW_VERSI  "v0.5.1"
