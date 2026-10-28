@@ -162,7 +162,7 @@ void prosesUpdate() {
   if (prosesFase == FASE_DOSING && !prosesJeda) {
     if (dosingBatasMs > 0 && (now - dosingMulaiMs) > dosingBatasMs) {
       dbg.println(F("[PROSES] Timeout dosing -> batal"));
-      pompaStopAll();
+      pompaStopAllDarurat();        // kondisi fault: potong seketika
       prosesBatal();
       return;
     }

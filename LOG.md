@@ -27,6 +27,38 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-28] v0.5.4 — Ramp naik/turun pompa stepper (akselerasi & deselerasi)
+
+**Perubahan Kode:**
+- `config.h` — `PUMP_ACCEL_HZ2` turun dari `1000000` ke **`50000`** langkah/detik².
+  Ramp 0 → 500 rpm (53.333 Hz) kini ~**1,07 detik**, sehingga start terlihat
+  naik bertahap, bukan langsung 100% ke RPM target.
+- `motor.h` — `pompaStop()` memakai **`stopMove()`** (deselerasi) dan tidak lagi
+  `forceStop()` + `disableOutputs()` seketika.
+  - `pompaTargetAktif` tetap `true` selama ramp turun, jadi UI masih
+    menampilkan `STOP` sampai motor benar-benar diam.
+  - `motorUpdate()` menyelesaikan status, mematikan driver, dan mencatat
+    `[POMPA] Berhenti idx ...` setelah deselerasi selesai.
+  - Fungsi baru **`pompaStopDarurat()`** / **`pompaStopAllDarurat()`** memakai
+    `forceStop()` + `disableOutputs()` untuk E-stop dan kondisi fault.
+  - Watchdog stall 3 detik sekarang memakai stop darurat.
+  - Jeda (`pompaJedaSemua`) juga deselerasi; sisa langkah dihitung setelah
+    motor diam agar tidak over-dosing. Lanjut saat masih deselerasi ditunda
+    lewat `pompaLanjutPending` dan dijalankan otomatis setelah berhenti.
+- `auto-etching-firmware.ino` — handler E-stop memanggil
+  `pompaStopAllDarurat()` (tanpa ramp) sebelum `prosesBatal()`.
+- `process.h` — timeout dosing memakai `pompaStopAllDarurat()`.
+- Estimasi durasi `pompaPerkiraanMs()` memakai koreksi trapezoid
+  `langkah/hz + hz/akselerasi`.
+
+**Catatan:**
+- Stop normal (tombol STOP di Test Motor, ganti fase, batal proses) = ramp turun.
+- E-stop, timeout, dan stall = potong seketika (tanpa ramp) demi keamanan.
+- Perilaku ramp perlu diverifikasi di hardware; bila motor stall saat
+  akselerasi, turunkan `PUMP_ACCEL_HZ2` (mis. `30000`).
+
+---
+
 ## [2026-10-28] v0.5.3 — Halaman Test Motor (3 pompa sekaligus) + default 500 rpm
 
 **Perubahan Kode:**

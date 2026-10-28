@@ -718,6 +718,7 @@ void loop() {
 
   // E-stop: hentikan semua aktuator & batalkan proses
   if (digitalRead(PIN_ESTOP) == LOW) {
+    pompaStopAllDarurat();               // potong seketika, tanpa ramp
     if (prosesJalan) {
       prosesBatal();
       tampilToast("E-STOP!");
@@ -725,7 +726,6 @@ void loop() {
     agitasiSet(0);
     pompaLimbahSet(false);
     pompaSabunSet(false);
-    pompaStopAll();
   }
 
   bool animasiBerjalan = false;

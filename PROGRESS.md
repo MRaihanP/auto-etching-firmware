@@ -187,6 +187,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ Kalibrasi DC: atur duty 0–255 dan catat ml hasil uji (`.ino:247-291`)
 - [x] ✅ **v0.5.2: kalibrasi pompa stepper** — 20 rotasi pada RPM 400–700, hasil ml/rotasi disimpan NVS (key `pompa`)
 - [x] ✅ **v0.5.3: halaman Test Motor** — START/STOP kontinu per pompa atau ketiga pompa sekaligus (Kalibrasi → Motor → Test Motor)
+- [x] ✅ **v0.5.4: ramp naik/turun pompa** — akselerasi 50.000 langkah/s², stop memakai `stopMove()`, E-stop/stall tetap `forceStop()`
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]`/`[KALIB*]` ke Serial
 - [x] ✅ **v0.5.1: `kalibDuty[7]` → `kalibDuty[5]`** setelah dihapusnya duty kipas (`data.h:100`)
 - [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik

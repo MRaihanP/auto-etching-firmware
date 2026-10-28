@@ -93,7 +93,9 @@
 #define PUMP_RPM_STEP        100
 // Akselerasi profil trapezoid (langkah/detik^2). Naikkan bila start terasa
 // lambat, turunkan bila motor stall/slip saat akselerasi.
-#define PUMP_ACCEL_HZ2       1000000L
+// 50000 = ramp 0 -> 500 rpm (53.333 Hz) dalam ~1,07 detik, sehingga start
+// dan stop terlihat naik/turun bertahap (bukan langsung 100%).
+#define PUMP_ACCEL_HZ2       50000L
 // Uji kalibrasi: jumlah rotasi yang dijalankan sebelum user mengukur hasil.
 #define PUMP_KALIB_REV       20
 // Timeout dosing = 2 x estimasi + margin ini.
@@ -127,4 +129,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.3"
+#define FW_VERSI  "v0.5.4"
