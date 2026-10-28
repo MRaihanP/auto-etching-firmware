@@ -62,13 +62,14 @@ enum Halaman {
   HAL_KALIB_DC,
   HAL_KALIB_AGITASI,
   HAL_KALIB_SUHU,
-  HAL_KALIB_UDARA
+  HAL_KALIB_UDARA,
+  HAL_TEST_POMPA
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
   "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI",
-  "KALIB_SUHU", "KALIB_UDARA"
+  "KALIB_SUHU", "KALIB_UDARA", "TEST_POMPA"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
@@ -101,6 +102,8 @@ int kalibStepperScroll = 0;
 int   kalibStepperRpm[3]     = { PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT };
 int   kalibStepperHasilMl[3] = { 0, 0, 0 };          // total ml hasil uji PUMP_KALIB_REV rotasi
 float kalibStepperMl[3]      = { 0.0f, 0.0f, 0.0f }; // ml per rotasi (hasil kalibrasi)
+// Halaman Test Pompa: cursor 0=Semua, 1=HCl, 2=H2O2, 3=Air
+int testPompaCursor = 0;
 int kalibDCCursor = 0;        // 0=START, 1=duty, 2=ml
 int kalibDuty[5] = {128, 128, 128, 128, 128};  // Sabun, Limbah, Agitasi SPD1-3
 float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah

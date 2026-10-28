@@ -469,9 +469,10 @@ const int JUMLAH_MENU_KALIB = 4;
 // ================= HALAMAN: KALIBRASI MOTOR LIST =================
 const char* const menuMotor[] = {
   "Pompa HCl", "Pompa H2O2", "Pompa Air",
-  "Pompa Sabun", "Pompa Limbah", "Motor Agitasi"
+  "Pompa Sabun", "Pompa Limbah", "Motor Agitasi",
+  "Test Motor"
 };
-const int JUMLAH_MENU_MOTOR = 6;
+const int JUMLAH_MENU_MOTOR = 7;
 
 void gambarKalibMotorList() {
   gambarHeader("Motor");
@@ -570,6 +571,31 @@ void gambarKalibStepper() {
     if (kalibStepperScroll < maxScroll)
       oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
   }
+}
+
+// ================= HALAMAN: TEST POMPA (HCl/H2O2/Air) =================
+// 4 baris: Semua / HCl / H2O2 / Air. ENTER menyalakan (label jadi STOP);
+// pompa hanya berhenti saat ENTER di STOP atau BACK.
+void gambarTestPompa() {
+  gambarHeader("Test Pompa");
+
+  const char* label[4] = { "Semua", "HCl", "H2O2", "Air" };
+  bool aktif[4] = {
+    pompaAktif(0) || pompaAktif(1) || pompaAktif(2),
+    pompaAktif(0), pompaAktif(1), pompaAktif(2)
+  };
+
+  oled.setTextSize(1);
+  for (int i = 0; i < 4; i++) {
+    int y = 13 + i * 9;
+    bool sel = (i == testPompaCursor);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 9, WHITE);
+    oled.setTextColor(sel ? BLACK : WHITE);
+    oled.setCursor(2, y);
+    oled.print(label[i]);
+    teksKanan(aktif[i] ? "STOP" : "START", SCREEN_WIDTH - 2, y);
+  }
+  oled.setTextColor(WHITE);
 }
 
 // ================= HALAMAN: KALIBRASI DC (Pompa Sabun/Limbah) =================
@@ -899,6 +925,7 @@ void gambarLayar() {
     case HAL_KALIB_AGITASI:    gambarKalibAgitasi();    break;
     case HAL_KALIB_SUHU:       gambarKalibSuhu();       break;
     case HAL_KALIB_UDARA:      gambarKalibUdara();      break;
+    case HAL_TEST_POMPA:       gambarTestPompa();       break;
   }
   // Overlay
   if (halaman == HAL_PROSES && dialogBatal)

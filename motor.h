@@ -148,6 +148,45 @@ bool pompaPutarRevolusi(int idx, int rev) {
   return pompaJalanLangkah(idx, (long)rev * PUMP_STEP_PER_REV);
 }
 
+// Uji manual (halaman Test Pompa): berjalan terus sampai pompaStop(idx).
+// Tidak memakai ml/rotasi, jadi tetap bisa dipakai walau belum dikalibrasi.
+bool pompaTestMulai(int idx) {
+  if (!pompaBisaGerak(idx)) return false;
+
+  FastAccelStepper* s = pompaStepper[idx];
+  if (s->isRunning()) s->forceStop();
+
+  uint32_t hz = rpmKeHz(kalibStepperRpm[idx]);
+  if (s->setSpeedInHz(hz) != 0) {
+    dbg.print(F("[POMPA] Speed invalid idx "));
+    dbg.println(idx);
+    return false;
+  }
+  s->setAcceleration(PUMP_ACCEL_HZ2);
+
+  pompaAwalLangkah[idx]     = (long)s->getCurrentPosition();
+  pompaTargetLangkah[idx]   = -1;          // -1 = kontinu (tanpa target)
+  pompaPosisiTerakhir[idx]  = pompaAwalLangkah[idx];
+  pompaTerakhirGerakMs[idx] = millis();
+  pompaSisaLangkah[idx]     = 0;
+  pompaTargetAktif[idx]     = true;
+
+  if (s->runForward() != MOVE_OK) {
+    pompaTargetAktif[idx] = false;
+    dbg.print(F("[POMPA] runForward() gagal idx "));
+    dbg.println(idx);
+    return false;
+  }
+
+  dbg.print(F("[POMPA] Test jalan idx "));
+  dbg.print(idx);
+  dbg.print(F(" rpm="));
+  dbg.print(rpmPompaValid(kalibStepperRpm[idx]));
+  dbg.print(F(" hz="));
+  dbg.println(hz);
+  return true;
+}
+
 void pompaStop(int idx) {
   if (idx < 0 || idx > 2) return;
   bool aktif = pompaTargetAktif[idx];

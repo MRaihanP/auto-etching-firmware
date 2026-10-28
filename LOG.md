@@ -27,6 +27,28 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-28] v0.5.3 — Halaman Test Motor (3 pompa sekaligus) + default 500 rpm
+
+**Perubahan Kode:**
+- `ui.h` — menu Kalibrasi → Motor bertambah item **“Test Motor”** (7 item).
+  Halaman baru `gambarTestPompa()`: baris **Semua / HCl / H2O2 / Air**;
+  tiap baris menampilkan `START` atau `STOP`.
+- `motor.h` — `pompaTestMulai(idx)`: menjalankan pompa **kontinu**
+  (`runForward()`) sampai dihentikan; tidak butuh kalibrasi ml/rotasi.
+- `auto-etching-firmware.ino` — handler `HAL_TEST_POMPA`: ENTER menyalakan
+  (label berubah jadi STOP), ENTER di STOP menghentikan; baris “Semua”
+  menyalakan/menghentikan ketiga pompa sekaligus; BACK menghentikan semua.
+- `data.h` — halaman `HAL_TEST_POMPA` + `testPompaCursor`.
+- Default RPM tetap **500** (`PUMP_RPM_DEFAULT`), batas 400–700 kelipatan 100.
+
+**Catatan:**
+- Pompa uji tidak berhenti otomatis setelah N rotasi — hanya STOP/BACK yang
+  menghentikan. Watchdog 3 detik tetap aktif bila posisi tidak maju (stall).
+- Pin map dikonfirmasi sama dengan tabel pengguna:
+  `SLP1=1, STEP1=2, DIR1=42, SLP2=41, STEP2=40, DIR2=39, SLP3=38, STEP3=47, DIR3=21`.
+
+---
+
 ## [2026-10-28] v0.5.2 — Pompa stepper berbasis RPM 400–700 (DRV8825 1/32)
 
 **Latar belakang:**

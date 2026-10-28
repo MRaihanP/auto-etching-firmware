@@ -218,9 +218,14 @@ void tanganiTombol(int t) {
           // Pompa Sabun, Limbah (DC)
           kalibDCScroll = 0;
           pindahHalaman(HAL_KALIB_DC);
-        } else {
-          // Motor Agitasi (index 5, item terakhir)
+        } else if (kalibMotorIdx == 5) {
+          // Motor Agitasi (index 5)
           pindahHalaman(HAL_KALIB_AGITASI);
+        } else {
+          // Test Motor: uji ketiga pompa stepper sekaligus
+          testPompaCursor = 0;
+          pompaStopAll();
+          pindahHalaman(HAL_TEST_POMPA);
         }
       }
       if (t == P_BACK) pindahHalaman(HAL_KALIB_MAIN);
@@ -280,6 +285,46 @@ void tanganiTombol(int t) {
             pompaStop(idx);
             tampilToast("Dihentikan");
           } else if (pompaPutarRevolusi(idx, PUMP_KALIB_REV)) {
+            tampilToast("Running...");
+          } else {
+            tampilToast("Gagal start");
+          }
+        }
+        break;
+      }
+      break;
+    }
+
+    // ---------- Test Motor: pompa stepper berjalan terus sampai STOP ----------
+    case HAL_TEST_POMPA: {
+      if (t == P_BACK) {
+        pompaStopAll();            // keluar halaman = semua uji berhenti
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
+      if (t == P_ATAS || t == P_BAWAH) {
+        int arah = (t == P_BAWAH) ? +1 : -1;
+        testPompaCursor = (testPompaCursor + arah + 4) % 4;
+        break;
+      }
+      if (t == P_ENTER) {
+        if (testPompaCursor == 0) {
+          // Baris "Semua": nyalakan/hentikan ketiga pompa sekaligus
+          bool adaJalan = pompaAktif(0) || pompaAktif(1) || pompaAktif(2);
+          if (adaJalan) {
+            pompaStopAll();
+            tampilToast("Stop semua");
+          } else {
+            bool ok = true;
+            for (int i = 0; i < 3; i++) if (!pompaTestMulai(i)) ok = false;
+            tampilToast(ok ? "Jalan semua" : "Gagal start");
+          }
+        } else {
+          int idx = testPompaCursor - 1;
+          if (pompaAktif(idx)) {
+            pompaStop(idx);
+            tampilToast("Stop");
+          } else if (pompaTestMulai(idx)) {
             tampilToast("Running...");
           } else {
             tampilToast("Gagal start");
@@ -643,6 +688,15 @@ void loop() {
     static bool stepperJalanTerakhir = false;
     bool jalan = pompaAktif(kalibMotorIdx);
     if (jalan != stepperJalanTerakhir) { stepperJalanTerakhir = jalan; perluGambar = true; }
+  }
+
+  // Redraw halaman Test Motor saat status salah satu pompa berubah.
+  if (halaman == HAL_TEST_POMPA) {
+    static uint8_t testStatusTerakhir = 0;
+    uint8_t status = (pompaAktif(0) ? 1 : 0) |
+                     (pompaAktif(1) ? 2 : 0) |
+                     (pompaAktif(2) ? 4 : 0);
+    if (status != testStatusTerakhir) { testStatusTerakhir = status; perluGambar = true; }
   }
 
   // Konversi DS18B20 non-blocking + redraw kalibrasi saat data baru tiba

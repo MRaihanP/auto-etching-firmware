@@ -53,6 +53,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v0.5.3** | 2026-10-28 | `v0.5.3` | Halaman **Test Motor** di Kalibrasi → Motor: START/STOP kontinu per pompa atau ketiga pompa sekaligus; default RPM 500 |
 | **v0.5.2** | 2026-10-28 | `v0.5.2` | Pompa stepper DRV8825 1/32 berbasis RPM 400–700 (default 500), kalibrasi 20 rotasi + NVS, dosing selesai berbasis pompa, FastAccelStepper |
 | **v0.5.1** | 2026-10-16 | `v0.5.1` | Exhaust fan dilepas dari TB6612FNG → langsung 12V; GPIO 18 bebas; sketch uji `test/tb6612fng/`; `PROCESS.md` + `PROGRESS.md` |
 | **v0.5.0** | 2026-10-13/14 | `v0.5.0` | Baseline lineage modular: menu, preset, dosing, sensor, kalibrasi, E-stop |
