@@ -1,6 +1,6 @@
 # Plan Pengembangan: Mesin PCB Etching Otomatis
 
-> ## ⚠️ DOKUMEN INI USANG (ditandai 2026-10-16)
+> ## ⚠️ DOKUMEN INI USANG (ditandai 2026-10-16, diperbarui 2026-10-28)
 >
 > Seluruh pin map dan rencana di bawah ini **sudah tidak berlaku**.
 > Pin map yang benar ada di `PROCESS.md` §1 dan `SUMMARY.md`.
@@ -8,10 +8,11 @@
 > | Keterangan | Nilai lama (usang) | Nilai sekarang (benar) |
 > |---|---|---|
 > | Exhaust fan | TB6612FNG #2 PWB, **GPIO 18** | **langsung ke 12V, selalu menyala**; GPIO 18 kini **bebas** |
-> | Driver stepper | DRV8825, `SLP` aktif-tinggi | **TMC2209**, `EN` (GPIO 1) + `PDN` (GPIO 2), tanpa pin MS1/MS2/MS3 |
-> | Pin stepper HCl | SLP 1 / STEP 2 / DIR 42 | **STEP 38 / DIR 48** |
-> | Pin stepper H2O2 | SLP 41 / STEP 40 / DIR 39 | STEP 40 / DIR 39 (tetap) |
-> | Pin stepper Air | SLP 38 / STEP 47 / DIR 21 | **STEP 42 / DIR 41** |
+> | Driver stepper | DRV8825, `SLP` aktif-tinggi | **DRV8825 1/32** (6400 langkah/putaran), `SLP` tetap dipakai; rencana TMC2209 dibatalkan |
+> | Pin stepper HCl | SLP 1 / STEP 2 / DIR 42 | SLP 1 / STEP 2 / DIR 42 (tetap) |
+> | Pin stepper H2O2 | SLP 41 / STEP 40 / DIR 39 | SLP 41 / STEP 40 / DIR 39 (tetap) |
+> | Pin stepper Air | SLP 38 / STEP 47 / DIR 21 | SLP 38 / STEP 47 / DIR 21 (tetap) |
+> | Kecepatan pompa | interval tetap 400 µs (≈23 rpm) | **RPM 400–700** (default 500) via FastAccelStepper |
 > | Kriteria selesai drain | "tangki kosong / timeout" | **fixed time** (`T_DRAINING_MS`), sensor hanya guard overfill |
 > | Dosis pompa | — | **paralel** (keputusan desain, `PROCESS.md` §0) |
 >

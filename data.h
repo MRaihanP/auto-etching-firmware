@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include "config.h"
 
 // ================= DATA PRESET =================
 // Catatan: semua field int + char[12] -> tanpa padding (aman untuk disimpan sebagai blob)
@@ -94,8 +95,12 @@ int kalibLevelScroll = 0;
 int kalibMotorIdx = 0;        // 0=HCl, 1=H2O2, 2=Air, 3=Sabun, 4=Limbah, 5=Agitasi
 int kalibMotorScroll = 0;
 int kalibDCScroll = 0;        // scroll offset untuk halaman DC
-int kalibStepperCursor = 0;   // 0=START button, 1=ml value
-float kalibStepperMl[3] = {1.0, 1.0, 1.0};  // ml per rotasi untuk HCl, H2O2, Air
+// Kalibrasi pompa stepper: cursor 0=START/STOP, 1=RPM, 2=Hasil, 3=ml/rotasi
+int kalibStepperCursor = 0;
+int kalibStepperScroll = 0;
+int   kalibStepperRpm[3]     = { PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT };
+int   kalibStepperHasilMl[3] = { 0, 0, 0 };          // total ml hasil uji PUMP_KALIB_REV rotasi
+float kalibStepperMl[3]      = { 0.0f, 0.0f, 0.0f }; // ml per rotasi (hasil kalibrasi)
 int kalibDCCursor = 0;        // 0=START, 1=duty, 2=ml
 int kalibDuty[5] = {128, 128, 128, 128, 128};  // Sabun, Limbah, Agitasi SPD1-3
 float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah

@@ -117,7 +117,13 @@ void tanganiTombol(int t) {
       int maxScroll = max(0, DETAIL_CONTENT_H - (SCREEN_HEIGHT - HEADER_H));
       if (t == P_ATAS)  presetDetailScroll = max(0, presetDetailScroll - DETAIL_SCROLL_STEP);
       if (t == P_BAWAH) presetDetailScroll = min(maxScroll, presetDetailScroll + DETAIL_SCROLL_STEP);
-      if (t == P_ENTER) { prosesMulai(); pindahHalaman(HAL_PROSES); }
+      if (t == P_ENTER) {
+        if (!pompaSiapSemua()) {
+          tampilToast("Kalibrasi pompa dulu");
+          break;
+        }
+        prosesMulai(); pindahHalaman(HAL_PROSES);
+      }
       if (t == P_BACK)  pindahHalaman(HAL_PRESET_LIST);
       break;
     }
@@ -206,6 +212,7 @@ void tanganiTombol(int t) {
         kalibDCCursor = 0;
         if (kalibMotorIdx <= 2) {
           // Pompa HCl, H2O2, Air (stepper)
+          kalibStepperScroll = 0;
           pindahHalaman(HAL_KALIB_STEPPER);
         } else if (kalibMotorIdx <= 4) {
           // Pompa Sabun, Limbah (DC)
@@ -220,28 +227,68 @@ void tanganiTombol(int t) {
       break;
 
     // ---------- Kalibrasi Stepper (Pompa HCl/H2O2/Air) ----------
-    case HAL_KALIB_STEPPER:
-      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+    case HAL_KALIB_STEPPER: {
+      int idx = kalibMotorIdx;
+      if (t == P_BACK) {
+        if (pompaAktif(idx)) pompaStop(idx);
+        if (kalibStepperMl[idx] > 0.0f) {
+          if (simpanPompa()) tampilToast("Tersimpan");
+          else tampilToast("Gagal simpan");
+        }
+        kalibStepperScroll = 0;
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
       if (t == P_ATAS || t == P_BAWAH) {
-        kalibStepperCursor = 1 - kalibStepperCursor;
+        int arah = (t == P_BAWAH) ? +1 : -1;
+        kalibStepperCursor = (kalibStepperCursor + arah + 4) % 4;
+        // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
+        {
+          static const int rowTop[4] = { 0, 12, 24, 36 };
+          static const int rowH[4]   = { 12, 10, 10, 10 };
+          int maxScroll = max(0, KALIB_STEPPER_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
+          int visibleH  = AREA_BAWAH - (HEADER_H + 4);
+          if (rowTop[kalibStepperCursor] - kalibStepperScroll + rowH[kalibStepperCursor] > visibleH)
+            kalibStepperScroll = rowTop[kalibStepperCursor] + rowH[kalibStepperCursor] - visibleH;
+          if (rowTop[kalibStepperCursor] - kalibStepperScroll < 0)
+            kalibStepperScroll = rowTop[kalibStepperCursor];
+          if (kalibStepperScroll > maxScroll) kalibStepperScroll = maxScroll;
+          if (kalibStepperScroll < 0) kalibStepperScroll = 0;
+        }
         break;
       }
       if (t == P_KIRI || t == P_KANAN) {
+        int arah = (t == P_KANAN) ? +1 : -1;
         if (kalibStepperCursor == 1) {
-          float delta = (t == P_KANAN) ? 0.1 : -0.1;
-          kalibStepperMl[kalibMotorIdx] += delta;
-          if (kalibStepperMl[kalibMotorIdx] < 0.1) kalibStepperMl[kalibMotorIdx] = 0.1;
-          if (kalibStepperMl[kalibMotorIdx] > 10.0) kalibStepperMl[kalibMotorIdx] = 10.0;
+          // Hanya angka ratusan: 400 / 500 / 600 / 700
+          kalibStepperRpm[idx] = rpmPompaValid(kalibStepperRpm[idx] + arah * PUMP_RPM_STEP);
+          dbg.print(F("[KALIB-POMPA] rpm="));
+          dbg.println(kalibStepperRpm[idx]);
+        } else if (kalibStepperCursor == 2) {
+          kalibStepperHasilMl[idx] = constrain(kalibStepperHasilMl[idx] + arah, 0, 999);
+          kalibStepperMl[idx] = (float)kalibStepperHasilMl[idx] / (float)PUMP_KALIB_REV;
+          dbg.print(F("[KALIB-POMPA] hasil="));
+          dbg.print(kalibStepperHasilMl[idx]);
+          dbg.print(F(" ml -> ml/rot="));
+          dbg.println(kalibStepperMl[idx]);
         }
         break;
       }
       if (t == P_ENTER) {
         if (kalibStepperCursor == 0) {
-          pompaMulai(kalibMotorIdx, 1);
-          tampilToast("Running...");
+          if (pompaAktif(idx)) {
+            pompaStop(idx);
+            tampilToast("Dihentikan");
+          } else if (pompaPutarRevolusi(idx, PUMP_KALIB_REV)) {
+            tampilToast("Running...");
+          } else {
+            tampilToast("Gagal start");
+          }
         }
+        break;
       }
       break;
+    }
 
     // ---------- Kalibrasi DC (Pompa Sabun/Limbah) ----------
     case HAL_KALIB_DC:
@@ -541,6 +588,7 @@ void setup() {
 
   muatPreset();
   muatKalib();
+  muatPompa();
 
   Wire.begin(SDA_PIN, SCL_PIN);
   Wire.setClock(I2C_CLOCK);
@@ -589,6 +637,13 @@ void loop() {
   motorUpdate();                             // stepper non-blocking
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
+
+  // Redraw halaman kalibrasi stepper saat status START/STOP berubah.
+  if (halaman == HAL_KALIB_STEPPER) {
+    static bool stepperJalanTerakhir = false;
+    bool jalan = pompaAktif(kalibMotorIdx);
+    if (jalan != stepperJalanTerakhir) { stepperJalanTerakhir = jalan; perluGambar = true; }
+  }
 
   // Konversi DS18B20 non-blocking + redraw kalibrasi saat data baru tiba
   if (halaman == HAL_KALIB_SUHU) {

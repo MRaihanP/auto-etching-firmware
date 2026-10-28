@@ -28,58 +28,54 @@ Status implementasi terdokumentasi di `PROGRESS.md`.
 | 1 | 4 | I2C SDA — OLED SSD1306 (0x3C) + PCF8574 (0x20) | ✅ Sudah |
 | 2 | 5 | I2C SCL — OLED SSD1306 (0x3C) + PCF8574 (0x20) | ✅ Sudah |
 
-### 1.2 Motor Stepper Pompa Peristaltik (TMC2209 ×3) — **PIN MAP DIPERBAIKI**
+### 1.2 Motor Stepper Pompa Peristaltik (DRV8825 ×3, 1/32)
 
-> **Perubahan hardware (terjadi setelah firmware v0.5.0 ditulis).**
-> Driver pompa stepper diganti dari **DRV8825** menjadi **TMC2209**, dan
-> pasangan pin setiap channel berubah. Pin `SLP` (sleep) tidak lagi dipakai;
-> digantikan oleh `EN` (enable driver) dan `PDN` (power-down) yang dikendalikan
-> software. Mikrostep juga diatur lewat UART resistor, bukan jumper MS1/MS2/MS3.
+> **Konfirmasi hardware 2026-10-28:** driver yang terpasang adalah **DRV8825**,
+> microstep **1/32**. Motor 200 langkah/putaran → **6400 langkah/putaran**.
+> Rencana TMC2209 sebelumnya **tidak dipakai**.
 
 | No. | GPIO | Connected to | Configured? |
 |---|---|---|---|
-| 3 | 38 | **STEP Pompa HCl** (TMC2209 channel 1) | ⬜ Belum — `config.h` masih `PIN_SLP3` |
-| 4 | 48 | **DIR Pompa HCl** (TMC2209 channel 1) | ⬜ Belum — `config.h` masih `PIN_DIR1` |
-| 5 | 39 | **DIR Pompa H2O2** (TMC2209 channel 2) | ✅ Sudah (koheren: `PIN_DIR2`) |
-| 6 | 40 | **STEP Pompa H2O2** (TMC2209 channel 2) | ✅ Sudah (koheren: `PIN_STEP2`) |
-| 7 | 41 | **DIR Pompa Air / H2O** (TMC2209 channel 3) | ⬜ Belum — `config.h` masih `PIN_SLP2` |
-| 8 | 42 | **STEP Pompa Air / H2O** (TMC2209 channel 3) | ⬜ Belum — `config.h` masih `PIN_DIR1` |
-| 9 | 1 | **TMC_EN** — enable seluruh driver TMC2209 | ⬜ Belum — `config.h` masih `PIN_SLP1` |
-| 10 | 2 | **TMC PDN** — power-down / reset seluruh driver | ⬜ Belum — `config.h` masih `PIN_STEP1` |
+| 3 | 1 | SLP/EN Pompa HCl (DRV8825, aktif HIGH) | ✅ Sudah (`PIN_SLP1`) |
+| 4 | 2 | STEP Pompa HCl | ✅ Sudah (`PIN_STEP1`) |
+| 5 | 42 | DIR Pompa HCl | ✅ Sudah (`PIN_DIR1`) |
+| 6 | 41 | SLP/EN Pompa H2O2 | ✅ Sudah (`PIN_SLP2`) |
+| 7 | 40 | STEP Pompa H2O2 | ✅ Sudah (`PIN_STEP2`) |
+| 8 | 39 | DIR Pompa H2O2 | ✅ Sudah (`PIN_DIR2`) |
+| 9 | 38 | SLP/EN Pompa Air / H2O | ✅ Sudah (`PIN_SLP3`) |
+| 10 | 47 | STEP Pompa Air / H2O | ✅ Sudah (`PIN_STEP3`) |
+| 11 | 21 | DIR Pompa Air / H2O | ✅ Sudah (`PIN_DIR3`) |
 
-**Catatan penting pin map baru:**
+**Catatan penting:**
 
-1. **GPIO 1 & 2 dipakai bersama** (common) untuk ketiga channel TMC2209, bukan
-   per-channel. Jadi hanya ada 1 pasang `EN`/`PDN` untuk 3 driver.
-   → *Perlu konfirmasi konfigurasi fisik PCB*: apakah `EN`/`PDN` benar-benar
-   di-OR-kan antar 3 driver, atau hanya driver #1 yang dikendalikan?
-2. **GPIO 21 dan GPIO 47 menjadi bebas** (semula `DIR3` dan `STEP3`) — bisa
-   dipakai untuk sensor level tambahan (mis. tangki proses) atau LED status.
-3. **GPIO 48 sebelumnya direncanakan untuk WS2812** pada
-   `water-level-sensor-plan.md`. Sekarang dipakai sebagai `DIR Pompa HCl`
-   → **konflik LED strip sudah terselesaikan**; bila LED status masih
-   dibutuhkan, pindahkan ke GPIO 21 atau 47.
-4. **GPIO 7 (`PIN_LED_STRIP`) masih didefinisikan di `config.h` tetapi belum
-   dipakai kode apa pun.** Dibiarkan sebagai status/indicator (opsional).
-5. Mikrostep TMC2209 diatur via **UART** (resistor pull-up ke VCC pada pin MS1/MS2
-   atau jumper), sehingga **tidak butuh GPIO MS1/MS2/MS3** seperti DRV8825.
-   Konfirmasi mode mikrostep yang dipakai (mis. 1/16 = 3200 step/rev).
-6. Dengan TMC2209, `langkahPerMl` harus dihitung ulang dari step/rev yang
-   sebenarnya (bukan asumsi 7200 step/rev DRV8825 1/36).
+1. DRV8825 `SLP` aktif **HIGH**; `motor.h` memakai
+   `setEnablePin(pin, false)` dan `setAutoEnable(true)`.
+2. Microstep 1/32 ditentukan jumper MS1/MS2/MS3 di modul DRV8825
+   (MS1=H, MS2=H, MS3=H untuk 1/32). Tidak ada GPIO MS di firmware.
+3. `PUMP_STEP_PER_REV = 6400`; kecepatan dihitung dari RPM:
+   `step/detik = rpm × 6400 / 60`.
+4. Pada 400–700 rpm, 3 pompa paralel bisa >200.000 langkah/detik. Pulsa
+   dibangkitkan **FastAccelStepper** (MCPWM/PCNT ESP32-S3), bukan `loop()`.
+5. Kalibrasi ml/rotasi disimpan di NVS key `pompa`; bukan hardcode
+   `langkahPerMl` lagi.
 
-**Nilai `#define` yang perlu diubah di `config.h`:**
+**Nilai `#define` aktual di `config.h`:**
 
 ```cpp
-// LAMA (v0.5.0 - DRV8825)          BARU (TMC2209)
-#define PIN_SLP1  1                   #define PIN_TMC_EN   1
-#define PIN_STEP1 2                   #define PIN_TMC_PDN  2
-#define PIN_DIR1  42                  #define PIN_STEP1   38
-#define PIN_SLP2  41                  #define PIN_DIR1    48
-#define PIN_STEP2 40                  #define PIN_STEP2   40
-#define PIN_DIR2  39                  #define PIN_DIR2    39
-#define PIN_SLP3  38                  #define PIN_STEP3   42
-#define PIN_STEP3 47                  #define PIN_DIR3    41
-#define PIN_DIR3  21                  // (SLP1/SLP2/SLP3 dihapus)
+#define PIN_SLP1   1
+#define PIN_STEP1  2
+#define PIN_DIR1   42
+#define PIN_SLP2   41
+#define PIN_STEP2  40
+#define PIN_DIR2   39
+#define PIN_SLP3   38
+#define PIN_STEP3  47
+#define PIN_DIR3   21
+
+#define PUMP_STEP_PER_REV 6400L   // 200 x 32
+#define PUMP_RPM_MIN      400
+#define PUMP_RPM_MAX      700
+#define PUMP_RPM_DEFAULT  500
 ```
 
 ---
@@ -213,7 +209,8 @@ enum `Halaman` ditambah: `HAL_ALARM`.
 #define DOSING_PARALEL        1
 #define TIMEOUT_DOSING_MS     90000UL   // watchdog total fase dosing
 #define DETEK_MACET_MS        3000UL    // langkah tak bertambah = macet
-#define STEP_INTERVAL_US      1200      // jeda pulsa (8 kHz, aman 3 pompa)
+#define PUMP_STEP_PER_REV     6400L     // DRV8825 1/32, 200 langkah/rev
+#define PUMP_RPM_DEFAULT      500       // 400-700 rpm
 
 // ===== ETCHING =====
 #define SUHU_MAKS_KOMPONEN    70.0f     // °C → turunkan speed agitasi
@@ -285,15 +282,15 @@ loop():
 | No | Task | File | Detail |
 |---|---|---|---|
 | 2.1 | `langkahPerMl` dari kalibrasi | `motor.h`, `process.h` | hapus hardcode `{1200,1200,1200}`; `langkahPerMl[i] = stepPerRev / kalibStepperMl[i]`. `kalibStepperMl[]` saat ini **hanya diubah di UI dan tidak pernah dipakai** → bug akurasi dosing |
-| 2.2 | Simpan ke NVS | `storage.h` | key baru `pompa` (3 × float ml/rotasi), naikkan `FORMAT_VERSI_KALIB` 1 → 2 |
+| 2.2 | Simpan ke NVS | `storage.h` | key baru `pompa` (`DataPompa`: rpm + ml/rotasi + CRC), terpisah dari `kal` |
 | 2.3 | `FASE_CEK` pre-flight | `process.h` | cek semua 5 sensor terbaca (persen 0–100 valid) + volume tangki > 0 → gagal `ERR_SENSOR` bila tidak |
 | 2.4 | Cek ketersediaan cairan | `process.h` | `butuh_i = max(0, mlTarget_i − tersedia_i)` dengan `tersedia_i = persenSensor_i × VOL_TANGKI_i / 100`. Kekurangan → `ERR_LEVEL_KURANG` **sebelum** pompa nyala |
-| 2.5 | Pompa paralel | `process.h` | `pompaMulai(0..2, butuh_i)` bersamaan; `STEP_INTERVAL_US` 400 → **1200 µs** agar 3 pompa tidak step-loss |
-| 2.6 | Selesai berbasis kondisi | `process.h` | `pompaSelesai(0) && pompaSelesai(1) && pompaSelesai(2)` → `FASE_ETCHING` |
-| 2.7 | Deteksi macet | `process.h` | `pompaJalan[i] == true` tapi `jalanLangkah[i]` tidak bertambah > 3 s → `ERR_STEP_MACET` |
-| 2.8 | Watchdog | `process.h` | `t > TIMEOUT_DOSING_MS` → `ERR_TIMEOUT_DOSING` |
-| 2.9 | `pompaProgres(i)` | `motor.h` | ekspor `jalanLangkah[i] / targetLangkah[i]` untuk UI |
-| 2.10 | Sesuaikan `motorInit()` | `motor.h` | `PIN_SLP*` → `PIN_TMC_EN` / `PIN_TMC_PDN`; bila `EN`/`PDN` shared oleh 3 driver, cukup ditulis sekali |
+| 2.5 | Pompa paralel | `process.h` | `pompaMulai(0..2, butuh_i)` bersamaan; kecepatan dari RPM (400–700) via FastAccelStepper |
+| 2.6 | Selesai berbasis kondisi | `process.h` | `semuaPompaSelesai()` → `FASE_ETCHING` (sudah) |
+| 2.7 | Deteksi macet | `process.h` | posisi tidak maju > 3 s → stop (bukan deteksi stall mekanis) |
+| 2.8 | Watchdog | `process.h` | `2 × estimasi + 10 s` → batal |
+| 2.9 | `pompaProgres(i)` | `motor.h` | ekspor `jalanLangkah / targetLangkah` untuk UI |
+| 2.10 | Sesuaikan `motorInit()` | `motor.h` | `PIN_SLP*` tetap dipakai (DRV8825 SLP aktif HIGH); FastAccelStepper `setEnablePin(pin, false)` |
 
 ### 6.2 Cara kerja
 
@@ -307,7 +304,7 @@ Mulai → FASE_CEK
             butuh_i    = max(0, mlTarget_i − tersedia_i)
             if (butuh_i > tersedia_i) → prosesGagal(ERR_LEVEL_KURANG)
         pompaMulai(0, butuh_0); pompaMulai(1, butuh_1); pompaMulai(2, butuh_2)
-        loop:  motorUpdate() menghasilkan pulsa STEP tiap 1200 µs per pompa
+        loop:  motorUpdate() memantau posisi; pulsa dihasilkan FastAccelStepper
         selesai?  semua pompaSelesai()        → FASE_ETCHING
         macet?    langkah flat > 3 s           → prosesGagal(ERR_STEP_MACET)
         watchdog? t > 90 s                     → prosesGagal(ERR_TIMEOUT_DOSING)
@@ -410,12 +407,12 @@ sesuai keputusan "fixed time".
 
 | File | Task |
 |---|---|
-| `config.h` | pin map TMC2209 (Section 1.2) + 15 konstanta baru (Section 4) |
+| `config.h` | pin map DRV8825 1/32 (Section 1.2) + konstanta RPM/kalibrasi |
 | `data.h` | enum `FaseProses`, `KodeError`, `namaFase`, `pesanError`, variabel state baru, `HAL_ALARM` |
-| `motor.h` | pin EN/PDN, `langkahPerMl` dari kalibrasi, `STEP_INTERVAL_US` 1200 µs, `pompaProgres()` |
+| `motor.h` | FastAccelStepper, `langkahPerMl` dari kalibrasi, RPM 400–700, `pompaProgres()` |
 | `dcmotor.h` | `stepperSleep(bool)` · ~~`fanOn()/fanOff()`~~ (dihapus v0.5.1) |
 | `buzzer.h` | `N_ALARM`, `buzzerAlarm()`, `buzzerAlarmStop()` |
-| `storage.h` | key `pompa`, naikkan `FORMAT_VERSI_KALIB` ke 2 |
+| `storage.h` | key `pompa` (`DataPompa` rpm + ml/rotasi + CRC), terpisah dari `kal` |
 | `ui.h` | `gambarProses()` per-fase + ml terpompa + ikon aktuator + badge warning, `gambarAlarm()` baru, badge E-STOP di header |
 | `.ino` | estop ke baris pertama `loop()`; BACK di `HAL_ALARM` → reset latch |
 
@@ -433,7 +430,7 @@ sesuai keputusan "fixed time".
 | 3 | SECTION 4 — Drain/Rinse | Air larutan terbuang habis dalam `T_DRAINING_MS`; tidak overfill; busa sabutan terlihat |
 | 4 | SECTION 3 — Etching | Agitasi siklus ON/OFF benar, fan menyala, tidak overheat pada siklus penuh |
 | 5 | SECTION 5 + UI | Layar proses konsisten dengan log Serial pada semua transisi; semua alarm bisa di-reset |
-| 6 | Ringkasan | Checklist `PROGRESS.md` diperbarui, tabel GPIO sesuai pin map TMC2209 |
+| 6 | Ringkasan | Checklist `PROGRESS.md` diperbarui, tabel GPIO sesuai pin map DRV8825 1/32 |
 
 ---
 
@@ -441,7 +438,7 @@ sesuai keputusan "fixed time".
 
 1. Apakah `TMC_EN` / `TMC_PDN` (GPIO 1 & 2) **shared** oleh 3 channel, atau
    hanya untuk driver #1? → menentukan apakah `motorInit()` menulis 1 atau 3 pin.
-2. Mikrostep TMC2209 yang dipakai berapa (step/rev)?
+2. Mikrostep DRV8825 yang dipakai: **1/32 = 6400 langkah/putaran** (terkonfirmasi 2026-10-28).
 3. Kapasitas tiap tangki (jerican) berapa ml → untuk `VOL_TANGKI_*`.
 4. Apakah perlu sensor level tambahan di **tangki proses**? (GPIO 21/47 bebas)
 5. Batas suhu aman chamber & komponen yang sesuai dengan material PCB.

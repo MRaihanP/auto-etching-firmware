@@ -30,10 +30,9 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 
 ## 1. GPIO & Hardware
 
-- [ ] ⬜ Update pin map stepper ke TMC2209 (`config.h`): STEP HCl=38, DIR HCl=48, STEP H2O2=40, DIR H2O2=39, STEP Air=42, DIR Air=41, TMC_EN=1, TMC_PDN=2
-- [ ] ⬜ Hapus `PIN_SLP1/2/3`, tambahkan `PIN_TMC_EN` + `PIN_TMC_PDN` (`config.h:87-97`)
-- [ ] ⬜ Konfirmasi apakah `EN`/`PDN` (GPIO 1 & 2) shared 3 channel atau per-channel
-- [ ] ⬜ Konfirmasi step/rev mikrostep TMC2209 (untuk hitung `langkahPerMl`)
+- [x] ✅ Pin map stepper final **DRV8825 1/32**: SLP/STEP/DIR = 1/2/42 (HCl), 41/40/39 (H2O2), 38/47/21 (Air) — rencana TMC2209 dibatalkan
+- [x] ✅ `PUMP_STEP_PER_REV 6400` (200 × 1/32) + RPM 400–700 di `config.h`
+- [x] ✅ Mikrostep dikonfirmasi **1/32** (jumper MS1/MS2/MS3 di modul DRV8825)
 - [x] ✅ I2C SDA=4, SCL=5, 400 kHz (`config.h:5-7`, `.ino:545-546`)
 - [x] ✅ OLED SSD1306 0x3C 128×64 terinisialisasi (`config.h:10-12`, `.ino:563`)
 - [x] ✅ PCF8574 0x20 — 6 tombol, inisialisasi tulis `0xFF` (`config.h:21`, `.ino:548`)
@@ -87,25 +86,24 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 
 ## 3. Modul Dosing (`process.h` § DOSING, `motor.h`, `presetops.h`)
 
-- [x] ✅ Driver stepper non-blocking (puls STEP tiap `LANGKAH_INTERVAL_US`) (`motor.h:50-68`)
-- [x] ✅ Konversi ml → jumlah langkah (`targetLangkah = ml × langkahPerMl`) (`motor.h:34`)
+- [x] ✅ Driver stepper non-blocking via FastAccelStepper (MCPWM/PCNT) (`motor.h`)
+- [x] ✅ Konversi ml → jumlah langkah dari kalibrasi ml/rotasi (`motor.h`)
 - [x] ✅ 3 pompa (HCl/H2O2/H2O) dijalankan **paralel** saat fase DOSING (`process.h:28-33`)
-- [x] ✅ `pompaMulai()` / `pompaStopAll()` / `pompaSelesai()` tersedia (`motor.h:32-48`)
+- [x] ✅ `pompaMulai()` / `pompaStopAll()` / `pompaSelesai()` / `pompaProgres()` tersedia
 - [x] ✅ Hitung otomatis %H2O dan ml tiap bahan dari %HCl/%H2O2 + volume (`presetops.h:17-22`)
 - [x] ✅ Validasi rentang semua field preset (`presetops.h:49-62`)
-- [x] ✅ Halaman kalibrasi stepper: uji pompa + set ml/rotasi (`.ino:223-244`)
+- [x] ✅ Halaman kalibrasi stepper: START 20 rotasi, RPM 400–700, hasil ml, ml/rotasi
 - [x] ✅ Dosis 3 pompa berjalan **paralel** (sesuai keputusan desain di `PROCESS.md` §0)
-- [ ] ⬜ Dosis memperhitungkan sisa cairan: `butuh_i = target_i − (persenSensor_i × volumeTangki_i / 100)` — saat ini ml dipompa selalu nilai mentah dari preset (`process.h:30-32`)
-- [ ] ⚠️ `langkahPerMl` **hardcode `{1200,1200,1200}`** — asumsi lama DRV8825 7200 step/rev (`motor.h:14`)
-- [ ] ⚠️ `kalibStepperMl[]` diubah dari UI (`ino:232`) tapi **tidak pernah dipakai** `pompaMulai()` (`data.h:98`)
-- [ ] ⬜ `langkahPerMl = stepPerRev / mlPerRotasi` (mikrostep TMC2209)
-- [ ] ⬜ Simpan kalibrasi ml/rotasi ke NVS (key `pompa`, `FORMAT_VERSI_KALIB` → 2)
+- [x] ✅ Kecepatan pompa berbasis RPM (default 500, batas 400–700)
+- [x] ✅ `langkahPerMl = PUMP_STEP_PER_REV / mlPerRotasi` (DRV8825 1/32 = 6400)
+- [x] ✅ Simpan kalibrasi rpm + ml/rotasi ke NVS (key `pompa`, terpisah dari `kal`)
+- [x] ✅ Selesai dosing berbasis kondisi pompa (bukan fraksi waktu total)
+- [x] ✅ Watchdog timeout dosing (2× estimasi + 10 detik)
+- [x] ✅ Jeda menghentikan pompa dan melanjutkan sisa langkah
+- [x] ✅ Deteksi posisi tidak maju > 3 detik (bukan deteksi stall mekanis)
+- [ ] ⬜ Dosis memperhitungkan sisa cairan: `butuh_i = target_i − (persenSensor_i × volumeTangki_i / 100)`
 - [ ] ⬜ Fase `FASE_CEK` pre-flight: validasi sensor & volume tangki
 - [ ] ⬜ Cek ketersediaan cairan → `ERR_LEVEL_KURANG` sebelum pompa nyala
-- [ ] ⬜ Selesai dosing berbasis kondisi pompa (saat ini masih berbasis fraksi waktu total)
-- [ ] ⬜ Deteksi pompa macet (langkah tidak bertambah > 3 s)
-- [ ] ⬜ Watchdog timeout dosing (90 s)
-- [ ] ⬜ Naikkan `LANGKAH_INTERVAL_US` 400 → 1200 µs (aman 3 pompa paralel, `motor.h:19`)
 - [ ] ⬜ Volume tangki (`VOL_TANGKI_*`) sebagai data, bukan `#define` statis
 
 ---
@@ -187,6 +185,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ Kalibrasi suhu: pilih sensor per blok + offset ±0,1 °C (`.ino:325-362`)
 - [x] ✅ Kalibrasi agitasi: uji 3 speed (`.ino:293-317`)
 - [x] ✅ Kalibrasi DC: atur duty 0–255 dan catat ml hasil uji (`.ino:247-291`)
+- [x] ✅ **v0.5.2: kalibrasi pompa stepper** — 20 rotasi pada RPM 400–700, hasil ml/rotasi disimpan NVS (key `pompa`)
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]`/`[KALIB*]` ke Serial
 - [x] ✅ **v0.5.1: `kalibDuty[7]` → `kalibDuty[5]`** setelah dihapusnya duty kipas (`data.h:100`)
 - [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik
@@ -209,8 +208,8 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ Simpan preset ke NVS sebagai satu blob + versi + CRC32 (`storage.h:26-43`)
 - [x] ✅ Muat preset: reject bila versi beda / CRC rusak / data tak valid (`storage.h:45-61`)
 - [x] ✅ Auto-reset ke default bila data korup (`storage.h:70`)
-- [x] ✅ Namespace NVS `etch`, key `cfg` (preset) & `kal` (kalibrasi level) (`config.h:46`, `storage.h:36-37`)
-- [ ] ⬜ Simpan kalibrasi pompa (ml/rotasi) ke NVS
+- [x] ✅ Namespace NVS `etch`, key `cfg` (preset), `kal` (kalibrasi level), `pompa` (rpm + ml/rotasi)
+- [x] ✅ Simpan kalibrasi pompa (rpm + ml/rotasi) ke NVS + CRC (`storage.h`)
 - [ ] ⬜ Simpan offset suhu & acuan MQ-135 ke NVS
 - [ ] ⬜ Simpan duty/kecepatan motor per kalibrasi ke NVS
 - [ ] ⬜ Backup/restore preset via Serial (export/import)
@@ -238,7 +237,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ `README.md`, `GUIDE.md`, `SUMMARY.md`, `LOG.md`
 - [x] ✅ `etching-otomatis.md` — rencana pengembangan + pin map awal
 - [x] ✅ `water-level-sensor-plan.md` — rencana sensor level non-contact
-- [x] ✅ `PROCESS.md` — rencana detail 5 modul proses + cara kerja + tabel GPIO + pin map TMC2209
+- [x] ✅ `PROCESS.md` — rencana detail 5 modul proses + cara kerja + tabel GPIO + pin map DRV8825 1/32
 - [x] ✅ `PROGRESS.md` — checklist status implementasi (dokumen ini)
 - [x] ✅ **v0.5.1: `SUMMARY.md` diperbarui** — fan dilepas, GPIO 18 jadi bebas, versi naik
 - [x] ✅ **v0.5.1: `PROCESS.md` diperbarui** — §1.4 tabel GPIO + catatan perubahan v0.5.1 + `FAN_SELAMA_ETCHING` dihapus
@@ -258,7 +257,9 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [ ] ⬜ Uji 5 sensor touch di jerican kosong vs terisi (repeatability < 5%)
 - [ ] ⬜ Verifikasi address DS18B20 fisik cocok dengan `sensor.h:119-123`
 - [ ] ⬜ Timbang air: 3 pompa × 3 ulangan → error ≤ 5% dari target
-- [ ] ⬜ Uji driver TMC2209 3 channel (STEP/DIR/EN/PDN) dengan pin map baru
+- [ ] ⬜ **Upload & uji `test/stepper-rpm/stepper-rpm.ino`** — verifikasi 400/500/600/700 rpm tanpa step-loss
+- [ ] ⬜ Uji driver DRV8825 3 channel (SLP/STEP/DIR) dengan pin map final
+- [ ] ⬜ Kalibrasi 20 rotasi tiap pompa pada RPM operasi → catat ml/rotasi, cek konsistensi 3 ulangan
 - [ ] ⬜ Uji respons E-stop (target < 5 ms dari LOW ke semua output mati)
 - [ ] ⬜ Uji drain: volume larutan terbuang habis dalam `T_DRAINING_MS`
 - [ ] ⬜ Uji overfill guard (isi tangki limbah hampir penuh)

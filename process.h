@@ -59,6 +59,9 @@ bool prosesJeda  = false;
 bool dialogBatal = false;          // dialog konfirmasi batal sedang tampil
 unsigned long prosesAkumMs      = 0;   // waktu proses berjalan (tanpa waktu jeda)
 unsigned long prosesTerakhirMs  = 0;
+unsigned long dosingMulaiMs     = 0;   // awal fase DOSING (untuk timeout)
+unsigned long dosingBatasMs     = 0;   // batas waktu dosing (0 = tidak dihitung)
+unsigned long dosingJedaMulaiMs = 0;   // awal jeda terakhir (timeout dikoreksi saat lanjut)
 int  prosesDetikTerakhir        = -1;
 FaseProses prosesFase           = FASE_IDLE;
 
@@ -81,11 +84,24 @@ void prosesMulai() {
   prosesTerakhirMs = millis();
   prosesDetikTerakhir = -1;
   prosesFase = FASE_DOSING;
+
+  // Timeout dosing: 2 x estimasi terlama + margin.
+  Preset &p = daftarPreset[presetTerpilih];
+  unsigned long estimasi = 0;
+  estimasi = max(estimasi, pompaPerkiraanMs(0, p.mlHCl));
+  estimasi = max(estimasi, pompaPerkiraanMs(1, p.mlH2O2));
+  estimasi = max(estimasi, pompaPerkiraanMs(2, p.mlH2O));
+  dosingMulaiMs = millis();
+  dosingBatasMs = (estimasi > 0) ? (estimasi * 2UL + PUMP_TIMEOUT_MARGIN_MS) : 0;
+
   dbg.print(F("[PROSES] Mulai: "));
-  dbg.print(daftarPreset[presetTerpilih].nama);
+  dbg.print(p.nama);
   dbg.print(F(" ("));
   dbg.print(prosesTotalDetik());
   dbg.println(F(" s)"));
+  dbg.print(F("[PROSES] Estimasi dosing: "));
+  dbg.print(estimasi);
+  dbg.println(F(" ms"));
   dbg.println(F("[PROSES] Fase: DOSING"));
   aksiFase(FASE_DOSING);
   buzzerMulai();                 // nada konfirmasi mulai
@@ -95,7 +111,16 @@ void prosesMulai() {
 void prosesToggleJeda() {
   if (!prosesJalan || prosesSelesai()) return;
   prosesJeda = !prosesJeda;
-  dbg.println(prosesJeda ? F("[PROSES] Jeda") : F("[PROSES] Lanjut"));
+  if (prosesJeda) {
+    pompaJedaSemua();
+    dosingJedaMulaiMs = millis();
+    dbg.println(F("[PROSES] Jeda"));
+  } else {
+    // Waktu jeda tidak dihitung terhadap timeout dosing.
+    dosingMulaiMs += millis() - dosingJedaMulaiMs;
+    pompaLanjutSemua();
+    dbg.println(F("[PROSES] Lanjut"));
+  }
   perluGambar = true;
 }
 
@@ -131,6 +156,25 @@ void prosesUpdate() {
 
   unsigned long totalMs = (unsigned long)prosesTotalDetik() * 1000UL;
   if (prosesAkumMs > totalMs) prosesAkumMs = totalMs;
+
+  // Fase DOSING: tunggu pompa benar-benar selesai, jangan hanya ikut fraksi waktu.
+  // Timeout mencegah pompa berjalan tanpa henti bila ada masalah.
+  if (prosesFase == FASE_DOSING && !prosesJeda) {
+    if (dosingBatasMs > 0 && (now - dosingMulaiMs) > dosingBatasMs) {
+      dbg.println(F("[PROSES] Timeout dosing -> batal"));
+      pompaStopAll();
+      prosesBatal();
+      return;
+    }
+    unsigned long batasFase = totalMs * 10UL / 100UL;
+    if (!semuaPompaSelesai()) {
+      // Tahan di akhir fase DOSING sampai ketiga pompa selesai.
+      if (batasFase > 0 && prosesAkumMs >= batasFase) prosesAkumMs = batasFase - 1;
+    } else {
+      // Semua pompa selesai lebih awal -> lanjut ke ETCHING.
+      if (prosesAkumMs < batasFase) prosesAkumMs = batasFase;
+    }
+  }
 
   int d = prosesAkumMs / 1000;
   if (d != prosesDetikTerakhir) {

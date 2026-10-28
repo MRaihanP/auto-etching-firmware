@@ -14,7 +14,9 @@ dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
 - **Menu OLED 6 tombol** — preset, konfigurasi, level cairan, kalibrasi
 - **Preset CRUD (maks 10)** — tersimpan di NVS dengan versi + CRC32, auto-reject bila korup
 - **Proses etching 5 fase non-blocking** — `DOSING → ETCHING → DRAINING → RINSING → SELESAI`
-- **Dosing 3 pompa peristaltik paralel** (stepper, ml → jumlah langkah, non-blocking)
+- **Dosing 3 pompa peristaltik paralel** (DRV8825 1/32, **400–700 rpm**, ml → langkah, non-blocking)
+- **Kecepatan pompa berbasis RPM** — default 500 rpm, dapat diubah 400/500/600/700 per pompa
+- **Kalibrasi pompa** — uji 20 rotasi pada RPM terpilih, hasil ml/rotasi disimpan di NVS
 - **3 aktuator DC via TB6612FNG PWM** — motor agitasi, pompa air sabun, pompa limbah
 - **5 sensor level non-contact** (strip nikel + `touchRead`, moving average)
 - **Sensor suhu DS18B20 ×3** pada satu bus 1-Wire, konversi non-blocking
@@ -36,13 +38,13 @@ dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
 | `presetops.h` | CRUD preset, kalkulasi ml, validasi |
 | `sensor.h` | Sensor level touch, DS18B20, MQ-135 |
 | `storage.h` | NVS (Preferences) + checksum untuk preset & kalibrasi |
-| `motor.h` | Driver stepper pompa peristaltik (non-blocking) |
+| `motor.h` | Driver stepper pompa peristaltik via FastAccelStepper (MCPWM/PCNT) |
 | `dcmotor.h` | Driver TB6612FNG (agitasi, pompa sabun, pompa limbah) |
 | `buzzer.h` | Buzzer pasif non-blocking (LEDC) + daftar melodi |
 | `process.h` | State machine proses etching |
 | `ui.h` | Rendering OLED: semua halaman, dialog, toast, animasi |
 | `fontmini.h` | Data font mini untuk OLED |
-| `test/` | Sketch uji mandiri per modul (mis. `test/tb6612fng/`) |
+| `test/` | Sketch uji mandiri per modul (`test/tb6612fng/`, `test/stepper-rpm/`) |
 | `backup/` | Snapshot versi lama (**lineage batal** — jangan di-flash) |
 
 ## Releases — Daftar Versi
@@ -51,6 +53,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v0.5.2** | 2026-10-28 | `v0.5.2` | Pompa stepper DRV8825 1/32 berbasis RPM 400–700 (default 500), kalibrasi 20 rotasi + NVS, dosing selesai berbasis pompa, FastAccelStepper |
 | **v0.5.1** | 2026-10-16 | `v0.5.1` | Exhaust fan dilepas dari TB6612FNG → langsung 12V; GPIO 18 bebas; sketch uji `test/tb6612fng/`; `PROCESS.md` + `PROGRESS.md` |
 | **v0.5.0** | 2026-10-13/14 | `v0.5.0` | Baseline lineage modular: menu, preset, dosing, sensor, kalibrasi, E-stop |
 
@@ -76,6 +79,18 @@ git checkout main                        # kembali ke versi terbaru
 | [`GUIDE.md`](./GUIDE.md) | Panduan pemilik repo & kontributor |
 | `etching-otomatis.md` | Rencana awal (**usang** — sudah dianotasi) |
 | `water-level-sensor-plan.md` | Rencana sensor level non-contact |
+
+## Library yang Dibutuhkan
+
+| Library | Versi diuji | Catatan |
+|---|---|---|
+| Adafruit GFX Library | 1.12.x | OLED |
+| Adafruit SSD1306 | 2.5.x | OLED |
+| OneWire + DallasTemperature | 2.3.x / 4.0.x | DS18B20 |
+| **FastAccelStepper** | **2.0.1** | Pulses stepper 400–700 rpm (MCPWM/PCNT ESP32-S3) |
+
+> FastAccelStepper wajib diinstal dari Library Manager Arduino IDE
+> (cari “FastAccelStepper” oleh Jochen Kiemes).
 
 ## Flash ke ESP32-S3
 

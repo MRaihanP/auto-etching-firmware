@@ -481,35 +481,95 @@ void gambarKalibMotorList() {
 }
 
 // ================= HALAMAN: KALIBRASI STEPPER (Pompa HCl/H2O2/Air) =================
+// Baris: START/STOP (uji PUMP_KALIB_REV rotasi), RPM, Hasil ukur, ml/rotasi.
+// Konten lebih tinggi dari area tampil -> scroll seperti halaman Pompa DC.
+const int KALIB_STEPPER_ROW_H     = 12;
+const int KALIB_STEPPER_CONTENT_H = 48;   // 4 baris x 12 px
+
 void gambarKalibStepper() {
   const char* nama[] = { "Pompa HCl", "Pompa H2O2", "Pompa Air" };
   gambarHeader(nama[kalibMotorIdx]);
 
+  int idx = kalibMotorIdx;
+  int maxScroll = max(0, KALIB_STEPPER_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
+  if (kalibStepperScroll < 0) kalibStepperScroll = 0;
+  if (kalibStepperScroll > maxScroll) kalibStepperScroll = maxScroll;
+
+  int baseY = HEADER_H + 4 - kalibStepperScroll;
+  char buf[20];
+
   oled.setTextSize(1);
+
+  // --- Baris 0: START / STOP ---
+  {
+    int y = baseY;
+    if (y + 12 > HEADER_H && y < AREA_BAWAH) {
+      bool sel = (kalibStepperCursor == 0);
+      if (sel) {
+        oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+        oled.setTextColor(BLACK);
+      } else {
+        oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
+        oled.setTextColor(WHITE);
+      }
+      teksTengah(pompaAktif(idx) ? "STOP" : "START", y + 2, 1);
+    }
+  }
+
+  // --- Baris 1: RPM ---
+  {
+    int y = baseY + 12;
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      bool sel = (kalibStepperCursor == 1);
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("RPM"));
+      sprintf(buf, "%d", rpmPompaValid(kalibStepperRpm[idx]));
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 2: Hasil ukur (total untuk PUMP_KALIB_REV rotasi) ---
+  {
+    int y = baseY + 24;
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      bool sel = (kalibStepperCursor == 2);
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      sprintf(buf, "Hasil %d rev", PUMP_KALIB_REV);
+      oled.print(buf);
+      sprintf(buf, "%d ml", kalibStepperHasilMl[idx]);
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 3: ml per rotasi (hasil kalibrasi) ---
+  {
+    int y = baseY + 36;
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      bool sel = (kalibStepperCursor == 3);
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("ml/rotasi"));
+      if (kalibStepperMl[idx] > 0.0f) sprintf(buf, "%.2f", kalibStepperMl[idx]);
+      else strcpy(buf, "--");
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
   oled.setTextColor(WHITE);
 
-  int y = HEADER_H + 4;
-  // START button dengan rounded corner
-  bool selStart = (kalibStepperCursor == 0);
-  if (selStart) {
-    oled.fillRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
-    oled.setTextColor(BLACK);
-  } else {
-    oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
-    oled.setTextColor(WHITE);
+  // --- Indikator scroll ---
+  if (maxScroll > 0) {
+    const int x = SCREEN_WIDTH - 4;
+    if (kalibStepperScroll > 0)
+      oled.fillTriangle(x - 2, HEADER_H + 3, x + 2, HEADER_H + 3, x, HEADER_H + 1, WHITE);
+    if (kalibStepperScroll < maxScroll)
+      oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
   }
-  teksTengah("START", y + 2, 1);
-  y += 16;
-
-  // ml per rotasi
-  bool selMl = (kalibStepperCursor == 1);
-  if (selMl) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-  oled.setTextColor(selMl ? BLACK : WHITE);
-  oled.setCursor(2, y);
-  oled.print(F("1 rotasi ="));
-  char buf[16];
-  sprintf(buf, "%.2f ml", kalibStepperMl[kalibMotorIdx]);
-  teksKanan(buf, SCREEN_WIDTH - 2, y);
 }
 
 // ================= HALAMAN: KALIBRASI DC (Pompa Sabun/Limbah) =================

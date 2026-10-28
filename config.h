@@ -82,6 +82,23 @@
 // TB6612FNG ~1.2A) dan menyala terus selama mesin dinyalakan, sehingga
 // tidak perlu dikendalikan firmware lagi.
 
+// ===== POMPA PERISTALTIK STEPPER (DRV8825 1/32) =====
+// Motor 200 langkah/putaran x microstep 1/32 = 6400 langkah/putaran.
+// Hasil uji langsung: pompa baru mengalirkan cairan pada ~400 rpm,
+// batas aman maksimum 700 rpm. RPM hanya diubah kelipatan 100.
+#define PUMP_STEP_PER_REV   6400L
+#define PUMP_RPM_MIN         400
+#define PUMP_RPM_MAX         700
+#define PUMP_RPM_DEFAULT     500
+#define PUMP_RPM_STEP        100
+// Akselerasi profil trapezoid (langkah/detik^2). Naikkan bila start terasa
+// lambat, turunkan bila motor stall/slip saat akselerasi.
+#define PUMP_ACCEL_HZ2       1000000L
+// Uji kalibrasi: jumlah rotasi yang dijalankan sebelum user mengukur hasil.
+#define PUMP_KALIB_REV       20
+// Timeout dosing = 2 x estimasi + margin ini.
+#define PUMP_TIMEOUT_MARGIN_MS 10000UL
+
 // ===== PIN MAP (ESP32-S3) - dipakai mulai Step 5/6 =====
 // Stepper DRV8825 (pompa peristaltik)
 #define PIN_SLP1        1     // HCl
@@ -110,4 +127,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.1"
+#define FW_VERSI  "v0.5.2"

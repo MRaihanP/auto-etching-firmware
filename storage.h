@@ -4,6 +4,7 @@
 #include "data.h"
 #include "presetops.h"
 #include "sensor.h"
+#include "motor.h"
 
 // Semua preset disimpan sebagai SATU blob (satu key) + versi + checksum.
 #define FORMAT_VERSI 1
@@ -121,4 +122,58 @@ void muatKalib() {
     sensorKalibPenuh[i]  = valid ? d.penuh[i]  : 156000;
   }
   dbg.println(valid ? F("[STORE] Kalibrasi dimuat") : F("[STORE] Kalibrasi belum ada (default)"));
+}
+
+// ================= KALIBRASI POMPA STEPPER =================
+// Key terpisah dari "kal" agar kalibrasi sensor level lama tetap valid.
+#define FORMAT_VERSI_POMPA 1
+
+struct DataPompa {
+  uint32_t versi;
+  int32_t  rpm[3];
+  float    mlPerRev[3];
+  uint32_t crc;
+};
+
+bool simpanPompa() {
+  DataPompa d;
+  memset(&d, 0, sizeof(d));
+  d.versi = FORMAT_VERSI_POMPA;
+  for (int i = 0; i < 3; i++) {
+    d.rpm[i]      = rpmPompaValid(kalibStepperRpm[i]);
+    d.mlPerRev[i] = kalibStepperMl[i];
+  }
+  d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
+
+  bool ok = false;
+  if (prefs.begin(PREF_NS, false)) {
+    ok = (prefs.putBytes("pompa", &d, sizeof(d)) == sizeof(d));
+    prefs.end();
+  }
+  dbg.println(ok ? F("[STORE] Simpan kalibrasi pompa: OK") : F("[STORE] Simpan kalibrasi pompa: GAGAL"));
+  return ok;
+}
+
+void muatPompa() {
+  DataPompa d;
+  bool valid = false;
+  if (prefs.begin(PREF_NS, false)) {
+    if (prefs.getBytesLength("pompa") == sizeof(d)) {
+      prefs.getBytes("pompa", &d, sizeof(d));
+      valid = (d.versi == FORMAT_VERSI_POMPA) &&
+              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
+      for (int i = 0; valid && i < 3; i++) {
+        if (d.rpm[i] < PUMP_RPM_MIN || d.rpm[i] > PUMP_RPM_MAX) valid = false;
+        if (d.mlPerRev[i] < 0.0f || d.mlPerRev[i] > 100.0f) valid = false;
+      }
+    }
+    prefs.end();
+  }
+
+  for (int i = 0; i < 3; i++) {
+    kalibStepperRpm[i] = valid ? rpmPompaValid(d.rpm[i]) : PUMP_RPM_DEFAULT;
+    kalibStepperMl[i]  = valid ? d.mlPerRev[i] : 0.0f;
+    kalibStepperHasilMl[i] = (int)lround(kalibStepperMl[i] * PUMP_KALIB_REV);
+  }
+  dbg.println(valid ? F("[STORE] Kalibrasi pompa dimuat") : F("[STORE] Kalibrasi pompa belum ada"));
 }

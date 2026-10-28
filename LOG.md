@@ -11,7 +11,7 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 >
 > | | **Lineage LAMA (batal)** | **Lineage SAH (aktif)** |
 > |---|---|---|
-> | Rentang versi | v0.5.0 → v0.8.3 | v0.5.0 → v0.5.1 (dimulai ulang) |
+> | Rentang versi | v0.5.0 → v0.8.3 | v0.5.0 → v0.5.2 (dimulai ulang) |
 > | Berkas inti | `aktuator.h` + `oled_pcb_baruuu.ino` | `dcmotor.h` + `buzzer.h` + `motor.h` + `auto-etching-firmware.ino` |
 > | Driver motor | `PIN_PWM_FAN`, `fanSet(duty)` | `PIN_PWA_D1/D2`, `PIN_PWB_D1` |
 > | Status | ❌ **rusak, tidak pernah di-commit ke `main`, tidak pernah diuji fisik** | ✅ **berjalan di branch `main`, uji fisik terbukti** |
@@ -24,6 +24,51 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 > 2026-10-16 memakai arsitektur lineage aktif.
 >
 > Rujukan acuan yang benar: `PROCESS.md` (rencana) & `PROGRESS.md` (status).
+
+---
+
+## [2026-10-28] v0.5.2 — Pompa stepper berbasis RPM 400–700 (DRV8825 1/32)
+
+**Latar belakang:**
+- Uji langsung: pompa peristaltik HCl/H₂O₂/air baru memindahkan cairan pada
+  **±400 rpm**; batas aman maksimum **700 rpm**.
+- Firmware lama memakai `LANGKAH_INTERVAL_US = 400` (tetap 2.500 langkah/detik).
+  Pada DRV8825 1/32 (6.400 langkah/putaran) itu hanya **≈23,4 rpm** — jauh di
+  bawah 400 rpm, sehingga pompa tidak mengalirkan cairan.
+- Pada 400–700 rpm, 3 pompa paralel membutuhkan hingga **224.000 langkah/detik**;
+  `digitalWrite()` di `loop()` tidak mampu. Pulsa kini dibangkitkan
+  **FastAccelStepper** (MCPWM/PCNT ESP32-S3, maks. 200 kHz/kanal).
+
+**Perubahan Kode:**
+- `config.h` — `PUMP_STEP_PER_REV 6400`, `PUMP_RPM_MIN/MAX/DEFAULT/STEP`,
+  `PUMP_ACCEL_HZ2`, `PUMP_KALIB_REV 20`, `PUMP_TIMEOUT_MARGIN_MS`; versi v0.5.2.
+- `motor.h` — rewrite total: FastAccelStepper, API RPM, `pompaMulai()` memakai
+  kalibrasi ml/rotasi, `pompaPutarRevolusi()`, `pompaProgres()`,
+  `pompaPerkiraanMs()`, jeda/lanjut dengan sisa langkah, watchdog 3 detik.
+- `data.h` — state `kalibStepperRpm[3]`, `kalibStepperHasilMl[3]`,
+  `kalibStepperMl[3]` (ml/rotasi), cursor + scroll.
+- `storage.h` — key NVS baru `pompa` (`DataPompa`: rpm + ml/rotasi + CRC),
+  terpisah dari `kal`; `muatPompa()` dipanggil saat boot.
+- `ui.h` — halaman kalibrasi stepper: START/STOP, RPM, Hasil 20 rev, ml/rotasi,
+  scroll otomatis.
+- `auto-etching-firmware.ino` — handler kalibrasi baru (RPM kelipatan 100,
+  hasil ±1 ml, simpan saat BACK), pre-check `pompaSiapSemua()` sebelum proses.
+- `process.h` — dosing ditahan sampai semua pompa selesai, timeout 2× estimasi
+  + 10 detik, jeda menghentikan pompa dan melanjutkan sisa langkah.
+- `test/stepper-rpm/stepper-rpm.ino` — sketch uji mandiri 400–700 rpm.
+
+**Dokumentasi:**
+- `README.md` — dependency FastAccelStepper, fitur RPM, versi v0.5.2.
+- `SUMMARY.md`, `PROGRESS.md`, `PROCESS.md`, `RELEASES.md` disinkronkan.
+- Plan: `PLAN-pompa-rpm-400-700.md` (salinan juga di `/home/raihanP/.opencode/plan/pump-rpm-400-700.md`).
+
+**Catatan teknis:**
+- RPM hanya 400/500/600/700 (kelipatan 100).
+- Kalibrasi: jalankan 20 rotasi pada RPM terpilih, ukur total ml, masukkan
+  “Hasil 20 rev”; firmware menghitung `ml/rotasi = hasil / 20`.
+- `ml/rotasi = 0` berarti belum dikalibrasi; proses dosing ditolak.
+- Tanpa encoder, watchdog hanya mendeteksi posisi yang tidak maju, bukan
+  stall mekanis.
 
 ---
 

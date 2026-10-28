@@ -12,7 +12,7 @@ Rujukan lain: `SUMMARY.md` (fitur) · `LOG.md` (changelog per versi) · `PROGRES
 
 | | **Lineage SAH (aktif)** | **Lineage LAMA (batal)** |
 |---|---|---|
-| Versi | **v0.5.0 → v0.5.1** | v0.5.0 → v0.8.3 |
+| Versi | **v0.5.0 → v0.5.2** | v0.5.0 → v0.8.3 |
 | Berkas inti | `auto-etching-firmware.ino` + `dcmotor.h`, `buzzer.h`, `motor.h` | `oled_pcb_baruuu.ino` + `aktuator.h` |
 | Sumber | branch `main` + **git tag** | folder `backup/` (**tanpa tag**) |
 | Status | ✅ jalan, teruji fisik | ❌ **rusak & dibatalkan** (tidak pernah di-commit ke `main`) |
@@ -27,6 +27,7 @@ Rujukan lain: `SUMMARY.md` (fitur) · `LOG.md` (changelog per versi) · `PROGRES
 
 | Versi | Tanggal | Git tag | Isi utama |
 |---|---|---|---|
+| **v0.5.2** | 2026-10-28 | `v0.5.2` | Pompa stepper **DRV8825 1/32** (6400 langkah/putaran) dikendalikan **berbasis RPM 400–700** (default 500, kelipatan 100); pulsa via **FastAccelStepper** (MCPWM/PCNT) menggantikan `loop()`; kalibrasi baru **20 rotasi → ml/rotasi** dengan NVS key `pompa`; dosing selesai berbasis status pompa + timeout `2× estimasi + 10 s`; jeda melanjutkan sisa langkah; sketch uji `test/stepper-rpm/`; `FW_VERSI`→v0.5.2 |
 | **v0.5.1** | 2026-10-16 | `v0.5.1` | Exhaust fan dilepas dari TB6612FNG → **langsung 12V, selalu menyala**; GPIO 18 jadi bebas; halaman Kalibrasi Kipas dihapus; `kalibDuty[7]`→`[5]`; `FW_VERSI`→v0.5.1; **sketch uji baru** `test/tb6612fng/`; `PROCESS.md` + `PROGRESS.md` ditulis; `LOG.md` & `SUMMARY.md` diperbarui; lineage lama diarsipkan |
 | **v0.5.0** | 2026-10-13/14 | `v0.5.0` | Baseline lineage modular: menu OLED 6 tombol, preset CRUD + NVS (CRC32), 3 pompa stepper non-blocking, 3 motor DC PWM, proses 5 fase, 5 sensor level touch (MA-8), kalibrasi level/suhu/udara/Motor, DS18B20 ×3 (non-blocking), MQ-135 ppm, E-stop, buzzer non-blocking, kompensasi baris atas OLED |
 
@@ -57,7 +58,7 @@ pernah diuji fisik dan tidak pernah masuk branch `main`.
 | v0.5.5 | `backup/v0.5.5_2026-10-12/` | ❌ batal (lineage lama) |
 | v0.5.4 | `backup/v0.5.4_2026-10-12/` | ❌ batal (lineage lama) |
 | v0.5.3 | `backup/v0.5.3_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.2 | `backup/v0.5.2_2026-10-12/` | ❌ batal (lineage lama) |
+| v0.5.2 | `backup/v0.5.2_2026-10-12/` | ❌ batal (lineage lama, **bukan** v0.5.2 di tabel §1) |
 | v0.5.1 | `backup/v0.5.1_2026-10-12/` | ❌ batal (lineage lama, **bukan** v0.5.1 di tabel §1) |
 | v0.5.0 | `backup/v0.5.0_2026-10-12/` | ❌ batal (lineage lama, **bukan** v0.5.0 di tabel §1) |
 
@@ -139,4 +140,4 @@ less backup/v0.8.2_2026-10-12/config.h
 
 ---
 
-*Terakhir diperbarui: 2026-10-16 — saat v0.5.1 (lineage SAH) dibuat.*
+*Terakhir diperbarui: 2026-10-28 — saat v0.5.2 (lineage SAH) dibuat.*
