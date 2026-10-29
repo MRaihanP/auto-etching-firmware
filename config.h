@@ -82,11 +82,13 @@
 // TB6612FNG ~1.2A) dan menyala terus selama mesin dinyalakan, sehingga
 // tidak perlu dikendalikan firmware lagi.
 
-// ===== POMPA PERISTALTIK STEPPER (DRV8825 1/32) =====
-// Motor 200 langkah/putaran x microstep 1/32 = 6400 langkah/putaran.
-// Hasil uji langsung: pompa baru mengalirkan cairan pada ~400 rpm,
+// ===== POMPA PERISTALTIK STEPPER (DRV8825 1/16) =====
+// Motor 200 langkah/putaran x microstep 1/16 = 3200 langkah/putaran.
+// Disamakan dengan sketch test/test-motor (STEPS_PER_REV = 3200). Versi lama
+// memakai 6400 (1/32) sehingga pompa berputar 2x lebih cepat dari RPM yang
+// ditampilkan. Hasil uji langsung: pompa baru mengalirkan cairan pada ~400 rpm,
 // batas aman maksimum 700 rpm. RPM hanya diubah kelipatan 100.
-#define PUMP_STEP_PER_REV   6400L
+#define PUMP_STEP_PER_REV   3200L
 #define PUMP_RPM_MIN         400
 #define PUMP_RPM_MAX         700
 #define PUMP_RPM_DEFAULT     500
@@ -152,4 +154,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.6.1"
+#define FW_VERSI  "v0.6.2"

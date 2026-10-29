@@ -14,7 +14,7 @@ dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
 - **Menu OLED 6 tombol** — preset, konfigurasi, level cairan, kalibrasi
 - **Preset CRUD (maks 10)** — tersimpan di NVS dengan versi + CRC32, auto-reject bila korup
 - **Proses etching 5 fase non-blocking** — `DOSING → ETCHING → DRAINING → RINSING → SELESAI`
-- **Dosing 3 pompa peristaltik paralel** (DRV8825 1/32, **400–700 rpm**, ml → langkah, non-blocking)
+- **Dosing 3 pompa peristaltik paralel** (DRV8825 1/16 = 3200 langkah/putaran, **400–700 rpm**, ml → langkah, non-blocking)
 - **Kecepatan pompa berbasis RPM** — default 500 rpm, dapat diubah 400/500/600/700 per pompa
 - **Kalibrasi pompa** — uji **10 rotasi** pada RPM terpilih, hasil ml/rotasi disimpan di NVS
 - **Kalibrasi pompa DC** — uji **10 detik** pada duty penuh, hasil ml/detik disimpan (margin 10%)
@@ -55,6 +55,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v0.6.2** | 2026-10-29 | `v0.6.2` | **Step/rev 6400 → 3200 (DRV8825 1/16)** agar RPM sesuai target dan sama dengan sketch `test/test-motor`; akselerasi menjadi 1000 langkah/s² (= 18,75 rpm/detik); NVS `pompa` **v3** dengan migrasi otomatis `mlPerRev / 2`; `FW_VERSI`→v0.6.2 |
 | **v0.6.1** | 2026-10-29 | `v0.6.1` | Ramp stepper disamakan dengan sketch `test/test-motor`: akselerasi **18,75 rpm/detik** (0→500 rpm ±26,7 s, 0→400 rpm ±21,3 s), dipakai juga saat deselerasi; estimasi durasi dosing dibuat akurat (trapezoid/triangular) agar timeout tidak berlebihan; `FW_VERSI`→v0.6.1 |
 | **v0.6.0** | 2026-10-29 | `v0.6.0` | **Ramp semua motor** (stepper akselerasi, DC ramp duty non-blocking); Test Motor mencakup 7 baris (3 stepper + 2 DC + agitasi) dengan scroll; kalibrasi stepper **10 rotasi** (ramp-aware, hasil 0,1 ml); kalibrasi DC **10 detik → ml/detik** + margin 10%; agitasi jadi **SPD1–3**; NVS `pompa` v2 |
 | **v0.5.4** | 2026-10-28 | `v0.5.4` | Pompa stepper ramp naik saat start & ramp turun saat stop (`stopMove`, akselerasi 50.000); E-stop/timeout/stall tetap potong seketika |

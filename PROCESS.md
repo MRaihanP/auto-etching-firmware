@@ -28,11 +28,14 @@ Status implementasi terdokumentasi di `PROGRESS.md`.
 | 1 | 4 | I2C SDA — OLED SSD1306 (0x3C) + PCF8574 (0x20) | ✅ Sudah |
 | 2 | 5 | I2C SCL — OLED SSD1306 (0x3C) + PCF8574 (0x20) | ✅ Sudah |
 
-### 1.2 Motor Stepper Pompa Peristaltik (DRV8825 ×3, 1/32)
+### 1.2 Motor Stepper Pompa Peristaltik (DRV8825 ×3, 1/16)
 
-> **Konfirmasi hardware 2026-10-28:** driver yang terpasang adalah **DRV8825**,
-> microstep **1/32**. Motor 200 langkah/putaran → **6400 langkah/putaran**.
-> Rencana TMC2209 sebelumnya **tidak dipakai**.
+> **Koreksi hardware 2026-10-29 (v0.6.2):** driver yang terpasang adalah
+> **DRV8825** dan berjalan di **1/16**, bukan 1/32. Buktinya: perintah
+> 10 rotasi menghasilkan 20 rotasi fisik saat firmware memakai 6400
+> langkah/putaran, dan pompa terasa 2× lebih cepat dari RPM target. Motor
+> 200 langkah/putaran → **3200 langkah/putaran**, sama dengan sketch
+> `test/test-motor`. Rencana TMC2209 sebelumnya **tidak dipakai**.
 
 | No. | GPIO | Connected to | Configured? |
 |---|---|---|---|
@@ -50,11 +53,12 @@ Status implementasi terdokumentasi di `PROGRESS.md`.
 
 1. DRV8825 `SLP` aktif **HIGH**; `motor.h` memakai
    `setEnablePin(pin, false)` dan `setAutoEnable(true)`.
-2. Microstep 1/32 ditentukan jumper MS1/MS2/MS3 di modul DRV8825
-   (MS1=H, MS2=H, MS3=H untuk 1/32). Tidak ada GPIO MS di firmware.
-3. `PUMP_STEP_PER_REV = 6400`; kecepatan dihitung dari RPM:
-   `step/detik = rpm × 6400 / 60`.
-4. Pada 400–700 rpm, 3 pompa paralel bisa >200.000 langkah/detik. Pulsa
+2. Microstep **1/16** (efektif pada modul DRV8825 yang terpasang). Tidak ada
+   GPIO MS di firmware; kalau jumper diubah, `PUMP_STEP_PER_REV` **dan**
+   versi NVS `pompa` harus ikut diubah + kalibrasi ulang.
+3. `PUMP_STEP_PER_REV = 3200`; kecepatan dihitung dari RPM:
+   `step/detik = rpm × 3200 / 60`.
+4. Pada 400–700 rpm, 3 pompa paralel bisa >100.000 langkah/detik. Pulsa
    dibangkitkan **FastAccelStepper** (MCPWM/PCNT ESP32-S3), bukan `loop()`.
 5. Kalibrasi ml/rotasi disimpan di NVS key `pompa`; bukan hardcode
    `langkahPerMl` lagi.
@@ -72,7 +76,7 @@ Status implementasi terdokumentasi di `PROGRESS.md`.
 #define PIN_STEP3  47
 #define PIN_DIR3   21
 
-#define PUMP_STEP_PER_REV 6400L   // 200 x 32
+#define PUMP_STEP_PER_REV 3200L   // 200 x 16
 #define PUMP_RPM_MIN      400
 #define PUMP_RPM_MAX      700
 #define PUMP_RPM_DEFAULT  500
@@ -209,7 +213,7 @@ enum `Halaman` ditambah: `HAL_ALARM`.
 #define DOSING_PARALEL        1
 #define TIMEOUT_DOSING_MS     90000UL   // watchdog total fase dosing
 #define DETEK_MACET_MS        3000UL    // langkah tak bertambah = macet
-#define PUMP_STEP_PER_REV     6400L     // DRV8825 1/32, 200 langkah/rev
+#define PUMP_STEP_PER_REV     3200L     // DRV8825 1/16, 200 langkah/rev
 #define PUMP_RPM_DEFAULT      500       // 400-700 rpm
 
 // ===== ETCHING =====
@@ -407,7 +411,7 @@ sesuai keputusan "fixed time".
 
 | File | Task |
 |---|---|
-| `config.h` | pin map DRV8825 1/32 (Section 1.2) + konstanta RPM/kalibrasi |
+| `config.h` | pin map DRV8825 1/16 (Section 1.2) + konstanta RPM/kalibrasi |
 | `data.h` | enum `FaseProses`, `KodeError`, `namaFase`, `pesanError`, variabel state baru, `HAL_ALARM` |
 | `motor.h` | FastAccelStepper, `langkahPerMl` dari kalibrasi, RPM 400–700, `pompaProgres()` |
 | `dcmotor.h` | `stepperSleep(bool)` · ~~`fanOn()/fanOff()`~~ (dihapus v0.5.1) |
@@ -430,7 +434,7 @@ sesuai keputusan "fixed time".
 | 3 | SECTION 4 — Drain/Rinse | Air larutan terbuang habis dalam `T_DRAINING_MS`; tidak overfill; busa sabutan terlihat |
 | 4 | SECTION 3 — Etching | Agitasi siklus ON/OFF benar, fan menyala, tidak overheat pada siklus penuh |
 | 5 | SECTION 5 + UI | Layar proses konsisten dengan log Serial pada semua transisi; semua alarm bisa di-reset |
-| 6 | Ringkasan | Checklist `PROGRESS.md` diperbarui, tabel GPIO sesuai pin map DRV8825 1/32 |
+| 6 | Ringkasan | Checklist `PROGRESS.md` diperbarui, tabel GPIO sesuai pin map DRV8825 1/16 |
 
 ---
 
@@ -438,7 +442,7 @@ sesuai keputusan "fixed time".
 
 1. Apakah `TMC_EN` / `TMC_PDN` (GPIO 1 & 2) **shared** oleh 3 channel, atau
    hanya untuk driver #1? → menentukan apakah `motorInit()` menulis 1 atau 3 pin.
-2. Mikrostep DRV8825 yang dipakai: **1/32 = 6400 langkah/putaran** (terkonfirmasi 2026-10-28).
+2. Mikrostep DRV8825 yang dipakai: **1/16 = 3200 langkah/putaran** (dikoreksi v0.6.2, 2026-10-29).
 3. Kapasitas tiap tangki (jerican) berapa ml → untuk `VOL_TANGKI_*`.
 4. Apakah perlu sensor level tambahan di **tangki proses**? (GPIO 21/47 bebas)
 5. Batas suhu aman chamber & komponen yang sesuai dengan material PCB.

@@ -3,6 +3,11 @@
 Tanggal: 2026-10-28
 Target versi: **v0.5.2**
 
+> **⚠️ Koreksi v0.6.2 (2026-10-29):** dokumen rencana ini ditulis dengan asumsi
+> DRV8825 **1/32 (6400 langkah/putaran)**. Modul yang terpasang ternyata
+> berjalan **1/16 (3200 langkah/putaran)** — lihat `LOG.md` v0.6.2. Angka
+> 1/32/6400 di bawah dipertahankan sebagai riwayat rencana, bukan acuan kode.
+
 ## 1. Data uji & keputusan
 
 - Driver terpasang: **DRV8825**, microstep **1/32**.

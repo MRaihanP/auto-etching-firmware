@@ -131,7 +131,9 @@ void muatKalib() {
 // ================= KALIBRASI POMPA & MOTOR =================
 // Key terpisah dari "kal" agar kalibrasi sensor level lama tetap valid.
 // Versi 2 (v0.6.0): + duty/ml DC, + 3 speed agitasi, hasil ukur 0,1 ml.
-#define FORMAT_VERSI_POMPA 2
+// Versi 3 (v0.6.2): PUMP_STEP_PER_REV 6400 -> 3200 (DRV8825 1/16). Data v2
+//   dimigrasi otomatis: mlPerRev dibagi 2 (lihat muatPompa()).
+#define FORMAT_VERSI_POMPA 3
 
 struct DataPompa {
   uint32_t versi;
@@ -170,19 +172,30 @@ bool simpanPompa() {
 void muatPompa() {
   DataPompa d;
   bool valid = false;
+  bool migrasi = false;
   if (prefs.begin(PREF_NS, false)) {
     if (prefs.getBytesLength("pompa") == sizeof(d)) {
       prefs.getBytes("pompa", &d, sizeof(d));
-      valid = (d.versi == FORMAT_VERSI_POMPA) &&
-              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
-      for (int i = 0; valid && i < 3; i++) {
-        if (d.rpm[i] < PUMP_RPM_MIN || d.rpm[i] > PUMP_RPM_MAX) valid = false;
-        if (d.mlPerRev[i] < 0.0f || d.mlPerRev[i] > 100.0f) valid = false;
-        if (d.agitDuty[i] < 0 || d.agitDuty[i] > 100) valid = false;
-      }
-      for (int i = 0; valid && i < 2; i++) {
-        if (d.dcDuty[i] < 0 || d.dcDuty[i] > 100) valid = false;
-        if (d.dcMlPerSec[i] < 0.0f || d.dcMlPerSec[i] > 100.0f) valid = false;
+      bool crcOk = (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
+      if (crcOk && (d.versi == FORMAT_VERSI_POMPA || d.versi == 2)) {
+        valid = true;
+        // Migrasi v2 -> v3: data v2 dikalibrasi saat firmware memakai 6400
+        // langkah/putaran, padahal hardware DRV8825 di 1/16 (3200). Perintah
+        // "10 rotasi" saat itu = 20 rotasi fisik, jadi mlPerRev tersimpan 2x
+        // terlalu besar. Bagi 2 supaya volume dosing tetap benar.
+        if (d.versi == 2) {
+          for (int i = 0; i < 3; i++) d.mlPerRev[i] *= 0.5f;
+          migrasi = true;
+        }
+        for (int i = 0; valid && i < 3; i++) {
+          if (d.rpm[i] < PUMP_RPM_MIN || d.rpm[i] > PUMP_RPM_MAX) valid = false;
+          if (d.mlPerRev[i] < 0.0f || d.mlPerRev[i] > 100.0f) valid = false;
+          if (d.agitDuty[i] < 0 || d.agitDuty[i] > 100) valid = false;
+        }
+        for (int i = 0; valid && i < 2; i++) {
+          if (d.dcDuty[i] < 0 || d.dcDuty[i] > 100) valid = false;
+          if (d.dcMlPerSec[i] < 0.0f || d.dcMlPerSec[i] > 100.0f) valid = false;
+        }
       }
     }
     prefs.end();
@@ -207,4 +220,9 @@ void muatPompa() {
   }
 
   dbg.println(valid ? F("[STORE] Kalibrasi motor dimuat") : F("[STORE] Kalibrasi motor belum ada (default)"));
+
+  if (migrasi && valid) {
+    dbg.println(F("[STORE] Migrasi kalibrasi pompa v2 -> v3 (mlPerRev / 2)"));
+    simpanPompa();
+  }
 }

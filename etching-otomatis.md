@@ -8,7 +8,7 @@
 > | Keterangan | Nilai lama (usang) | Nilai sekarang (benar) |
 > |---|---|---|
 > | Exhaust fan | TB6612FNG #2 PWB, **GPIO 18** | **langsung ke 12V, selalu menyala**; GPIO 18 kini **bebas** |
-> | Driver stepper | DRV8825, `SLP` aktif-tinggi | **DRV8825 1/32** (6400 langkah/putaran), `SLP` tetap dipakai; rencana TMC2209 dibatalkan |
+> | Driver stepper | DRV8825, `SLP` aktif-tinggi | **DRV8825 1/16** (3200 langkah/putaran), `SLP` tetap dipakai; rencana TMC2209 dibatalkan |
 > | Pin stepper HCl | SLP 1 / STEP 2 / DIR 42 | SLP 1 / STEP 2 / DIR 42 (tetap) |
 > | Pin stepper H2O2 | SLP 41 / STEP 40 / DIR 39 | SLP 41 / STEP 40 / DIR 39 (tetap) |
 > | Pin stepper Air | SLP 38 / STEP 47 / DIR 21 | SLP 38 / STEP 47 / DIR 21 (tetap) |

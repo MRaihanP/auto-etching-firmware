@@ -1,6 +1,6 @@
 # PROGRESS — Checklist Implementasi Firmware Etching Otomatis
 
-Firmware: **Etching v0.6.1** · Board: **ESP32-S3 DevKitC**
+Firmware: **Etching v0.6.2** · Board: **ESP32-S3 DevKitC**
 Rencana teknis lengkap: `PROCESS.md` · Ringkasan: `SUMMARY.md` · Riwayat: `LOG.md`
 
 Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/terpakai** · ⬜ **Belum ada**
@@ -30,9 +30,9 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 
 ## 1. GPIO & Hardware
 
-- [x] ✅ Pin map stepper final **DRV8825 1/32**: SLP/STEP/DIR = 1/2/42 (HCl), 41/40/39 (H2O2), 38/47/21 (Air) — rencana TMC2209 dibatalkan
-- [x] ✅ `PUMP_STEP_PER_REV 6400` (200 × 1/32) + RPM 400–700 di `config.h`
-- [x] ✅ Mikrostep dikonfirmasi **1/32** (jumper MS1/MS2/MS3 di modul DRV8825)
+- [x] ✅ Pin map stepper final **DRV8825 1/16**: SLP/STEP/DIR = 1/2/42 (HCl), 41/40/39 (H2O2), 38/47/21 (Air) — rencana TMC2209 dibatalkan
+- [x] ✅ `PUMP_STEP_PER_REV 3200` (200 × 1/16) + RPM 400–700 di `config.h`
+- [x] ✅ Mikrostep dikonfirmasi **1/16** (perilaku fisik sama dengan sketch `test/test-motor`; v0.6.2)
 - [x] ✅ I2C SDA=4, SCL=5, 400 kHz (`config.h:5-7`, `.ino:545-546`)
 - [x] ✅ OLED SSD1306 0x3C 128×64 terinisialisasi (`config.h:10-12`, `.ino:563`)
 - [x] ✅ PCF8574 0x20 — 6 tombol, inisialisasi tulis `0xFF` (`config.h:21`, `.ino:548`)
@@ -95,7 +95,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ Halaman kalibrasi stepper: START 10 rotasi, RPM 400–700, hasil ukur 0,1 ml, ml/rotasi
 - [x] ✅ Dosis 3 pompa berjalan **paralel** (sesuai keputusan desain di `PROCESS.md` §0)
 - [x] ✅ Kecepatan pompa berbasis RPM (default 500, batas 400–700)
-- [x] ✅ `langkahPerMl = PUMP_STEP_PER_REV / mlPerRotasi` (DRV8825 1/32 = 6400)
+- [x] ✅ `langkahPerMl = PUMP_STEP_PER_REV / mlPerRotasi` (DRV8825 1/16 = 3200)
 - [x] ✅ Simpan kalibrasi rpm + ml/rotasi ke NVS (key `pompa`, terpisah dari `kal`)
 - [x] ✅ Selesai dosing berbasis kondisi pompa (bukan fraksi waktu total)
 - [x] ✅ Watchdog timeout dosing (2× estimasi + 10 detik)
@@ -190,12 +190,13 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ **v0.5.4: ramp naik/turun pompa** — akselerasi 50.000 langkah/s², stop memakai `stopMove()`, E-stop/stall tetap `forceStop()`
 - [x] ✅ **v0.6.0: ramp semua motor + kalibrasi baru** — stepper 10 rotasi (ramp-aware), DC 10 detik → ml/detik, agitasi SPD1–3, Test Motor 7 baris scroll, NVS `pompa` v2
 - [x] ✅ **v0.6.1: ramp stepper = sketch `test/test-motor`** — `PUMP_ACCEL_RPM_PER_SEC` 18,75 rpm/detik (0→500 rpm ±26,7 s), deselerasi sama, estimasi dosing trapezoid/triangular
+- [x] ✅ **v0.6.2: step/rev 6400 → 3200** — RPM kini sesuai target (sebelumnya fisik 2× lebih cepat); `PUMP_ACCEL_HZ2` = 1000 langkah/s² (sama dengan `accel` sketch); NVS `pompa` **v3** memigrasi `mlPerRev / 2`
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]`/`[KALIB*]` ke Serial
 - [x] ✅ **v0.6.0: `kalibDuty[]` dihapus** — diganti `kalibDutyDC[2]` + `agitasiSpdDuty[3]`
 - [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik
 - [ ] ⚠️ `kalibSuhuAddr[]` & `suhuOffsetX10[]` **tidak disimpan ke NVS** (hilang saat reset) (`sensor.h:126-129`)
 - [ ] ⚠️ `mq135Normal`/`mq135Kotor` **tidak disimpan ke NVS** dan tidak dipakai proteksi (`data.h:119-122`)
-- [x] ✅ **v0.6.0: semua parameter kalibrasi motor disimpan ke NVS** (`pompa` v2: rpm, ml/rotasi, duty DC, ml/detik, duty agitasi)
+- [x] ✅ **v0.6.0: semua parameter kalibrasi motor disimpan ke NVS** (`pompa` v3: rpm, ml/rotasi, duty DC, ml/detik, duty agitasi)
 - [x] ✅ **v0.6.0: uji motor non-blocking** — `kalibDcUpdate()` + `kalibStepperUkur`, tanpa `delay()` saat uji
 - [ ] ⬜ Deteksi sensor touch mati (nilai tidak berubah / selalu 0%)
 
@@ -239,7 +240,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ `README.md`, `GUIDE.md`, `SUMMARY.md`, `LOG.md`
 - [x] ✅ `etching-otomatis.md` — rencana pengembangan + pin map awal
 - [x] ✅ `water-level-sensor-plan.md` — rencana sensor level non-contact
-- [x] ✅ `PROCESS.md` — rencana detail 5 modul proses + cara kerja + tabel GPIO + pin map DRV8825 1/32
+- [x] ✅ `PROCESS.md` — rencana detail 5 modul proses + cara kerja + tabel GPIO + pin map DRV8825 1/16
 - [x] ✅ `PROGRESS.md` — checklist status implementasi (dokumen ini)
 - [x] ✅ **v0.5.1: `SUMMARY.md` diperbarui** — fan dilepas, GPIO 18 jadi bebas, versi naik
 - [x] ✅ **v0.5.1: `PROCESS.md` diperbarui** — §1.4 tabel GPIO + catatan perubahan v0.5.1 + `FAN_SELAMA_ETCHING` dihapus

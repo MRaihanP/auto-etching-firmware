@@ -1,8 +1,8 @@
 /*
-  Uji mandiri pompa peristaltik stepper DRV8825 1/32.
+  Uji mandiri pompa peristaltik stepper DRV8825 1/16.
 
   Tujuan:
-    - Verifikasi kecepatan 400-700 rpm (motor 200 step/rev, 1/32 = 6400 step/rev).
+    - Verifikasi kecepatan 400-700 rpm (motor 200 step/rev, 1/16 = 3200 step/rev).
     - Cari RPM minimum agar cairan benar-benar terpompa.
     - Ukur ml/rotasi pada RPM tertentu.
 
@@ -21,11 +21,11 @@
 #include <Arduino.h>
 #include <FastAccelStepper.h>
 
-#define STEP_PER_REV 6400L
+#define STEP_PER_REV 3200L
 #define RPM_MIN      400
 #define RPM_MAX      700
 #define RPM_DEFAULT  500
-#define ACCEL_HZ2    50000L    // ramp 0->500 rpm ±1,07 detik
+#define ACCEL_HZ2    1000L     // 18,75 rpm/detik, sama dengan test-motor
 
 const int PIN_STEP[3] = { 2, 40, 47 };
 const int PIN_DIR [3] = { 42, 39, 21 };

@@ -27,6 +27,47 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-29] v0.6.2 — Step/rev 6400 → 3200: RPM akhirnya sesuai target
+
+**Latar belakang:**
+- Setelah v0.6.1, pompa stepper terasa **berputar lebih cepat dari RPM yang
+  ditampilkan** (target 500 rpm, putaran nyata ±2x lipat).
+- Penyebabnya bukan ramp, melainkan **microstep**. Firmware memakai
+  `PUMP_STEP_PER_REV = 6400` (asumsi DRV8825 1/32), sedangkan modul yang
+  terpasang berjalan di **1/16 = 3200 langkah/putaran** — persis sama dengan
+  sketch `test/test-motor` (`STEPS_PER_REV = 3200`).
+- Rumus `step/detik = rpm × langkah/putaran / 60` mengirim pulsa 2x lebih
+  banyak per detik, jadi motor memang berputar 2x lebih cepat. Ramp juga ikut
+  2x lebih tajam dalam rpm/detik, yang berisiko merusak pump head.
+
+**Perubahan Kode:**
+- `config.h`
+  - `PUMP_STEP_PER_REV` = **3200L** (200 langkah × 1/16), sama dengan sketch.
+  - `PUMP_ACCEL_HZ2` kini otomatis **1000** langkah/s² — angka `accel = 1000`
+    di sketch. Dalam rpm/detik tetap 18,75 rpm/detik (tidak berubah).
+  - `FW_VERSI` → `v0.6.2`.
+- `motor.h` — komentar kecepatan diperbarui: 400–700 rpm = 21,333–37,333
+  langkah/detik.
+- `storage.h`
+  - `FORMAT_VERSI_POMPA` 2 → **3**.
+  - `muatPompa()` menerima data v2 dan **membagi `mlPerRev` dengan 2**.
+    Alasannya: kalibrasi v2 dijalankan saat firmware memakai 6400 langkah/
+    putaran, sehingga perintah "10 rotasi" sebenarnya = **20 rotasi fisik** dan
+    ml/rotasi tersimpan 2x terlalu besar. Data hasil migrasi langsung
+    disimpan ulang sebagai v3.
+
+**Catatan:**
+- Kalibrasi v2 **tidak perlu diulang**; migrasi menjaga volume dosing tetap
+  sama. Tetap disarankan cek sekali dengan menimbang/mengukur hasil dosing.
+- Kalau ternyata modul DRV8825 Anda benar-benar 1/32 (jumper MS1/MS2/MS3
+  semua HIGH), kembalikan `PUMP_STEP_PER_REV` ke `6400L` **dan** naikkan
+  `FORMAT_VERSI_POMPA` ke 4 dengan migrasi `mlPerRev *= 2`, lalu kalibrasi
+  ulang. Jangan hanya mengubah angkanya tanpa migrasi.
+- Gejala "lebih cepat dari target" seharusnya hilang: pada 500 rpm poros pompa
+  berputar 500 rpm (8,33 putaran/detik), sama dengan sketch.
+
+---
+
 ## [2026-10-29] v0.6.1 — Ramp stepper disamakan dengan sketch `test/test-motor`
 
 **Latar belakang:**

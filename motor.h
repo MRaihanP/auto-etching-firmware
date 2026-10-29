@@ -4,14 +4,14 @@
 #include "config.h"
 #include "data.h"
 
-// ================= POMPA PERISTALTIK STEPPER (DRV8825 1/32) =================
+// ================= POMPA PERISTALTIK STEPPER (DRV8825 1/16) =================
 // 3 pompa: HCl, H2O2, H2O.
 //
 // Kecepatan dihitung dari RPM, bukan interval tetap:
 //   step/detik = rpm * PUMP_STEP_PER_REV / 60
 //
-// Pada 1/32 microstep (6400 langkah/putaran), 400-700 rpm = 42.667-74.667
-// langkah/detik per pompa. Tiga pompa paralel bisa >200.000 langkah/detik,
+// Pada 1/16 microstep (3200 langkah/putaran), 400-700 rpm = 21.333-37.333
+// langkah/detik per pompa. Tiga pompa paralel bisa >100.000 langkah/detik,
 // jadi pulsa dibangkitkan oleh FastAccelStepper (MCPWM/PCNT ESP32-S3),
 // bukan oleh loop()/digitalWrite().
 //
