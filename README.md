@@ -55,6 +55,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v0.6.3** | 2026-10-29 | `v0.6.3` | **Test Motor = sketch `test/test-motor`**: start memakai `applySpeedAcceleration()` seperti sketch, RPM live langsung dipakai ramp; baris HCl/H2O2/Air menampilkan **target/aktual** (mis. `400/400`) sehingga terlihat kecepatan berhenti di target; `st` di sketch uji juga mencetak RPM aktual; `FW_VERSI`→v0.6.3 |
 | **v0.6.2** | 2026-10-29 | `v0.6.2` | **Step/rev 6400 → 3200 (DRV8825 1/16)** agar RPM sesuai target dan sama dengan sketch `test/test-motor`; akselerasi menjadi 1000 langkah/s² (= 18,75 rpm/detik); NVS `pompa` **v3** dengan migrasi otomatis `mlPerRev / 2`; `FW_VERSI`→v0.6.2 |
 | **v0.6.1** | 2026-10-29 | `v0.6.1` | Ramp stepper disamakan dengan sketch `test/test-motor`: akselerasi **18,75 rpm/detik** (0→500 rpm ±26,7 s, 0→400 rpm ±21,3 s), dipakai juga saat deselerasi; estimasi durasi dosing dibuat akurat (trapezoid/triangular) agar timeout tidak berlebihan; `FW_VERSI`→v0.6.1 |
 | **v0.6.0** | 2026-10-29 | `v0.6.0` | **Ramp semua motor** (stepper akselerasi, DC ramp duty non-blocking); Test Motor mencakup 7 baris (3 stepper + 2 DC + agitasi) dengan scroll; kalibrasi stepper **10 rotasi** (ramp-aware, hasil 0,1 ml); kalibrasi DC **10 detik → ml/detik** + margin 10%; agitasi jadi **SPD1–3**; NVS `pompa` v2 |

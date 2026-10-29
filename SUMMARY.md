@@ -1,6 +1,6 @@
 # SUMMARY — Mesin PCB Etching Otomatis
 
-Firmware **Etching v0.6.2** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
+Firmware **Etching v0.6.3** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
 HCl/H2O2/H2O (stepper DRV8825 1/16 = 3200 langkah/putaran, 400–700 rpm), agitasi, draining, dan rinsing, dikendalikan lewat layar
 OLED 128x64 + 6 tombol (PCF8574).
 
@@ -32,7 +32,9 @@ OLED 128x64 + 6 tombol (PCF8574).
   selalu ramp dari 0%.
 - **Test Motor:** halaman di Kalibrasi → Motor dengan **7 baris** (Semua / HCl /
   H2O2 / Air / Sabun / Limbah / Agitasi) dan scroll; KIRI/KANAN mengubah
-  RPM/duty/SPD secara live.
+  RPM/duty/SPD secara live. Saat stepper berjalan, baris menampilkan
+  **target/aktual** (mis. `400/400`) sehingga terlihat kecepatan berhenti di
+  target, sama seperti sketch `test/test-motor`.
 - **Aktuator DC (PWM LEDC):** motor agitasi (3 level), pompa air sabun, pompa
   limbah. Semua start/stop memakai ramp duty non-blocking
   (`DC_RAMP_PCT_PER_SEC`), tidak pernah lompat 0 → 100%.

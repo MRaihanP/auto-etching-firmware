@@ -27,6 +27,42 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-29] v0.6.3 — Test Motor: RPM aktual ditampilkan & start = sketch
+
+**Latar belakang:**
+- Setelah pemetaan 3200 langkah/putaran (v0.6.2), Test Motor perlu dipastikan
+  berperilaku **sama persis** dengan sketch `test/test-motor`: setelah ramp
+  selesai, kecepatan harus **berhenti di target** (400 tetap 400), tidak terus
+  naik.
+- Sebelumnya tidak ada cara melihat kecepatan aktual, jadi sulit membedakan
+  "masih ramp" dengan "sudah berhenti di target".
+
+**Perubahan Kode:**
+- `motor.h`
+  - `pompaTestMulai()` kini memanggil `applySpeedAcceleration()` setelah
+    `runForward()`, urutan yang sama dengan `setRPM()` di sketch.
+  - `pompaAturRpmLive()` memeriksa hasil `setSpeedInHz()` lalu
+    `applySpeedAcceleration()`; perubahan RPM saat berjalan langsung dipakai
+    ramp generator (tidak menunggu restart).
+  - Fungsi baru `pompaRpmSekarang(idx)` membaca **kecepatan aktual** dari
+    queue pulsa (`getCurrentSpeedInMilliHz`), bukan nilai target.
+- `ui.h` — baris HCl/H2O2/Air di Test Motor menampilkan `target/aktual`
+  (mis. `400/400`) saat berjalan, `400rpm` saat berhenti.
+- `auto-etching-firmware.ino` — redraw Test Motor tiap 250 ms selama stepper
+  berjalan agar angka aktual terlihat naik lalu berhenti di target.
+- `test/test-motor/test-motor.ino` — perintah `st` mencetak RPM aktual juga,
+  jadi bisa dibandingkan langsung dengan firmware.
+
+**Catatan:**
+- Ramp tetap **18,75 rpm/detik** (sama dengan sketch, `accel = 1000` pada 3200
+  langkah/putaran). Artinya 0 → 400 rpm memerlukan **±21 detik**; selama itu
+  angka aktual memang naik. Setelah ±21 detik harus berhenti di 400.
+- Kalau ingin lebih cepat mencapai target tanpa mengubah sketch, naikkan
+  `PUMP_ACCEL_RPM_PER_SEC` (mis. `37.5` = 0→400 rpm ±10,7 s); itu bukan bug,
+  hanya setelan ramp.
+
+---
+
 ## [2026-10-29] v0.6.2 — Step/rev 6400 → 3200: RPM akhirnya sesuai target
 
 **Latar belakang:**

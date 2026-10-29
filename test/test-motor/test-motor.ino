@@ -151,11 +151,18 @@ void printHelp() {
   Serial.println(F("h                : bantuan"));
 }
 
+float actualRPM(int i) {
+  int32_t mhz = stepper[i]->getCurrentSpeedInMilliHz();
+  if (mhz < 0) mhz = -mhz;
+  return mhz * 0.001f * 60.0f / STEPS_PER_REV;
+}
+
 void printStatus() {
   Serial.printf("Stepper accel: %.0f step/s^2\n", accel);
   for (int i = 0; i < NUM_MOTORS; i++) {
-    Serial.printf("Stepper %d: %.1f RPM, arah %s, driver %s\n",
-                  i + 1, curRPM[i], forwardDir[i] ? "FWD" : "REV",
+    Serial.printf("Stepper %d: %.1f RPM (aktual %.1f), arah %s, driver %s\n",
+                  i + 1, curRPM[i], actualRPM(i),
+                  forwardDir[i] ? "FWD" : "REV",
                   awake[i] ? "AKTIF" : "SLEEP");
   }
   Serial.printf("DC ramp: %.0f %%/s\n", dcRamp);

@@ -53,6 +53,18 @@ bool pompaBisaGerak(int idx) {
   return idx >= 0 && idx < 3 && pompaStepper[idx] != nullptr;
 }
 
+// RPM aktual yang sedang dibangkitkan (dibaca dari queue pulsa, bukan target).
+// Dipakai halaman Test Motor untuk membuktikan motor benar-benar berhenti
+// menaikkan kecepatan setelah mencapai target, persis sketch test/test-motor.
+float pompaRpmSekarang(int idx) {
+  if (!pompaBisaGerak(idx)) return 0.0f;
+  FastAccelStepper* s = pompaStepper[idx];
+  if (!s->isRunning()) return 0.0f;
+  int32_t milliHz = s->getCurrentSpeedInMilliHz();
+  if (milliHz < 0) milliHz = -milliHz;
+  return (float)milliHz * 0.001f * 60.0f / (float)PUMP_STEP_PER_REV;
+}
+
 // Siap untuk dosing: stepper ada + ml/rotasi sudah dikalibrasi.
 bool pompaSiap(int idx) {
   return pompaBisaGerak(idx) && kalibStepperMl[idx] > 0.0f;
@@ -199,6 +211,10 @@ bool pompaTestMulai(int idx) {
     dbg.println(idx);
     return false;
   }
+  // Sama seperti sketch test/test-motor: commit speed+acceleration ke ramp
+  // generator setelah start, supaya target langsung dipakai dan motor
+  // berhenti menaikkan RPM tepat di target (bukan terus naik).
+  s->applySpeedAcceleration();
 
   dbg.print(F("[POMPA] Test jalan idx "));
   dbg.print(idx);
@@ -220,7 +236,7 @@ void pompaAturRpmLive(int idx, int rpm) {
   FastAccelStepper* s = pompaStepper[idx];
   if (!s->isRunning()) return;
 
-  s->setSpeedInHz(rpmKeHz(kalibStepperRpm[idx]));
+  if (s->setSpeedInHz(rpmKeHz(kalibStepperRpm[idx])) != 0) return;
   s->setAcceleration(PUMP_ACCEL_HZ2);
   s->applySpeedAcceleration();
 

@@ -631,7 +631,15 @@ void gambarTestMotor() {
 
     buf[0] = 0;
     if (j >= 1 && j <= 3) {
-      sprintf(buf, "%drpm", rpmPompaValid(kalibStepperRpm[j - 1]));
+      int idx = j - 1;
+      if (pompaAktif(idx)) {
+        // Saat berjalan tampilkan target/aktual supaya terlihat RPM berhenti
+        // tepat di target (mis. "400/400"), sama seperti sketch test-motor.
+        sprintf(buf, "%d/%d", rpmPompaValid(kalibStepperRpm[idx]),
+                (int)(pompaRpmSekarang(idx) + 0.5f));
+      } else {
+        sprintf(buf, "%drpm", rpmPompaValid(kalibStepperRpm[idx]));
+      }
     } else if (j == 4 || j == 5) {
       sprintf(buf, "%d%%", kalibDutyDC[j - 4]);
     } else if (j == 6) {

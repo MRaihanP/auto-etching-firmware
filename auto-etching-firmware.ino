@@ -825,6 +825,14 @@ void loop() {
                      (dcAktif(DC_LIMBAH) ? 16 : 0) |
                      (dcAktif(DC_AGI) ? 32 : 0);
     if (status != testStatusTerakhir) { testStatusTerakhir = status; perluGambar = true; }
+
+    // Angka RPM aktual berubah selama ramp, jadi redraw berkala saat stepper
+    // berjalan agar user melihat kecepatan berhenti di target.
+    static unsigned long testRpmMs = 0;
+    if (pompaAktif(0) || pompaAktif(1) || pompaAktif(2)) {
+      unsigned long now = millis();
+      if (now - testRpmMs >= 250) { testRpmMs = now; perluGambar = true; }
+    }
   }
 
   // Konversi DS18B20 non-blocking + redraw kalibrasi saat data baru tiba
