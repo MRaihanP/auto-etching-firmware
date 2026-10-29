@@ -55,6 +55,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v0.6.1** | 2026-10-29 | `v0.6.1` | Ramp stepper disamakan dengan sketch `test/test-motor`: akselerasi **18,75 rpm/detik** (0→500 rpm ±26,7 s, 0→400 rpm ±21,3 s), dipakai juga saat deselerasi; estimasi durasi dosing dibuat akurat (trapezoid/triangular) agar timeout tidak berlebihan; `FW_VERSI`→v0.6.1 |
 | **v0.6.0** | 2026-10-29 | `v0.6.0` | **Ramp semua motor** (stepper akselerasi, DC ramp duty non-blocking); Test Motor mencakup 7 baris (3 stepper + 2 DC + agitasi) dengan scroll; kalibrasi stepper **10 rotasi** (ramp-aware, hasil 0,1 ml); kalibrasi DC **10 detik → ml/detik** + margin 10%; agitasi jadi **SPD1–3**; NVS `pompa` v2 |
 | **v0.5.4** | 2026-10-28 | `v0.5.4` | Pompa stepper ramp naik saat start & ramp turun saat stop (`stopMove`, akselerasi 50.000); E-stop/timeout/stall tetap potong seketika |
 | **v0.5.3** | 2026-10-28 | `v0.5.3` | Halaman **Test Motor** di Kalibrasi → Motor: START/STOP kontinu per pompa atau ketiga pompa sekaligus; default RPM 500 |

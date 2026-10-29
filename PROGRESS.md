@@ -1,6 +1,6 @@
 # PROGRESS — Checklist Implementasi Firmware Etching Otomatis
 
-Firmware: **Etching v0.6.0** · Board: **ESP32-S3 DevKitC**
+Firmware: **Etching v0.6.1** · Board: **ESP32-S3 DevKitC**
 Rencana teknis lengkap: `PROCESS.md` · Ringkasan: `SUMMARY.md` · Riwayat: `LOG.md`
 
 Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/terpakai** · ⬜ **Belum ada**
@@ -189,6 +189,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ **v0.5.3: halaman Test Motor** — START/STOP kontinu per pompa atau ketiga pompa sekaligus (Kalibrasi → Motor → Test Motor)
 - [x] ✅ **v0.5.4: ramp naik/turun pompa** — akselerasi 50.000 langkah/s², stop memakai `stopMove()`, E-stop/stall tetap `forceStop()`
 - [x] ✅ **v0.6.0: ramp semua motor + kalibrasi baru** — stepper 10 rotasi (ramp-aware), DC 10 detik → ml/detik, agitasi SPD1–3, Test Motor 7 baris scroll, NVS `pompa` v2
+- [x] ✅ **v0.6.1: ramp stepper = sketch `test/test-motor`** — `PUMP_ACCEL_RPM_PER_SEC` 18,75 rpm/detik (0→500 rpm ±26,7 s), deselerasi sama, estimasi dosing trapezoid/triangular
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]`/`[KALIB*]` ke Serial
 - [x] ✅ **v0.6.0: `kalibDuty[]` dihapus** — diganti `kalibDutyDC[2]` + `agitasiSpdDuty[3]`
 - [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik

@@ -27,6 +27,40 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-29] v0.6.1 — Ramp stepper disamakan dengan sketch `test/test-motor`
+
+**Latar belakang:**
+- Ramp v0.6.0 (akselerasi 50.000 langkah/s²) mencapai 500 rpm hanya dalam
+  ±1,07 detik. Lonjakan torsi sebesar itu membuat **pump head peristaltik
+  rusak**.
+- Sketch `test/test-motor` memakai `accel = 1000` langkah/s² pada
+  `STEPS_PER_REV = 3200` = **18,75 rpm/detik**. Ramp inilah yang dianggap aman.
+
+**Perubahan Kode:**
+- `config.h`
+  - Baru: `PUMP_ACCEL_RPM_PER_SEC = 18.75f` (setara sketch di atas).
+  - `PUMP_ACCEL_HZ2` sekarang **dihitung** dari nilai rpm/detik tersebut:
+    `18,75 x 6400 / 60 = 2000` langkah/s². Jadi ramp tidak berubah walau
+    microstep (`PUMP_STEP_PER_REV`) diubah.
+  - Efek: 0 → 400 rpm ±21,3 s, 0 → 500 rpm ±26,7 s, 0 → 700 rpm ±37,3 s.
+    Deselerasi (`stopMove`) memakai laju yang sama, jadi berhenti pun halus.
+- `motor.h` — `pompaPerkiraanMs()` memakai rumus **trapezoid/triangular**
+  yang akurat. Rumus lama (`langkah/hz + hz/akselerasi`) terlalu
+  overestimate ketika ramp sangat landai, sehingga timeout dosing membengkak
+  tanpa perlu.
+
+**Catatan:**
+- Jumlah langkah (dan volume) tetap tepat: ramp hanya mengubah *kapan*
+  kecepatan dicapai, bukan jumlah pulsa. Dosing jadi lebih lama, bukan
+  berkurang volumenya.
+- Kalibrasi 10 rotasi bisa berjalan tanpa pernah mencapai RPM target
+  (profil triangular), tetapi ml/rotasi tetap valid karena pompa peristaltik
+  memindahkan volume tetap per putaran.
+- Bila dosing terasa terlalu lambat, naikkan `PUMP_ACCEL_RPM_PER_SEC`
+  (mis. `37.5` = 0→500 rpm ±13,3 s). Bila masih terasa hentakan, turunkan.
+
+---
+
 ## [2026-10-29] v0.6.0 — Ramp semua motor, Test Motor 7 baris, kalibrasi baru
 
 **Latar belakang:**

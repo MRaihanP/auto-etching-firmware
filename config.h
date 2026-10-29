@@ -91,11 +91,17 @@
 #define PUMP_RPM_MAX         700
 #define PUMP_RPM_DEFAULT     500
 #define PUMP_RPM_STEP        100
-// Akselerasi profil trapezoid (langkah/detik^2). Naikkan bila start terasa
-// lambat, turunkan bila motor stall/slip saat akselerasi.
-// 50000 = ramp 0 -> 500 rpm (53.333 Hz) dalam ~1,07 detik, sehingga start
-// dan stop terlihat naik/turun bertahap (bukan langsung 100%).
-#define PUMP_ACCEL_HZ2       50000L
+// Akselerasi profil trapezoid, dinyatakan dalam rpm/detik supaya perilakunya
+// sama persis dengan sketch test/test-motor (accel 1000 langkah/detik^2 pada
+// 3200 langkah/putaran = 18,75 rpm/detik). Nilai ini tidak bergantung pada
+// microstep, jadi tetap sama walau PUMP_STEP_PER_REV diubah.
+// Efek: 0 -> 400 rpm +-21,3 detik, 0 -> 500 rpm +-26,7 detik, dan deselerasi
+// (stopMove) memakai laju yang sama. Ramp sehalus ini mencegah pump head
+// rusak akibat lonjakan torsi saat start/stop. Naikkan bila dosing terlalu
+// lambat, turunkan bila masih ada hentakan.
+#define PUMP_ACCEL_RPM_PER_SEC  18.75f
+#define PUMP_ACCEL_HZ2 \
+  ((uint32_t)(PUMP_ACCEL_RPM_PER_SEC * (float)PUMP_STEP_PER_REV / 60.0f + 0.5f))
 // Uji kalibrasi: jumlah rotasi yang dijalankan sebelum user mengukur hasil.
 // Ramp up/down tetap dihitung FastAccelStepper, jadi jumlah langkah (dan
 // volume) tepat PUMP_KALIB_REV rotasi meskipun start/stop bertahap.
@@ -146,4 +152,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.6.0"
+#define FW_VERSI  "v0.6.1"

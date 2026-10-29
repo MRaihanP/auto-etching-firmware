@@ -71,6 +71,14 @@ float pompaLangkahPerMl(int idx) {
 void motorInit() {
   pompaEngine.init();
 
+  dbg.print(F("[POMPA] Akselerasi "));
+  dbg.print((unsigned int)PUMP_ACCEL_HZ2);
+  dbg.print(F(" langkah/s^2 = "));
+  dbg.print(PUMP_ACCEL_RPM_PER_SEC);
+  dbg.print(F(" rpm/s (ramp 0-500 rpm ~"));
+  dbg.print(500.0 / PUMP_ACCEL_RPM_PER_SEC);
+  dbg.println(F(" s)"));
+
   for (int i = 0; i < 3; i++) {
     pinMode(PIN_SLP[i], OUTPUT);
     digitalWrite(PIN_SLP[i], LOW);   // DRV8825 sleep = driver nonaktif
@@ -366,14 +374,28 @@ int pompaProgres(int idx) {
   return (int)constrain(persen, 0L, 100L);
 }
 
-// Estimasi durasi dosing (ms), termasuk waktu akselerasi/decelerasi.
+// Estimasi durasi dosing (ms) dengan profil trapezoid/triangular yang akurat,
+// termasuk ramp naik & turun. Penting karena ramp sekarang sangat landai
+// (PUMP_ACCEL_RPM_PER_SEC), sehingga rumus lama (langkah/hz + hz/accel)
+// terlalu overestimate untuk dosing pendek.
 unsigned long pompaPerkiraanMs(int idx, int ml) {
   if (!pompaSiap(idx) || ml <= 0) return 0;
   double hz   = (double)rpmKeHz(kalibStepperRpm[idx]);
   double rev  = (double)ml / (double)kalibStepperMl[idx];
   double langkah = rev * (double)PUMP_STEP_PER_REV;
-  double ramp = (double)hz / (double)PUMP_ACCEL_HZ2;   // koreksi profil trapezoid
-  double detik = langkah / hz + ramp;
+  double a    = (double)PUMP_ACCEL_HZ2;
+  if (hz <= 0.0 || a <= 0.0) return 0;
+
+  double langkahRamp = hz * hz / a;          // total langkah untuk naik + turun
+  double detik;
+  if (langkah >= langkahRamp) {
+    // Trapezoid: capai kecepatan penuh, lalu cruise.
+    detik = (langkah - langkahRamp) / hz + 2.0 * (hz / a);
+  } else {
+    // Triangular: tidak sempat mencapai hz, langsung deselerasi.
+    double hzPuncak = sqrt(langkah * a);
+    detik = 2.0 * hzPuncak / a;
+  }
   return (unsigned long)(detik * 1000.0);
 }
 
