@@ -97,9 +97,26 @@
 // dan stop terlihat naik/turun bertahap (bukan langsung 100%).
 #define PUMP_ACCEL_HZ2       50000L
 // Uji kalibrasi: jumlah rotasi yang dijalankan sebelum user mengukur hasil.
-#define PUMP_KALIB_REV       20
+// Ramp up/down tetap dihitung FastAccelStepper, jadi jumlah langkah (dan
+// volume) tepat PUMP_KALIB_REV rotasi meskipun start/stop bertahap.
+#define PUMP_KALIB_REV       10
 // Timeout dosing = 2 x estimasi + margin ini.
 #define PUMP_TIMEOUT_MARGIN_MS 10000UL
+
+// ===== POMPA DC & AGITASI (TB6612FNG) =====
+// Ramp duty non-blocking (% per detik). 100 = 0..100% dalam 1 detik.
+#define DC_RAMP_PCT_PER_SEC  100.0f
+// Kalibrasi pompa DC: pompa ditahan pada duty penuh selama N detik,
+// lalu volume terukur dibagi N untuk mendapat ml/detik.
+#define KALIB_DC_DETIK       10
+// Margin pompa DC: dosing berbasis waktu diberi kelebihan 10% karena laju DC
+// kurang presisi (selang, tegangan, viskositas) dan cenderung kurang, bukan
+// berlebih. Dipakai oleh dcDosisMs().
+#define DC_MARGIN_PCT        10
+// Duty default agitasi untuk SPD1/SPD2/SPD3 (persen).
+#define AGITASI_SPD1_DEFAULT 40
+#define AGITASI_SPD2_DEFAULT 70
+#define AGITASI_SPD3_DEFAULT 100
 
 // ===== PIN MAP (ESP32-S3) - dipakai mulai Step 5/6 =====
 // Stepper DRV8825 (pompa peristaltik)
@@ -129,4 +146,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.5.4"
+#define FW_VERSI  "v0.6.0"

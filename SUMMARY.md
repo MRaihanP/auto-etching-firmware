@@ -1,6 +1,6 @@
 # SUMMARY — Mesin PCB Etching Otomatis
 
-Firmware **Etching v0.5.4** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
+Firmware **Etching v0.6.0** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
 HCl/H2O2/H2O (stepper DRV8825 1/32, 400–700 rpm), agitasi, draining, dan rinsing, dikendalikan lewat layar
 OLED 128x64 + 6 tombol (PCF8574).
 
@@ -22,11 +22,19 @@ OLED 128x64 + 6 tombol (PCF8574).
   Pulsa dibangkitkan FastAccelStepper (MCPWM/PCNT), bukan `loop()`.
   Start/stop memakai **ramp** (akselerasi 50.000 langkah/s²): naik ke RPM target
   ±1 detik dan turun bertahap saat dihentikan. E-stop/timeout tetap potong seketika.
-- **Kalibrasi pompa:** uji 20 rotasi pada RPM terpilih; hasil ml/rotasi disimpan
-  di NVS (key `pompa`).
-- **Test Motor:** halaman di Kalibrasi → Motor untuk menyalakan pompa kontinu
-  (START → STOP), satu per satu atau ketiga pompa sekaligus.
-- **Aktuator DC (PWM LEDC):** motor agitasi, pompa air sabun, pompa limbah.
+- **Kalibrasi pompa:** uji **10 rotasi** pada RPM terpilih; hasil ml/rotasi disimpan
+  di NVS (key `pompa`). Ramp naik/turun dihitung stepper, jadi jumlah langkah
+  tetap tepat 10 rotasi.
+- **Kalibrasi pompa DC:** uji **10 detik** pada duty penuh, hasil **ml/detik**
+  disimpan di NVS; dosing berbasis waktu diberi margin 10%.
+- **Agitasi 3 level:** SPD1/SPD2/SPD3 dalam %, tanpa kalibrasi ml; tiap level
+  selalu ramp dari 0%.
+- **Test Motor:** halaman di Kalibrasi → Motor dengan **7 baris** (Semua / HCl /
+  H2O2 / Air / Sabun / Limbah / Agitasi) dan scroll; KIRI/KANAN mengubah
+  RPM/duty/SPD secara live.
+- **Aktuator DC (PWM LEDC):** motor agitasi (3 level), pompa air sabun, pompa
+  limbah. Semua start/stop memakai ramp duty non-blocking
+  (`DC_RAMP_PCT_PER_SEC`), tidak pernah lompat 0 → 100%.
 - **Exhaust fan:** disambung **langsung ke 12V** dan menyala terus (arus kipas
   melebihi kapasitas TB6612FNG ~1.2 A). GPIO 18 kini bebas.
 - **Kalibrasi level cairan:** ambang tersimpan di NVS (Preferences).

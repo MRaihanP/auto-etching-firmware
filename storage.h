@@ -63,7 +63,11 @@ void muatPreset() {
 
   if (valid) {
     jumlahPreset = d.jumlah;
-    for (int i = 0; i < jumlahPreset; i++) daftarPreset[i] = d.p[i];
+    for (int i = 0; i < jumlahPreset; i++) {
+      daftarPreset[i] = d.p[i];
+      // v0.6.0: speed agitasi hanya 1-3; preset lama (4/5) di-clamp.
+      daftarPreset[i].agitasiSpeed = constrain(daftarPreset[i].agitasiSpeed, 1, 3);
+    }
     dbg.print(F("[STORE] Dimuat "));
     dbg.print(jumlahPreset);
     dbg.println(F(" preset"));
@@ -124,14 +128,18 @@ void muatKalib() {
   dbg.println(valid ? F("[STORE] Kalibrasi dimuat") : F("[STORE] Kalibrasi belum ada (default)"));
 }
 
-// ================= KALIBRASI POMPA STEPPER =================
+// ================= KALIBRASI POMPA & MOTOR =================
 // Key terpisah dari "kal" agar kalibrasi sensor level lama tetap valid.
-#define FORMAT_VERSI_POMPA 1
+// Versi 2 (v0.6.0): + duty/ml DC, + 3 speed agitasi, hasil ukur 0,1 ml.
+#define FORMAT_VERSI_POMPA 2
 
 struct DataPompa {
   uint32_t versi;
   int32_t  rpm[3];
   float    mlPerRev[3];
+  int32_t  dcDuty[2];
+  float    dcMlPerSec[2];
+  int32_t  agitDuty[3];
   uint32_t crc;
 };
 
@@ -142,6 +150,11 @@ bool simpanPompa() {
   for (int i = 0; i < 3; i++) {
     d.rpm[i]      = rpmPompaValid(kalibStepperRpm[i]);
     d.mlPerRev[i] = kalibStepperMl[i];
+    d.agitDuty[i] = constrain(agitasiSpdDuty[i], 0, 100);
+  }
+  for (int i = 0; i < 2; i++) {
+    d.dcDuty[i]    = constrain(kalibDutyDC[i], 0, 100);
+    d.dcMlPerSec[i] = kalibDcMlPerSec[i];
   }
   d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
 
@@ -150,7 +163,7 @@ bool simpanPompa() {
     ok = (prefs.putBytes("pompa", &d, sizeof(d)) == sizeof(d));
     prefs.end();
   }
-  dbg.println(ok ? F("[STORE] Simpan kalibrasi pompa: OK") : F("[STORE] Simpan kalibrasi pompa: GAGAL"));
+  dbg.println(ok ? F("[STORE] Simpan kalibrasi motor: OK") : F("[STORE] Simpan kalibrasi motor: GAGAL"));
   return ok;
 }
 
@@ -165,15 +178,33 @@ void muatPompa() {
       for (int i = 0; valid && i < 3; i++) {
         if (d.rpm[i] < PUMP_RPM_MIN || d.rpm[i] > PUMP_RPM_MAX) valid = false;
         if (d.mlPerRev[i] < 0.0f || d.mlPerRev[i] > 100.0f) valid = false;
+        if (d.agitDuty[i] < 0 || d.agitDuty[i] > 100) valid = false;
+      }
+      for (int i = 0; valid && i < 2; i++) {
+        if (d.dcDuty[i] < 0 || d.dcDuty[i] > 100) valid = false;
+        if (d.dcMlPerSec[i] < 0.0f || d.dcMlPerSec[i] > 100.0f) valid = false;
       }
     }
     prefs.end();
   }
 
+  static const int agitDefault[3] = { AGITASI_SPD1_DEFAULT,
+                                      AGITASI_SPD2_DEFAULT,
+                                      AGITASI_SPD3_DEFAULT };
   for (int i = 0; i < 3; i++) {
     kalibStepperRpm[i] = valid ? rpmPompaValid(d.rpm[i]) : PUMP_RPM_DEFAULT;
     kalibStepperMl[i]  = valid ? d.mlPerRev[i] : 0.0f;
-    kalibStepperHasilMl[i] = (int)lround(kalibStepperMl[i] * PUMP_KALIB_REV);
+    kalibStepperHasilMl10[i] =
+        (int)lround(kalibStepperMl[i] * (float)PUMP_KALIB_REV * 10.0f);
+    agitasiSpdDuty[i] = valid ? constrain((int)d.agitDuty[i], 0, 100)
+                              : agitDefault[i];
   }
-  dbg.println(valid ? F("[STORE] Kalibrasi pompa dimuat") : F("[STORE] Kalibrasi pompa belum ada"));
+  static const int dcDefault[2] = { 80, 100 };   // sabun 80%, limbah 100%
+  for (int i = 0; i < 2; i++) {
+    kalibDutyDC[i]    = valid ? constrain((int)d.dcDuty[i], 0, 100) : dcDefault[i];
+    kalibDcMlPerSec[i] = valid ? d.dcMlPerSec[i] : 0.0f;
+    kalibDcHasilMl[i]  = (int)lround(kalibDcMlPerSec[i] * (float)KALIB_DC_DETIK);
+  }
+
+  dbg.println(valid ? F("[STORE] Kalibrasi motor dimuat") : F("[STORE] Kalibrasi motor belum ada (default)"));
 }

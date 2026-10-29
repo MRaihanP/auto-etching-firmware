@@ -15,7 +15,7 @@ struct Preset {
   int   mlH2O2;
   int   mlH2O;
   int   agitasiDetik;    // durasi agitasi per siklus
-  int   agitasiSpeed;    // level kecepatan 1-5
+  int   agitasiSpeed;    // level kecepatan 1-3 (SPD1/SPD2/SPD3)
   int   totalDetik;      // estimasi lama total proses
 };
 
@@ -25,9 +25,9 @@ struct Preset {
 // Data default (dipakai saat pertama kali / data korup)
 const Preset presetDefault[JUMLAH_DEFAULT] = {
   { "Preset 1", 100, 80, 33, 17, 50, 120,  60, 180,  5, 3, 270 },
-  { "Preset 2",  80, 60, 40, 20, 40, 100,  50, 100,  8, 4, 330 },
+  { "Preset 2",  80, 60, 40, 20, 40, 100,  50, 100,  8, 3, 330 },
   { "Preset 3", 150,100, 25, 25, 50, 150, 150, 300,  4, 2, 420 },
-  { "Preset 4",  60, 40, 50, 10, 40,  90,  18,  72, 10, 5, 210 },
+  { "Preset 4",  60, 40, 50, 10, 40,  90,  18,  72, 10, 3, 210 },
   { "Preset 5", 120, 90, 30, 20, 50, 135,  90, 225,  6, 3, 360 }
 };
 
@@ -63,13 +63,13 @@ enum Halaman {
   HAL_KALIB_AGITASI,
   HAL_KALIB_SUHU,
   HAL_KALIB_UDARA,
-  HAL_TEST_POMPA
+  HAL_TEST_MOTOR
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
   "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI",
-  "KALIB_SUHU", "KALIB_UDARA", "TEST_POMPA"
+  "KALIB_SUHU", "KALIB_UDARA", "TEST_MOTOR"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
@@ -93,23 +93,44 @@ int kalibSetStep = 0;
 int kalibLevelScroll = 0;
 
 // State Kalibrasi Motor/Pompa
-int kalibMotorIdx = 0;        // 0=HCl, 1=H2O2, 2=Air, 3=Sabun, 4=Limbah, 5=Agitasi
+int kalibMotorIdx = 0;        // 0=HCl, 1=H2O2, 2=Air, 3=Sabun, 4=Limbah, 5=Agitasi, 6=Test Motor
 int kalibMotorScroll = 0;
 int kalibDCScroll = 0;        // scroll offset untuk halaman DC
-// Kalibrasi pompa stepper: cursor 0=START/STOP, 1=RPM, 2=Hasil, 3=ml/rotasi
+
+// ---- Kalibrasi pompa stepper (HCl/H2O2/Air) ----
+// Cursor 0=START/STOP, 1=RPM, 2=Hasil ukur, 3=ml/rotasi
 int kalibStepperCursor = 0;
 int kalibStepperScroll = 0;
-int   kalibStepperRpm[3]     = { PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT };
-int   kalibStepperHasilMl[3] = { 0, 0, 0 };          // total ml hasil uji PUMP_KALIB_REV rotasi
-float kalibStepperMl[3]      = { 0.0f, 0.0f, 0.0f }; // ml per rotasi (hasil kalibrasi)
-// Halaman Test Pompa: cursor 0=Semua, 1=HCl, 2=H2O2, 3=Air
-int testPompaCursor = 0;
-int kalibDCCursor = 0;        // 0=START, 1=duty, 2=ml
-int kalibDuty[5] = {128, 128, 128, 128, 128};  // Sabun, Limbah, Agitasi SPD1-3
-float kalibMl[2] = {0, 0};  // ml hasil test untuk Sabun, Limbah
-bool kalibMotorRunning = false;  // true = motor sedang berjalan
-unsigned long kalibMotorStartMs = 0;
-int kalibMotorRunMs = 2000;    // durasi test default 2 detik
+int   kalibStepperRpm[3]        = { PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT };
+int   kalibStepperHasilMl10[3]  = { 0, 0, 0 };          // hasil ukur (0,1 ml) untuk PUMP_KALIB_REV
+float kalibStepperMl[3]         = { 0.0f, 0.0f, 0.0f }; // ml per rotasi (hasil kalibrasi)
+int   kalibStepperStep          = 5;                     // langkah edit: 1=0,1 ml, 5=0,5 ml, 10=1 ml
+
+// ---- Kalibrasi pompa DC (sabun/limbah) ----
+// Cursor 0=START/STOP, 1=Duty, 2=Hasil ukur, 3=ml/detik
+int   kalibDCCursor       = 0;
+int   kalibDutyDC[2]      = { 80, 100 };   // duty pompa sabun & limbah (%)
+int   kalibDcHasilMl[2]   = { 0, 0 };       // ml terukur selama KALIB_DC_DETIK
+float kalibDcMlPerSec[2]  = { 0.0f, 0.0f }; // hasil kalibrasi ml/detik
+int   kalibDcStep         = 5;              // langkah edit hasil: 1/5/10 ml
+
+// Status uji DC 10 detik (dipakai dcmotor.h)
+enum KalibDcFase { KDC_IDLE, KDC_RAMPUP, KDC_UKUR, KDC_TURUN };
+KalibDcFase   kalibDcFase = KDC_IDLE;
+int           kalibDcIdx  = -1;
+unsigned long kalibDcT0   = 0;
+bool          kalibDcUkur = false;   // true = uji berjalan, beri toast saat selesai
+bool          kalibStepperUkur = false; // true = uji stepper berjalan (toast selesai)
+
+// ---- Motor agitasi: 3 level kecepatan, tanpa kalibrasi ----
+int agitasiSpdDuty[3] = { AGITASI_SPD1_DEFAULT, AGITASI_SPD2_DEFAULT, AGITASI_SPD3_DEFAULT };
+int agitasiSpdUji     = 1;   // SPD yang sedang diuji di halaman agitasi (1..3)
+
+// ---- Halaman Test Motor ----
+// 0=Semua, 1=HCl, 2=H2O2, 3=Air, 4=Sabun, 5=Limbah, 6=Agitasi
+int testMotorCursor  = 0;
+int testMotorScroll  = 0;
+int testAgitSpeed    = 1;   // SPD agitasi yang dipakai saat test (1..3)
 
 // State Kalibrasi Sensor Suhu (3 blok)
 #define JUMLAH_SUHU 3

@@ -72,6 +72,21 @@ void simpanEdit() {
 }
 
 // ================= NAVIGASI =================
+// ================= HELPER TEST MOTOR =================
+// Semua motor dijalankan dari nol: stepper pakai ramp akselerasi,
+// DC/agitasi pakai ramp duty (dcmotorUpdate).
+void testMotorMulaiSemua() {
+  for (int i = 0; i < 3; i++) pompaTestMulai(i);
+  dcSetPct(DC_SABUN,  kalibDutyDC[0]);
+  dcSetPct(DC_LIMBAH, kalibDutyDC[1]);
+  agitasiSet(testAgitSpeed);
+}
+
+void testMotorHentikanSemua() {
+  pompaStopAll();       // ramp turun
+  dcStopAll();          // ramp turun
+}
+
 void tanganiTombol(int t) {
   dbg.print(F("[TOMBOL] "));
   dbg.println(namaTombol[t]);
@@ -219,13 +234,15 @@ void tanganiTombol(int t) {
           kalibDCScroll = 0;
           pindahHalaman(HAL_KALIB_DC);
         } else if (kalibMotorIdx == 5) {
-          // Motor Agitasi (index 5)
+          // Motor Agitasi (index 5): setting SPD1-3, tanpa kalibrasi
+          kalibDCCursor = 0;
           pindahHalaman(HAL_KALIB_AGITASI);
         } else {
-          // Test Motor: uji ketiga pompa stepper sekaligus
-          testPompaCursor = 0;
-          pompaStopAll();
-          pindahHalaman(HAL_TEST_POMPA);
+          // Test Motor: semua motor (stepper + DC + agitasi)
+          testMotorCursor = 0;
+          testMotorScroll = 0;
+          testMotorHentikanSemua();
+          pindahHalaman(HAL_TEST_MOTOR);
         }
       }
       if (t == P_BACK) pindahHalaman(HAL_KALIB_MAIN);
@@ -236,10 +253,7 @@ void tanganiTombol(int t) {
       int idx = kalibMotorIdx;
       if (t == P_BACK) {
         if (pompaAktif(idx)) pompaStop(idx);
-        if (kalibStepperMl[idx] > 0.0f) {
-          if (simpanPompa()) tampilToast("Tersimpan");
-          else tampilToast("Gagal simpan");
-        }
+        simpanPompa();
         kalibStepperScroll = 0;
         pindahHalaman(HAL_KALIB_MOTOR_LIST);
         break;
@@ -249,7 +263,7 @@ void tanganiTombol(int t) {
         kalibStepperCursor = (kalibStepperCursor + arah + 4) % 4;
         // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
         {
-          static const int rowTop[4] = { 0, 12, 24, 36 };
+          static const int rowTop[4] = { 0, 12, 22, 32 };
           static const int rowH[4]   = { 12, 10, 10, 10 };
           int maxScroll = max(0, KALIB_STEPPER_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
           int visibleH  = AREA_BAWAH - (HEADER_H + 4);
@@ -265,15 +279,16 @@ void tanganiTombol(int t) {
       if (t == P_KIRI || t == P_KANAN) {
         int arah = (t == P_KANAN) ? +1 : -1;
         if (kalibStepperCursor == 1) {
-          // Hanya angka ratusan: 400 / 500 / 600 / 700
-          kalibStepperRpm[idx] = rpmPompaValid(kalibStepperRpm[idx] + arah * PUMP_RPM_STEP);
-          dbg.print(F("[KALIB-POMPA] rpm="));
-          dbg.println(kalibStepperRpm[idx]);
+          // RPM live: kalau pompa sedang jalan, target baru ikut ramp.
+          pompaAturRpmLive(idx, kalibStepperRpm[idx] + arah * PUMP_RPM_STEP);
         } else if (kalibStepperCursor == 2) {
-          kalibStepperHasilMl[idx] = constrain(kalibStepperHasilMl[idx] + arah, 0, 999);
-          kalibStepperMl[idx] = (float)kalibStepperHasilMl[idx] / (float)PUMP_KALIB_REV;
+          // Hasil ukur dalam 0,1 ml, langkah edit bisa 0,1/0,5/1 ml.
+          kalibStepperHasilMl10[idx] = constrain(
+              kalibStepperHasilMl10[idx] + arah * kalibStepperStep, 0, 9999);
+          kalibStepperMl[idx] =
+              (kalibStepperHasilMl10[idx] / 10.0f) / (float)PUMP_KALIB_REV;
           dbg.print(F("[KALIB-POMPA] hasil="));
-          dbg.print(kalibStepperHasilMl[idx]);
+          dbg.print(kalibStepperHasilMl10[idx] / 10.0f);
           dbg.print(F(" ml -> ml/rot="));
           dbg.println(kalibStepperMl[idx]);
         }
@@ -283,44 +298,68 @@ void tanganiTombol(int t) {
         if (kalibStepperCursor == 0) {
           if (pompaAktif(idx)) {
             pompaStop(idx);
+            kalibStepperUkur = false;
             tampilToast("Dihentikan");
           } else if (pompaPutarRevolusi(idx, PUMP_KALIB_REV)) {
-            tampilToast("Running...");
+            kalibStepperUkur = true;
+            tampilToast("Mengisi...");
           } else {
             tampilToast("Gagal start");
           }
+        } else if (kalibStepperCursor == 2) {
+          // Ganti langkah edit: 0,1 -> 0,5 -> 1,0 ml
+          if      (kalibStepperStep == 1)  kalibStepperStep = 5;
+          else if (kalibStepperStep == 5)  kalibStepperStep = 10;
+          else                             kalibStepperStep = 1;
+          tampilToast("Step hasil");
         }
         break;
       }
       break;
     }
 
-    // ---------- Test Motor: pompa stepper berjalan terus sampai STOP ----------
-    case HAL_TEST_POMPA: {
+    // ---------- Test Motor: semua motor, START/STOP + ubah nilai live ----------
+    case HAL_TEST_MOTOR: {
       if (t == P_BACK) {
-        pompaStopAll();            // keluar halaman = semua uji berhenti
+        testMotorHentikanSemua();
+        simpanPompa();
         pindahHalaman(HAL_KALIB_MOTOR_LIST);
         break;
       }
       if (t == P_ATAS || t == P_BAWAH) {
         int arah = (t == P_BAWAH) ? +1 : -1;
-        testPompaCursor = (testPompaCursor + arah + 4) % 4;
+        testMotorCursor = (testMotorCursor + arah + TEST_MOTOR_JUMLAH) % TEST_MOTOR_JUMLAH;
+        testMotorPastikanTerlihat();
+        break;
+      }
+      if (t == P_KIRI || t == P_KANAN) {
+        int arah = (t == P_KANAN) ? +1 : -1;
+        if (testMotorCursor >= 1 && testMotorCursor <= 3) {
+          int idx = testMotorCursor - 1;
+          pompaAturRpmLive(idx, kalibStepperRpm[idx] + arah * PUMP_RPM_STEP);
+        } else if (testMotorCursor == 4 || testMotorCursor == 5) {
+          int idx = testMotorCursor - 4;       // 0=sabun, 1=limbah
+          kalibDutyDC[idx] = constrain(kalibDutyDC[idx] + arah * 5, 0, 100);
+          int ch = idx + 1;
+          if (dcAktif(ch)) dcSetPct(ch, kalibDutyDC[idx]);   // live, ikut ramp
+        } else if (testMotorCursor == 6) {
+          testAgitSpeed = constrain(testAgitSpeed + arah, 1, 3);
+          if (agitasiAktif()) agitasiSet(testAgitSpeed);
+        }
         break;
       }
       if (t == P_ENTER) {
-        if (testPompaCursor == 0) {
-          // Baris "Semua": nyalakan/hentikan ketiga pompa sekaligus
-          bool adaJalan = pompaAktif(0) || pompaAktif(1) || pompaAktif(2);
-          if (adaJalan) {
-            pompaStopAll();
+        if (testMotorCursor == 0) {
+          // Baris "Semua": nyalakan/hentikan semua motor
+          if (testMotorAktifBaris(0)) {
+            testMotorHentikanSemua();
             tampilToast("Stop semua");
           } else {
-            bool ok = true;
-            for (int i = 0; i < 3; i++) if (!pompaTestMulai(i)) ok = false;
-            tampilToast(ok ? "Jalan semua" : "Gagal start");
+            testMotorMulaiSemua();
+            tampilToast("Jalan semua");
           }
-        } else {
-          int idx = testPompaCursor - 1;
+        } else if (testMotorCursor <= 3) {
+          int idx = testMotorCursor - 1;
           if (pompaAktif(idx)) {
             pompaStop(idx);
             tampilToast("Stop");
@@ -329,6 +368,24 @@ void tanganiTombol(int t) {
           } else {
             tampilToast("Gagal start");
           }
+        } else if (testMotorCursor <= 5) {
+          int idx = testMotorCursor - 4;
+          int ch = idx + 1;
+          if (dcAktif(ch)) {
+            dcStop(ch);
+            tampilToast("Stop");
+          } else {
+            dcSetPct(ch, kalibDutyDC[idx]);
+            tampilToast("Running...");
+          }
+        } else {
+          if (agitasiAktif()) {
+            agitasiSet(0);
+            tampilToast("Stop");
+          } else {
+            agitasiSet(testAgitSpeed);
+            tampilToast("Running...");
+          }
         }
         break;
       }
@@ -336,82 +393,116 @@ void tanganiTombol(int t) {
     }
 
     // ---------- Kalibrasi DC (Pompa Sabun/Limbah) ----------
-    case HAL_KALIB_DC:
-      if (t == P_BACK) { kalibDCScroll = 0; pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+    // Uji 10 detik: RAMPUP -> UKUR 10 s -> TURUN; hasil ml diukur setelah
+    // pompa benar-benar diam, jadi tidak terpengaruh ramp.
+    case HAL_KALIB_DC: {
+      int idx = kalibMotorIdx - 3;                 // 0=sabun, 1=limbah
+      if (t == P_BACK) {
+        if (kalibDcJalan()) kalibDcStop();
+        dcStop(idx + 1);
+        simpanPompa();
+        kalibDCScroll = 0;
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
       if (t == P_ATAS || t == P_BAWAH) {
-        kalibDCCursor = (kalibDCCursor + 1) % 3;
+        int arah = (t == P_BAWAH) ? +1 : -1;
+        kalibDCCursor = (kalibDCCursor + arah + 4) % 4;
         // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
         {
-          static const int rowTop[3]  = { 0, 16, 28 };
-          static const int rowH[3]    = { 12, 10, 10 };
+          static const int rowH[4] = { 12, 10, 10, 10 };
           int maxScroll = max(0, KALIB_DC_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
           int visibleH  = AREA_BAWAH - (HEADER_H + 4);
-          if (rowTop[kalibDCCursor] - kalibDCScroll + rowH[kalibDCCursor] > visibleH)
-            kalibDCScroll = rowTop[kalibDCCursor] + rowH[kalibDCCursor] - visibleH;
-          if (rowTop[kalibDCCursor] - kalibDCScroll < 0)
-            kalibDCScroll = rowTop[kalibDCCursor];
+          int top = KALIB_DC_ROW_TOP[kalibDCCursor];
+          if (top - kalibDCScroll + rowH[kalibDCCursor] > visibleH)
+            kalibDCScroll = top + rowH[kalibDCCursor] - visibleH;
+          if (top - kalibDCScroll < 0)
+            kalibDCScroll = top;
           if (kalibDCScroll > maxScroll) kalibDCScroll = maxScroll;
           if (kalibDCScroll < 0) kalibDCScroll = 0;
         }
         break;
       }
       if (t == P_KIRI || t == P_KANAN) {
-        int idx = kalibMotorIdx - 3;
+        int arah = (t == P_KANAN) ? +1 : -1;
         if (kalibDCCursor == 1) {
-          int delta = (t == P_KANAN) ? 5 : -5;
-          kalibDuty[idx] += delta;
-          if (kalibDuty[idx] < 0) kalibDuty[idx] = 0;
-          if (kalibDuty[idx] > 255) kalibDuty[idx] = 255;
+          // Duty live: kalau uji sedang berjalan, mulai ulang siklus
+          // (ramp + 10 detik) agar ml/detik tetap sesuai duty terpilih.
+          kalibDutyDC[idx] = constrain(kalibDutyDC[idx] + arah * 5, 0, 100);
+          if (kalibDcJalan()) kalibDcMulai(idx);
         } else if (kalibDCCursor == 2) {
-          int delta = (t == P_KANAN) ? 1 : -1;
-          kalibMl[idx] += delta;
-          if (kalibMl[idx] < 0) kalibMl[idx] = 0;
-          if (kalibMl[idx] > 999) kalibMl[idx] = 999;
+          // Hasil ukur ml; ml/detik = hasil / KALIB_DC_DETIK.
+          kalibDcHasilMl[idx] = constrain(kalibDcHasilMl[idx] + arah * kalibDcStep, 0, 9999);
+          kalibDcMlPerSec[idx] =
+              (float)kalibDcHasilMl[idx] / (float)KALIB_DC_DETIK;
+          dbg.print(F("[KALIB-DC] hasil="));
+          dbg.print(kalibDcHasilMl[idx]);
+          dbg.print(F(" ml -> ml/det="));
+          dbg.println(kalibDcMlPerSec[idx]);
         }
         break;
       }
       if (t == P_ENTER) {
         if (kalibDCCursor == 0) {
-          if (kalibMotorIdx == 3) pompaSabunSet(true);
-          else pompaLimbahSet(true);
-          kalibMotorRunning = true;
-          kalibMotorStartMs = millis();
-          tampilToast("Running...");
+          if (kalibDcJalan()) {
+            kalibDcStop();
+            kalibDcUkur = false;
+            tampilToast("Dihentikan");
+          } else if (kalibDutyDC[idx] <= 0) {
+            tampilToast("Duty 0%");
+          } else {
+            kalibDcUkur = true;
+            kalibDcMulai(idx);
+            tampilToast("Ukur 10 dtk");
+          }
+        } else if (kalibDCCursor == 2) {
+          // Ganti langkah edit: 1 -> 5 -> 10 ml
+          if      (kalibDcStep == 1)  kalibDcStep = 5;
+          else if (kalibDcStep == 5)  kalibDcStep = 10;
+          else                        kalibDcStep = 1;
+          tampilToast("Step hasil");
         }
+        break;
       }
       break;
+    }
 
-    // ---------- Kalibrasi Agitasi ----------
-    case HAL_KALIB_AGITASI:
-      if (t == P_BACK) { pindahHalaman(HAL_KALIB_MOTOR_LIST); break; }
+    // ---------- Setting Agitasi: 3 level kecepatan (tanpa kalibrasi ml) ----------
+    case HAL_KALIB_AGITASI: {
+      if (t == P_BACK) {
+        agitasiSet(0);
+        simpanPompa();
+        pindahHalaman(HAL_KALIB_MOTOR_LIST);
+        break;
+      }
       if (t == P_ATAS || t == P_BAWAH) {
-        kalibDCCursor = (kalibDCCursor + 1) % 4;
+        int arah = (t == P_BAWAH) ? +1 : -1;
+        kalibDCCursor = (kalibDCCursor + arah + 3) % 3;
         break;
       }
       if (t == P_KIRI || t == P_KANAN) {
-        int delta = (t == P_KANAN) ? 5 : -5;
-        if (kalibDCCursor < 3) {
-          kalibDuty[kalibDCCursor + 2] = constrain(kalibDuty[kalibDCCursor + 2] + delta, 0, 255);
-        }
+        int arah = (t == P_KANAN) ? +1 : -1;
+        agitasiSpdDuty[kalibDCCursor] =
+            constrain(agitasiSpdDuty[kalibDCCursor] + arah * 5, 0, 100);
+        // Live: kalau SPD ini sedang diuji, target baru ikut diramp.
+        if (agitasiAktif() && agitasiSpdUji == kalibDCCursor + 1)
+          dcSetPct(DC_AGI, agitasiSpdDuty[kalibDCCursor]);
         break;
       }
       if (t == P_ENTER) {
-        if (kalibDCCursor == 3) {
-          // Test all speeds
-          for (int s = 1; s <= 3; s++) {
-            agitasiSet(s);
-            delay(1000);
-          }
+        int spd = kalibDCCursor + 1;
+        if (agitasiAktif() && agitasiSpdUji == spd) {
           agitasiSet(0);
-          tampilToast("Done");
+          tampilToast("Stop");
         } else {
-          agitasiSet(kalibDCCursor + 1);
-          delay(2000);
-          agitasiSet(0);
-          tampilToast("Done");
+          agitasiSpdUji = spd;
+          agitasiSet(spd);
+          tampilToast("Running...");
         }
+        break;
       }
       break;
+    }
 
     // ---------- Kalibrasi Sensor Suhu ----------
     case HAL_KALIB_SUHU:
@@ -680,22 +771,59 @@ void loop() {
 
   prosesUpdate();                            // logika proses, tidak tergantung render
   motorUpdate();                             // stepper non-blocking
+  dcmotorUpdate();                           // ramp duty DC/agitasi non-blocking
+  kalibDcUpdate();                           // state machine uji DC 10 detik
   sensorUpdate();                            // baca sensor level cairan
   buzzerUpdate();                            // pola nada non-blocking
 
   // Redraw halaman kalibrasi stepper saat status START/STOP berubah.
+  // Saat uji PUMP_KALIB_REV rotasi selesai sendiri, minta user mengukur ml.
   if (halaman == HAL_KALIB_STEPPER) {
     static bool stepperJalanTerakhir = false;
     bool jalan = pompaAktif(kalibMotorIdx);
-    if (jalan != stepperJalanTerakhir) { stepperJalanTerakhir = jalan; perluGambar = true; }
+    if (jalan != stepperJalanTerakhir) {
+      stepperJalanTerakhir = jalan;
+      perluGambar = true;
+      if (!jalan && kalibStepperUkur) {
+        kalibStepperUkur = false;
+        tampilToast("Selesai, ukur ml");
+      }
+    }
   }
 
-  // Redraw halaman Test Motor saat status salah satu pompa berubah.
-  if (halaman == HAL_TEST_POMPA) {
+  // Redraw halaman kalibrasi DC: status uji, hitung mundur, dan selesai.
+  if (halaman == HAL_KALIB_DC) {
+    static bool dcJalanTerakhir = false;
+    static int  dcSisaTerakhir  = -1;
+    bool jalan = kalibDcJalan();
+    int  sisa  = kalibDcSisaDetik();
+    if (jalan != dcJalanTerakhir || sisa != dcSisaTerakhir) {
+      dcJalanTerakhir = jalan;
+      dcSisaTerakhir  = sisa;
+      perluGambar = true;
+      if (dcJalanTerakhir == false && kalibDcUkur) {
+        kalibDcUkur = false;
+        tampilToast("Selesai, ukur ml");
+      }
+    }
+  }
+
+  // Redraw halaman setting agitasi saat relay status berubah.
+  if (halaman == HAL_KALIB_AGITASI) {
+    static bool agitJalanTerakhir = false;
+    bool jalan = agitasiAktif();
+    if (jalan != agitJalanTerakhir) { agitJalanTerakhir = jalan; perluGambar = true; }
+  }
+
+  // Redraw halaman Test Motor saat status salah satu motor berubah.
+  if (halaman == HAL_TEST_MOTOR) {
     static uint8_t testStatusTerakhir = 0;
     uint8_t status = (pompaAktif(0) ? 1 : 0) |
                      (pompaAktif(1) ? 2 : 0) |
-                     (pompaAktif(2) ? 4 : 0);
+                     (pompaAktif(2) ? 4 : 0) |
+                     (dcAktif(DC_SABUN) ? 8 : 0) |
+                     (dcAktif(DC_LIMBAH) ? 16 : 0) |
+                     (dcAktif(DC_AGI) ? 32 : 0);
     if (status != testStatusTerakhir) { testStatusTerakhir = status; perluGambar = true; }
   }
 
@@ -719,13 +847,15 @@ void loop() {
   // E-stop: hentikan semua aktuator & batalkan proses
   if (digitalRead(PIN_ESTOP) == LOW) {
     pompaStopAllDarurat();               // potong seketika, tanpa ramp
+    dcStopAllDarurat();                  // agitasi + pompa DC, tanpa ramp
+    kalibDcFase = KDC_IDLE;
+    kalibDcIdx  = -1;
+    kalibDcUkur = false;
+    kalibStepperUkur = false;
     if (prosesJalan) {
       prosesBatal();
       tampilToast("E-STOP!");
     }
-    agitasiSet(0);
-    pompaLimbahSet(false);
-    pompaSabunSet(false);
   }
 
   bool animasiBerjalan = false;

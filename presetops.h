@@ -40,7 +40,7 @@ void ubahField(Preset &p, int f, int arah) {
       vol = constrain(vol + arah * 10, VOL_MIN, VOL_MAX);
       hitungUlang(p, vol); break;
     case 6: p.agitasiDetik = constrain(p.agitasiDetik + arah, 1, 60); break;
-    case 7: p.agitasiSpeed = constrain(p.agitasiSpeed + arah, 1, 5); break;
+    case 7: p.agitasiSpeed = constrain(p.agitasiSpeed + arah, 1, 3); break;
     case 8: p.totalDetik   = constrain(p.totalDetik + arah * 10, 30, 3600); break;
   }
 }

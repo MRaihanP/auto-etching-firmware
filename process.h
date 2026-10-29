@@ -26,7 +26,7 @@ void aksiFase(FaseProses f) {
   Preset &p = daftarPreset[presetTerpilih];
   switch (f) {
     case FASE_DOSING:
-      dcmotorStopAll();
+      dcStopAll();
       pompaMulai(0, p.mlHCl);   // HCl
       pompaMulai(1, p.mlH2O2);  // H2O2
       pompaMulai(2, p.mlH2O);   // H2O
@@ -38,6 +38,17 @@ void aksiFase(FaseProses f) {
     case FASE_DRAINING:
       agitasiSet(0);
       pompaLimbahSet(true);
+      {
+        int mlBuang = p.mlHCl + p.mlH2O2 + p.mlH2O;
+        unsigned long ms = dcDosisMs(1, mlBuang);
+        if (ms > 0) {
+          dbg.print(F("[PROSES] Perkiraan buang "));
+          dbg.print(mlBuang);
+          dbg.print(F(" ml = "));
+          dbg.print(ms / 1000);
+          dbg.println(F(" s (termasuk margin)"));
+        }
+      }
       break;
     case FASE_RINSING:
       pompaLimbahSet(false);

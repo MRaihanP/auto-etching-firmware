@@ -201,6 +201,27 @@ bool pompaTestMulai(int idx) {
   return true;
 }
 
+// Ubah RPM saat pompa sedang berjalan (test motor): target baru diterapkan
+// dengan ramp, bukan restart. Kalau pompa diam, hanya nilai tersimpan yang
+// berubah.
+void pompaAturRpmLive(int idx, int rpm) {
+  if (idx < 0 || idx > 2) return;
+  kalibStepperRpm[idx] = rpmPompaValid(rpm);
+
+  if (!pompaBisaGerak(idx)) return;
+  FastAccelStepper* s = pompaStepper[idx];
+  if (!s->isRunning()) return;
+
+  s->setSpeedInHz(rpmKeHz(kalibStepperRpm[idx]));
+  s->setAcceleration(PUMP_ACCEL_HZ2);
+  s->applySpeedAcceleration();
+
+  dbg.print(F("[POMPA] RPM live idx "));
+  dbg.print(idx);
+  dbg.print(F(" = "));
+  dbg.println(kalibStepperRpm[idx]);
+}
+
 // Berhenti normal: ramp turun (deselerasi) sampai motor diam.
 // pompaTargetAktif tetap true selama deselerasi; motorUpdate() yang
 // menyelesaikan status & mematikan driver setelah benar-benar berhenti.

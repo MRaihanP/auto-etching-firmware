@@ -12,7 +12,7 @@ Rujukan lain: `SUMMARY.md` (fitur) · `LOG.md` (changelog per versi) · `PROGRES
 
 | | **Lineage SAH (aktif)** | **Lineage LAMA (batal)** |
 |---|---|---|
-| Versi | **v0.5.0 → v0.5.4** | v0.5.0 → v0.8.3 |
+| Versi | **v0.5.0 → v0.6.0** | v0.5.0 → v0.8.3 |
 | Berkas inti | `auto-etching-firmware.ino` + `dcmotor.h`, `buzzer.h`, `motor.h` | `oled_pcb_baruuu.ino` + `aktuator.h` |
 | Sumber | branch `main` + **git tag** | folder `backup/` (**tanpa tag**) |
 | Status | ✅ jalan, teruji fisik | ❌ **rusak & dibatalkan** (tidak pernah di-commit ke `main`) |
@@ -27,6 +27,7 @@ Rujukan lain: `SUMMARY.md` (fitur) · `LOG.md` (changelog per versi) · `PROGRES
 
 | Versi | Tanggal | Git tag | Isi utama |
 |---|---|---|---|
+| **v0.6.0** | 2026-10-29 | `v0.6.0` | **Ramp semua motor** — stepper akselerasi 50.000 langkah/s² (start & stop), DC/agitasi ramp duty non-blocking `DC_RAMP_PCT_PER_SEC` 100 %/s; **Test Motor** jadi 7 baris scroll (3 stepper + sabun + limbah + agitasi) dengan ubah RPM/duty/SPD live; **kalibrasi stepper baru**: 10 rotasi penuh, hasil ukur 0,1 ml (step 0,1/0,5/1 ml), ramp-aware; **kalibrasi DC baru**: 10 detik pada duty target → ml/detik + margin 10%; **agitasi 3 level** SPD1/SPD2/SPD3 (tanpa ml); NVS `pompa` **v2** (kalibrasi lama di-reset ke default); `FW_VERSI`→v0.6.0 |
 | **v0.5.4** | 2026-10-28 | `v0.5.4` | Pompa stepper kini **ramp naik saat start** dan **ramp turun saat stop** (`stopMove()`), `PUMP_ACCEL_HZ2` 1.000.000 → **50.000** (0→500 rpm ±1,07 s); E-stop/timeout/stall tetap `forceStop()`; jeda menghitung sisa langkah setelah motor diam; `FW_VERSI`→v0.5.4 |
 | **v0.5.3** | 2026-10-28 | `v0.5.3` | Menu Kalibrasi → Motor + **Test Motor**: halaman baru untuk menyalakan pompa HCl/H₂O₂/Air **kontinu** (START → STOP) satu per satu atau **ketiga sekaligus**; default RPM tetap 500; `FW_VERSI`→v0.5.3 |
 | **v0.5.2** | 2026-10-28 | `v0.5.2` | Pompa stepper **DRV8825 1/32** (6400 langkah/putaran) dikendalikan **berbasis RPM 400–700** (default 500, kelipatan 100); pulsa via **FastAccelStepper** (MCPWM/PCNT) menggantikan `loop()`; kalibrasi baru **20 rotasi → ml/rotasi** dengan NVS key `pompa`; dosing selesai berbasis status pompa + timeout `2× estimasi + 10 s`; jeda melanjutkan sisa langkah; sketch uji `test/stepper-rpm/`; `FW_VERSI`→v0.5.2 |

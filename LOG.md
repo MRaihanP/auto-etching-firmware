@@ -27,6 +27,77 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-29] v0.6.0 — Ramp semua motor, Test Motor 7 baris, kalibrasi baru
+
+**Latar belakang:**
+- Motor tidak boleh langsung 0 → target (stepper maupun DC) karena beban
+  mekanis (peristaltik/agitator) bisa slip atau stall.
+- Kalibrasi lama hanya mencatat duty mentah (0–255) untuk DC dan agitasi,
+  sehingga tidak ada hubungannya dengan volume (ml).
+- Hasil ukur pompa stepper perlu resolusi lebih halus dari 1 ml.
+
+**Perubahan Kode:**
+- `config.h`
+  - `PUMP_KALIB_REV` 20 → **10** rotasi.
+  - Baru: `DC_RAMP_PCT_PER_SEC` 100 %/s, `KALIB_DC_DETIK` 10, `DC_MARGIN_PCT` 10,
+    `AGITASI_SPD1/2/3_DEFAULT` = 40/70/100 %.
+- `dcmotor.h` — **ditulis ulang**:
+  - 3 kanal (`DC_AGI`, `DC_SABUN`, `DC_LIMBAH`) dengan target & duty aktual
+    dalam persen, ramp **non-blocking** di `dcmotorUpdate()` (tidak ada
+    lonjakan 0 → 100 %).
+  - `dcSetPct/dcStop/dcStopAll/dcStopAllDarurat/dcAktif/dcDiTarget/dcDiam`.
+  - `agitasiSet(1..3)` memakai `agitasiSpdDuty[]`; `pompaSabunSet/pompaLimbahSet`
+    memakai `kalibDutyDC[]`.
+  - State machine kalibrasi DC: `RAMPUP → UKUR (10 s) → TURUN`; volume diukur
+    setelah pompa benar-benar diam sehingga hasil ml/detik tidak terpengaruh
+    ramp (volume ramp naik & turun saling meniadakan).
+  - `dcDosisMs(idx, ml)` = durasi dosing berbasis ml/detik + margin 10 %.
+- `motor.h` — `pompaAturRpmLive(idx, rpm)` untuk mengubah RPM saat pompa
+  berjalan (`applySpeedAcceleration()`, tetap ikut ramp).
+- `data.h`
+  - Halaman `HAL_TEST_POMPA` → **`HAL_TEST_MOTOR`**.
+  - Baru: `kalibStepperHasilMl10[]`, `kalibStepperStep` (0,1/0,5/1 ml),
+    `kalibDutyDC[2]`, `kalibDcHasilMl[2]`, `kalibDcMlPerSec[2]`, `kalibDcStep`,
+    state `KalibDcFase`, `agitasiSpdDuty[3]`, `agitasiSpdUji`,
+    `testMotorCursor/testMotorScroll/testAgitSpeed`, `kalibDcUkur`,
+    `kalibStepperUkur`.
+  - Dihapus: `kalibDuty[5]`, `kalibMl[2]`, `testPompaCursor`,
+    `kalibMotorRunning/StartMs/RunMs`.
+  - Preset default: speed agitasi 4/5 → 3.
+- `storage.h` — **`DataPompa` versi 2**: `rpm[3]`, `mlPerRev[3]`, `dcDuty[2]`,
+  `dcMlPerSec[2]`, `agitDuty[3]` + CRC. Kalibrasi versi lama otomatis tidak
+  valid → default. Speed agitasi preset lama (4/5) di-clamp ke 3 saat dimuat.
+- `presetops.h` — field “Speed agit” dibatasi 1–3.
+- `ui.h`
+  - Kalibrasi stepper: header `HCl 10rev`, baris START/STOP, RPM, **Hasil**
+    (0,1 ml, step bisa diganti), ml/rotasi 3 desimal, scroll.
+  - **Test Motor**: 7 baris (Semua / HCl / H2O2 / Air / Sabun / Limbah /
+    Agitasi), auto-scroll, nilai RPM/duty/SPD + status START/STOP.
+  - Kalibrasi DC: header `Sabun 10s`, START/STOP dengan hitung mundur
+    `STOP Ns`, Duty, Hasil (step 1/5/10 ml), ml/detik.
+  - Agitasi: 3 baris SPD1/SPD2/SPD3 (duty %) + status ON/OFF; ENTER
+    menjalankan level terpilih (ramp dari 0 %), tanpa `delay()`.
+- `auto-etching-firmware.ino`
+  - `testMotorMulaiSemua()` / `testMotorHentikanSemua()`.
+  - Handler stepper: START = putar `PUMP_KALIB_REV` rotasi, RPM & hasil live,
+    toast “Selesai, ukur ml” saat uji selesai.
+  - Handler DC: START/STOP uji 10 detik, duty & hasil live, step hasil.
+  - Handler agitasi: KIRI/KANAN duty, ENTER ON/OFF level terpilih.
+  - `dcmotorUpdate()` + `kalibDcUpdate()` dipanggil tiap `loop()`.
+  - E-stop memakai `dcStopAllDarurat()` (tanpa ramp) + reset state uji.
+  - `process.h`: `dcmotorStopAll()` → `dcStopAll()`; DRAINING mencatat
+    perkiraan durasi buang dari ml/detik kalibrasi + margin.
+
+**Catatan:**
+- Kalibrasi stepper tetap tepat 10 rotasi meskipun ada ramp, karena
+  FastAccelStepper menghitung langkah, bukan waktu.
+- Kalibrasi DC: duty memakai persen (0–100), bukan 0–255 lagi.
+- NVS `pompa` naik versi → **kalibrasi motor harus diulang** setelah update.
+- DC kurang presisi (selang/tegangan/viskositas); margin 10 % dipakai pada
+  dosing berbasis waktu, dan pembacaan ml/detik tetap ditampilkan apa adanya.
+
+---
+
 ## [2026-10-28] v0.5.4 — Ramp naik/turun pompa stepper (akselerasi & deselerasi)
 
 **Perubahan Kode:**
