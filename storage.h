@@ -207,8 +207,6 @@ void muatPompa() {
   for (int i = 0; i < 3; i++) {
     kalibStepperRpm[i] = valid ? rpmPompaValid(d.rpm[i]) : PUMP_RPM_DEFAULT;
     kalibStepperMl[i]  = valid ? d.mlPerRev[i] : 0.0f;
-    kalibStepperHasilMl10[i] =
-        (int)lround(kalibStepperMl[i] * (float)PUMP_KALIB_REV * 10.0f);
     agitasiSpdDuty[i] = valid ? constrain((int)d.agitDuty[i], 0, 100)
                               : agitDefault[i];
   }
@@ -216,7 +214,6 @@ void muatPompa() {
   for (int i = 0; i < 2; i++) {
     kalibDutyDC[i]    = valid ? constrain((int)d.dcDuty[i], 0, 100) : dcDefault[i];
     kalibDcMlPerSec[i] = valid ? d.dcMlPerSec[i] : 0.0f;
-    kalibDcHasilMl[i]  = (int)lround(kalibDcMlPerSec[i] * (float)KALIB_DC_DETIK);
   }
 
   dbg.println(valid ? F("[STORE] Kalibrasi motor dimuat") : F("[STORE] Kalibrasi motor belum ada (default)"));

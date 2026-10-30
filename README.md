@@ -16,14 +16,14 @@ dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
 - **Proses etching 5 fase non-blocking** — `DOSING → ETCHING → DRAINING → RINSING → SELESAI`
 - **Dosing 3 pompa peristaltik paralel** (DRV8825 1/16 = 3200 langkah/putaran, **400–700 rpm**, ml → langkah, non-blocking)
 - **Kecepatan pompa berbasis RPM** — default 500 rpm, dapat diubah 400/500/600/700 per pompa
-- **Kalibrasi pompa** — uji **10 rotasi** pada RPM terpilih, hasil ml/rotasi disimpan di NVS
-- **Kalibrasi pompa DC** — uji **10 detik** pada duty penuh, hasil ml/detik disimpan (margin 10%)
+- **Kalibrasi pompa** — uji **target ml**: masukkan ml → START (dosing pakai kalibrasi sekarang, ramp sama seperti Test Motor) → ukur hasil nyata → isi **Hasil** → ENTER menghitung **offset** dan mengkalibrasi ulang ml/rotasi
+- **Kalibrasi pompa DC** — uji **target ml** pada duty terpilih, hasil nyata diisi di baris Hasil → ENTER menghitung offset + ml/detik baru (margin dosing 10%)
 - **Agitasi 3 level** — SPD1/SPD2/SPD3 dalam %, tanpa kalibrasi ml
 - **3 aktuator DC via TB6612FNG PWM** — motor agitasi, pompa air sabun, pompa limbah
 - **5 sensor level non-contact** (strip nikel + `touchRead`, moving average)
 - **Sensor suhu DS18B20 ×3** pada satu bus 1-Wire, konversi non-blocking
 - **Sensor udara MQ-135** dengan divider analog & konversi ppm
-- **Kalibrasi** — stepper (10 rotasi → ml/rotasi), DC (10 detik → ml/detik), agitasi (SPD1–3), sensor level 0%/100%, suhu (offset), udara (acuan)
+- **Kalibrasi** — stepper (target ml → offset → ml/rotasi), DC (target ml → offset → ml/detik), agitasi (SPD1–3), sensor level 0%/100%, suhu (offset), udara (acuan)
 - **E-stop** GPIO 8 — hentikan semua aktuator & batalkan proses
 - **Buzzer non-blocking** — nada boot, klik, mulai, batal, selesai
 - **Exhaust fan** disambung langsung ke 12V, menyala terus (tidak dikendalikan firmware)
@@ -55,6 +55,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v0.6.4** | 2026-10-30 | `v0.6.4` | **Uji kalibrasi target ml per motor** — masukkan target ml, START (ramp sama seperti Test Motor), ukur hasil nyata, isi **Hasil**, ENTER menghitung **offset** + kalibrasi ulang (`cal = calLama × hasil / target`); halaman stepper & DC jadi 6 baris (START/STOP, RPM/Duty, Target, Hasil, Offset, ml/rotasi atau ml/detik); uji DC tanpa margin; `FW_VERSI`→v0.6.4 |
 | **v0.6.3** | 2026-10-29 | `v0.6.3` | **Test Motor = sketch `test/test-motor`**: start memakai `applySpeedAcceleration()` seperti sketch, RPM live langsung dipakai ramp; baris HCl/H2O2/Air menampilkan **target/aktual** (mis. `400/400`) sehingga terlihat kecepatan berhenti di target; `st` di sketch uji juga mencetak RPM aktual; `FW_VERSI`→v0.6.3 |
 | **v0.6.2** | 2026-10-29 | `v0.6.2` | **Step/rev 6400 → 3200 (DRV8825 1/16)** agar RPM sesuai target dan sama dengan sketch `test/test-motor`; akselerasi menjadi 1000 langkah/s² (= 18,75 rpm/detik); NVS `pompa` **v3** dengan migrasi otomatis `mlPerRev / 2`; `FW_VERSI`→v0.6.2 |
 | **v0.6.1** | 2026-10-29 | `v0.6.1` | Ramp stepper disamakan dengan sketch `test/test-motor`: akselerasi **18,75 rpm/detik** (0→500 rpm ±26,7 s, 0→400 rpm ±21,3 s), dipakai juga saat deselerasi; estimasi durasi dosing dibuat akurat (trapezoid/triangular) agar timeout tidak berlebihan; `FW_VERSI`→v0.6.1 |

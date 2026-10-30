@@ -149,6 +149,9 @@ bool pompaJalanLangkah(int idx, long langkah) {
     dbg.println(idx);
     return false;
   }
+  // Sama seperti sketch test/test-motor: commit speed+acceleration setelah
+  // perintah gerak, supaya ramp memakai target terbaru.
+  s->applySpeedAcceleration();
 
   dbg.print(F("[POMPA] Mulai idx "));
   dbg.print(idx);
@@ -177,6 +180,18 @@ bool pompaMulai(int idx, int ml) {
 bool pompaPutarRevolusi(int idx, int rev) {
   if (rev <= 0) return false;
   return pompaJalanLangkah(idx, (long)rev * PUMP_STEP_PER_REV);
+}
+
+// Uji kalibrasi berbasis target ml dengan kalibrasi tertentu (ml/rotasi).
+// Dipakai halaman kalibrasi: pompa bergerak sejauh `ml` menurut kalibrasi
+// yang sedang dipakai, lalu hasil ukur nyata dipakai untuk menghitung ulang.
+// Start/stop memakai jalur yang sama dengan Test Motor (ramp + deselerasi).
+bool pompaDosisKalibrasi(int idx, int ml, float calMlPerRev) {
+  if (idx < 0 || idx > 2 || ml <= 0 || calMlPerRev <= 0.0f) return false;
+  long langkah = (long)lround((double)ml * (double)PUMP_STEP_PER_REV /
+                              (double)calMlPerRev);
+  if (langkah <= 0) return false;
+  return pompaJalanLangkah(idx, langkah);
 }
 
 // Uji manual (halaman Test Pompa): berjalan terus sampai pompaStop(idx).

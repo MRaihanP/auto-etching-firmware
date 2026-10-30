@@ -1,6 +1,6 @@
 # PROGRESS — Checklist Implementasi Firmware Etching Otomatis
 
-Firmware: **Etching v0.6.3** · Board: **ESP32-S3 DevKitC**
+Firmware: **Etching v0.6.4** · Board: **ESP32-S3 DevKitC**
 Rencana teknis lengkap: `PROCESS.md` · Ringkasan: `SUMMARY.md` · Riwayat: `LOG.md`
 
 Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/terpakai** · ⬜ **Belum ada**
@@ -92,7 +92,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ `pompaMulai()` / `pompaStopAll()` / `pompaSelesai()` / `pompaProgres()` tersedia
 - [x] ✅ Hitung otomatis %H2O dan ml tiap bahan dari %HCl/%H2O2 + volume (`presetops.h:17-22`)
 - [x] ✅ Validasi rentang semua field preset (`presetops.h:49-62`)
-- [x] ✅ Halaman kalibrasi stepper: START 10 rotasi, RPM 400–700, hasil ukur 0,1 ml, ml/rotasi
+- [x] ✅ Halaman kalibrasi stepper: START uji **target ml**, RPM 400–700, hasil ukur nyata, offset, ml/rotasi
 - [x] ✅ Dosis 3 pompa berjalan **paralel** (sesuai keputusan desain di `PROCESS.md` §0)
 - [x] ✅ Kecepatan pompa berbasis RPM (default 500, batas 400–700)
 - [x] ✅ `langkahPerMl = PUMP_STEP_PER_REV / mlPerRotasi` (DRV8825 1/16 = 3200)
@@ -184,7 +184,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ Kalibrasi MQ-135: rekam acuan udara bersih & kotor (`.ino:365-386`)
 - [x] ✅ Kalibrasi suhu: pilih sensor per blok + offset ±0,1 °C (`.ino:325-362`)
 - [x] ✅ Kalibrasi agitasi: 3 level SPD1/SPD2/SPD3 (duty %) tanpa ml
-- [x] ✅ Kalibrasi DC: uji 10 detik + hasil ml → ml/detik + margin 10%
+- [x] ✅ Kalibrasi DC: uji target ml + hasil ukur → offset + ml/detik + margin 10% saat dosing
 - [x] ✅ **v0.5.2: kalibrasi pompa stepper** — rotasi penuh pada RPM 400–700, hasil ml/rotasi disimpan NVS (key `pompa`)
 - [x] ✅ **v0.5.3: halaman Test Motor** — START/STOP kontinu per pompa atau ketiga pompa sekaligus (Kalibrasi → Motor → Test Motor)
 - [x] ✅ **v0.5.4: ramp naik/turun pompa** — akselerasi 50.000 langkah/s², stop memakai `stopMove()`, E-stop/stall tetap `forceStop()`
@@ -192,6 +192,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ **v0.6.1: ramp stepper = sketch `test/test-motor`** — `PUMP_ACCEL_RPM_PER_SEC` 18,75 rpm/detik (0→500 rpm ±26,7 s), deselerasi sama, estimasi dosing trapezoid/triangular
 - [x] ✅ **v0.6.2: step/rev 6400 → 3200** — RPM kini sesuai target (sebelumnya fisik 2× lebih cepat); `PUMP_ACCEL_HZ2` = 1000 langkah/s² (sama dengan `accel` sketch); NVS `pompa` **v3** memigrasi `mlPerRev / 2`
 - [x] ✅ **v0.6.3: Test Motor = sketch** — `applySpeedAcceleration()` setelah start, RPM live langsung dipakai, `pompaRpmSekarang()` + UI `target/aktual` membuktikan kecepatan berhenti di target (400 tetap 400)
+- [x] ✅ **v0.6.4: uji kalibrasi target ml** — START/STOP memakai ramp yang sama seperti Test Motor; target ml → hasil ukur nyata → ENTER menghitung offset + kalibrasi ulang (stepper ml/rotasi, DC ml/detik); halaman kalibrasi 6 baris scrollable; uji DC tanpa margin
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]`/`[KALIB*]` ke Serial
 - [x] ✅ **v0.6.0: `kalibDuty[]` dihapus** — diganti `kalibDutyDC[2]` + `agitasiSpdDuty[3]`
 - [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik
@@ -261,11 +262,11 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [ ] ⬜ Uji 5 sensor touch di jerican kosong vs terisi (repeatability < 5%)
 - [ ] ⬜ Verifikasi address DS18B20 fisik cocok dengan `sensor.h:119-123`
 - [ ] ⬜ Timbang air: 3 pompa × 3 ulangan → error ≤ 5% dari target
-- [ ] ⬜ Kalibrasi DC sabun/limbah 10 detik × 3 ulangan → ml/detik konsisten
+- [ ] ⬜ Kalibrasi DC sabun/limbah target ml × 3 ulangan → ml/detik konsisten & offset ≤ 5%
 - [ ] ⬜ Uji ramp agitasi & pompa DC (tidak ada lonjakan duty saat start/stop)
 - [ ] ⬜ **Upload & uji `test/stepper-rpm/stepper-rpm.ino`** — verifikasi 400/500/600/700 rpm tanpa step-loss
 - [ ] ⬜ Uji driver DRV8825 3 channel (SLP/STEP/DIR) dengan pin map final
-- [ ] ⬜ Kalibrasi 10 rotasi tiap pompa pada RPM operasi → catat ml/rotasi, cek konsistensi 3 ulangan
+- [ ] ⬜ Kalibrasi target ml tiap pompa pada RPM operasi → catat ml/rotasi & offset, cek konsistensi 3 ulangan
 - [ ] ⬜ Uji respons E-stop (target < 5 ms dari LOW ke semua output mati)
 - [ ] ⬜ Uji drain: volume larutan terbuang habis dalam `T_DRAINING_MS`
 - [ ] ⬜ Uji overfill guard (isi tangki limbah hampir penuh)

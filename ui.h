@@ -482,16 +482,17 @@ void gambarKalibMotorList() {
 }
 
 // ================= HALAMAN: KALIBRASI STEPPER (Pompa HCl/H2O2/Air) =================
-// Baris: START/STOP (uji PUMP_KALIB_REV rotasi), RPM, Hasil ukur (0,1 ml),
-// ml/rotasi. Ramp up/down tetap dihitung stepper, jadi jumlah langkah tepat
-// PUMP_KALIB_REV rotasi. Konten lebih tinggi dari area tampil -> scroll.
-const int KALIB_STEPPER_ROW_H     = 12;
-const int KALIB_STEPPER_CONTENT_H = 42;
+// Baris: START/STOP (uji target ml), RPM, Target, Hasil ukur, Offset,
+// ml/rotasi. Start/stop memakai ramp yang sama seperti Test Motor. Konten
+// lebih tinggi dari area tampil -> scroll.
+const int KALIB_STEPPER_ROW_TOP[6] = { 0, 14, 24, 34, 44, 54 };
+const int KALIB_STEPPER_ROW_H[6]   = { 12, 10, 10, 10, 10, 10 };
+const int KALIB_STEPPER_CONTENT_H  = 64;
 
 void gambarKalibStepper() {
   const char* nama[] = { "HCl", "H2O2", "Air" };
   char judul[20];
-  sprintf(judul, "%s %drev", nama[kalibMotorIdx], PUMP_KALIB_REV);
+  sprintf(judul, "Kal %s", nama[kalibMotorIdx]);
   gambarHeader(judul);
 
   int idx = kalibMotorIdx;
@@ -504,9 +505,9 @@ void gambarKalibStepper() {
 
   oled.setTextSize(1);
 
-  // --- Baris 0: START / STOP ---
+  // --- Baris 0: START / STOP (uji target ml) ---
   {
-    int y = baseY;
+    int y = baseY + KALIB_STEPPER_ROW_TOP[0];
     if (y + 12 > HEADER_H && y < AREA_BAWAH) {
       bool sel = (kalibStepperCursor == 0);
       if (sel) {
@@ -516,13 +517,15 @@ void gambarKalibStepper() {
         oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
         oled.setTextColor(WHITE);
       }
-      teksTengah(pompaAktif(idx) ? "STOP" : "START", y + 2, 1);
+      if (pompaAktif(idx)) sprintf(buf, "STOP %d%%", pompaProgres(idx));
+      else                 strcpy(buf, "START");
+      teksTengah(buf, y + 2, 1);
     }
   }
 
   // --- Baris 1: RPM ---
   {
-    int y = baseY + 12;
+    int y = baseY + KALIB_STEPPER_ROW_TOP[1];
     if (y + 10 > HEADER_H && y < AREA_BAWAH) {
       bool sel = (kalibStepperCursor == 1);
       if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
@@ -534,26 +537,60 @@ void gambarKalibStepper() {
     }
   }
 
-  // --- Baris 2: Hasil ukur untuk PUMP_KALIB_REV rotasi (0,1 ml) ---
+  // --- Baris 2: target ml yang akan didosis ---
   {
-    int y = baseY + 22;
+    int y = baseY + KALIB_STEPPER_ROW_TOP[2];
     if (y + 10 > HEADER_H && y < AREA_BAWAH) {
       bool sel = (kalibStepperCursor == 2);
       if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
       oled.setTextColor(sel ? BLACK : WHITE);
       oled.setCursor(2, y);
-      sprintf(buf, "Hasil x%.1f", kalibStepperStep / 10.0f);
+      sprintf(buf, "Target x%d", kalibStepperTgtStep);
       oled.print(buf);
-      sprintf(buf, "%.1f ml", kalibStepperHasilMl10[idx] / 10.0f);
+      sprintf(buf, "%d ml", kalibStepperTargetMl[idx]);
       teksKanan(buf, SCREEN_WIDTH - 2, y);
     }
   }
 
-  // --- Baris 3: ml per rotasi (hasil kalibrasi) ---
+  // --- Baris 3: hasil ukur nyata (ENTER = hitung offset) ---
   {
-    int y = baseY + 32;
+    int y = baseY + KALIB_STEPPER_ROW_TOP[3];
     if (y + 10 > HEADER_H && y < AREA_BAWAH) {
       bool sel = (kalibStepperCursor == 3);
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("Hasil"));
+      if (kalibStepperUkurMl10[idx] > 0)
+        sprintf(buf, "%.1f ml", kalibStepperUkurMl10[idx] / 10.0f);
+      else
+        strcpy(buf, "--");
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 4: offset terakhir (hasil hitung, % terhadap target) ---
+  {
+    int y = baseY + KALIB_STEPPER_ROW_TOP[4];
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      bool sel = (kalibStepperCursor == 4);
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("Offset"));
+      if (kalibStepperOffsetAda[idx])
+        sprintf(buf, "%+.1f%%", kalibStepperOffsetX10[idx] / 10.0f);
+      else
+        strcpy(buf, "--");
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 5: ml per rotasi (hasil kalibrasi) ---
+  {
+    int y = baseY + KALIB_STEPPER_ROW_TOP[5];
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      bool sel = (kalibStepperCursor == 5);
       if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
       oled.setTextColor(sel ? BLACK : WHITE);
       oled.setCursor(2, y);
@@ -661,17 +698,19 @@ void gambarTestMotor() {
 }
 
 // ================= HALAMAN: KALIBRASI DC (Pompa Sabun/Limbah) =================
-// Kalibrasi: pompa ditahan di duty penuh selama KALIB_DC_DETIK detik,
-// user mengukur ml, firmware menyimpan ml/detik.
-// Baris: START/STOP, Duty, Hasil ukur, ml/detik. Perlu scroll.
-const int KALIB_DC_CONTENT_H  = 44;
-const int KALIB_DC_ROW_TOP[4] = { 0, 14, 24, 34 };
+// Uji berbasis target ml: pompa diramp ke duty terpilih, dijalankan selama
+// durasi hasil hitung (ml / laju sekarang), lalu diramp turun. User mengukur
+// hasil nyata, mengisi baris Hasil, dan ENTER menghitung offset + kalibrasi.
+// Baris: START/STOP, Duty, Target, Hasil, Offset, ml/detik. Perlu scroll.
+const int KALIB_DC_CONTENT_H  = 64;
+const int KALIB_DC_ROW_TOP[6] = { 0, 14, 24, 34, 44, 54 };
+const int KALIB_DC_ROW_H[6]   = { 12, 10, 10, 10, 10, 10 };
 
 void gambarKalibDC() {
   const char* nama[] = { "Sabun", "Limbah" };
   int idx = kalibMotorIdx - 3;                 // 0=sabun, 1=limbah
   char judul[16];
-  sprintf(judul, "%s %ds", nama[idx], KALIB_DC_DETIK);
+  sprintf(judul, "Kal %s", nama[idx]);
   gambarHeader(judul);
 
   oled.setTextSize(1);
@@ -721,7 +760,7 @@ void gambarKalibDC() {
     }
   }
 
-  // --- Baris 2: Hasil ukur (ml selama KALIB_DC_DETIK detik) ---
+  // --- Baris 2: target ml yang akan didosis ---
   {
     int y = baseY + KALIB_DC_ROW_TOP[2];
     bool sel = (kalibDCCursor == 2);
@@ -729,17 +768,50 @@ void gambarKalibDC() {
       if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
       oled.setTextColor(sel ? BLACK : WHITE);
       oled.setCursor(2, y);
-      sprintf(buf, "Hasil x%d", kalibDcStep);
+      sprintf(buf, "Target x%d", kalibDcTgtStep);
       oled.print(buf);
-      sprintf(buf, "%d ml", kalibDcHasilMl[idx]);
+      sprintf(buf, "%d ml", kalibDcTargetMl[idx]);
       teksKanan(buf, SCREEN_WIDTH - 2, y);
     }
   }
 
-  // --- Baris 3: ml/detik (hasil kalibrasi) ---
+  // --- Baris 3: hasil ukur nyata (ENTER = hitung offset) ---
   {
     int y = baseY + KALIB_DC_ROW_TOP[3];
     bool sel = (kalibDCCursor == 3);
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      sprintf(buf, "Hasil x%d", kalibDcStep);
+      oled.print(buf);
+      if (kalibDcUkurMl[idx] > 0) sprintf(buf, "%d ml", kalibDcUkurMl[idx]);
+      else                        strcpy(buf, "--");
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 4: offset terakhir (% terhadap target) ---
+  {
+    int y = baseY + KALIB_DC_ROW_TOP[4];
+    bool sel = (kalibDCCursor == 4);
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("Offset"));
+      if (kalibDcOffsetAda[idx])
+        sprintf(buf, "%+.1f%%", kalibDcOffsetX10[idx] / 10.0f);
+      else
+        strcpy(buf, "--");
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 5: ml/detik (hasil kalibrasi) ---
+  {
+    int y = baseY + KALIB_DC_ROW_TOP[5];
+    bool sel = (kalibDCCursor == 5);
     if (y + 10 > HEADER_H && y < AREA_BAWAH) {
       if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
       oled.setTextColor(sel ? BLACK : WHITE);

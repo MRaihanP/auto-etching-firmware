@@ -27,6 +27,45 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-30] v0.6.4 — Uji kalibrasi per motor (target ml → offset → kalibrasi ulang)
+
+**Latar belakang:**
+- Kalibrasi lama memakai 10 rotasi (stepper) / 10 detik (DC), lalu user
+  menghitung sendiri. Tidak ada verifikasi bahwa hasil dosing benar-benar
+  sesuai target ml.
+- Start/stop kalibrasi juga harus memakai jalur yang sama dengan Test Motor
+  (ramp naik/turun) agar pump head tidak rusak.
+
+**Perubahan Kode:**
+- `motor.h`
+  - `pompaJalanLangkah()` kini memanggil `applySpeedAcceleration()` setelah
+    `move()` (paritas dengan sketch `test/test-motor`).
+  - Fungsi baru `pompaDosisKalibrasi(idx, ml, calMlPerRev)` — dosing sejauh
+    target ml memakai kalibrasi yang dipilih, lewat jalur ramp yang sama.
+- `dcmotor.h`
+  - `dcKalibrasiMs(ml, rate)` — durasi uji **tanpa** margin 10%; kalau margin
+    ikut dihitung saat uji, hasil ukur selalu ~10% di atas target.
+- `data.h` — state uji baru: target ml, hasil ukur, offset, kalibrasi efektif
+  saat uji, untuk 3 pompa stepper dan 2 pompa DC.
+- `ui.h` — halaman kalibrasi stepper & DC menjadi **6 baris** (START/STOP,
+  RPM/Duty, Target, Hasil, Offset, ml/rotasi atau ml/detik), scrollable.
+- `auto-etching-firmware.ino`
+  - START menjalankan uji target ml dengan kalibrasi sekarang; STOP memakai
+    `pompaStop()`/`dcStop()` (ramp turun).
+  - ENTER di baris **Hasil** menghitung `offset = (hasil - target) / target`
+    dan kalibrasi baru `cal = calLama * hasil / target`, lalu simpan NVS.
+  - Target/Duty/Hasil dikunci saat uji berjalan supaya hasil tidak ambigu.
+- `storage.h` — field lama (hasil 10 rotasi/10 detik) tidak lagi diturunkan;
+  `mlPerRev` dan `dcMlPerSec` tetap format NVS `pompa` v3.
+
+**Catatan:**
+- Uji stepper bergerak tepat sejumlah langkah = target ml / kalibrasi, jadi
+  hasil ml/rotasi tetap akurat meskipun ramp belum mencapai RPM target.
+- Uji DC memakai duty terpilih dan durasi tanpa margin; margin 10% tetap
+  dipakai saat dosing normal (`dcDosisMs`).
+
+---
+
 ## [2026-10-29] v0.6.3 — Test Motor: RPM aktual ditampilkan & start = sketch
 
 **Latar belakang:**

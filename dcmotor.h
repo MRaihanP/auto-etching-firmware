@@ -124,20 +124,34 @@ bool agitasiAktif() { return dcAktif(DC_AGI); }
 void pompaSabunSet(bool on)  { dcSetPct(DC_SABUN,  on ? kalibDutyDC[0] : 0.0f); }
 void pompaLimbahSet(bool on) { dcSetPct(DC_LIMBAH, on ? kalibDutyDC[1] : 0.0f); }
 
-// Durasi (ms) untuk memindahkan `ml` pada pompa DC idx (0=sabun, 1=limbah).
-// Sudah termasuk DC_MARGIN_PCT. 0 = pompa belum dikalibrasi.
-unsigned long dcDosisMs(int idx, int ml) {
-  if (idx < 0 || idx > 1 || ml <= 0) return 0;
-  float rate = kalibDcMlPerSec[idx];
-  if (rate <= 0.0f) return 0;
+// Durasi (ms) untuk memindahkan `ml` pada laju `rate` (ml/detik).
+// Sudah termasuk DC_MARGIN_PCT. 0 = laju belum diketahui.
+unsigned long dcDosisMsRate(int ml, float rate) {
+  if (ml <= 0 || rate <= 0.0f) return 0;
   float detik = (float)ml / rate * (1.0f + DC_MARGIN_PCT / 100.0f);
   return (unsigned long)(detik * 1000.0f);
 }
 
-// ================= KALIBRASI DC 10 DETIK =================
-// Alur: RAMPUP (tunggu duty penuh) -> UKUR (KALIB_DC_DETIK detik)
-//       -> TURUN (tunggu diam). Volume diukur SETELAH pompa benar-benar
-//       berhenti, jadi hasil ml/detik tidak terpengaruh ramp.
+// Durasi uji kalibrasi TANPA margin. Kalau margin ikut diterapkan saat uji,
+// hasil ukur akan selalu ~10% di atas target dan kalibrasi jadi melenceng.
+unsigned long dcKalibrasiMs(int ml, float rate) {
+  if (ml <= 0 || rate <= 0.0f) return 0;
+  return (unsigned long)(((float)ml / rate) * 1000.0f);
+}
+
+// Durasi (ms) untuk memindahkan `ml` pada pompa DC idx (0=sabun, 1=limbah).
+// 0 = pompa belum dikalibrasi.
+unsigned long dcDosisMs(int idx, int ml) {
+  if (idx < 0 || idx > 1) return 0;
+  return dcDosisMsRate(ml, kalibDcMlPerSec[idx]);
+}
+
+// ================= UJI KALIBRASI DC (target ml) =================
+// Alur: RAMPUP (tunggu duty target) -> UKUR (durasi = ml / laju, tanpa margin)
+// -> TURUN (tunggu diam). Volume diukur SETELAH pompa benar-benar berhenti,
+// jadi user mengukur hasil nyata tanpa menunggu motor.
+// Start/stop memakai dcSetPct()/dcStop() yang sama dengan Test Motor (ramp),
+// bukan lompatan duty.
 void kalibDcMulai(int idx) {
   if (idx < 0 || idx > 1) return;
   kalibDcIdx = idx;
@@ -154,7 +168,8 @@ bool kalibDcJalan() { return kalibDcFase != KDC_IDLE; }
 
 int kalibDcSisaDetik() {
   if (kalibDcFase != KDC_UKUR) return 0;
-  unsigned long total = (unsigned long)KALIB_DC_DETIK * 1000UL;
+  unsigned long total = kalibDcDurasiMs;
+  if (total == 0) return 0;
   unsigned long lewat = millis() - kalibDcT0;
   if (lewat >= total) return 0;
   return (int)((total - lewat + 999UL) / 1000UL);
@@ -169,7 +184,7 @@ void kalibDcUpdate() {
       }
       break;
     case KDC_UKUR:
-      if (millis() - kalibDcT0 >= (unsigned long)KALIB_DC_DETIK * 1000UL) {
+      if (millis() - kalibDcT0 >= kalibDcDurasiMs) {
         dcStop(kalibDcIdx + 1);
         kalibDcFase = KDC_TURUN;
       }
