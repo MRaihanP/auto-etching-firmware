@@ -316,9 +316,7 @@ void tanganiTombol(int t) {
             } else if (pompaDosisKalibrasi(idx, targetMl, calUsed)) {
               kalibStepperCalUsed[idx] = calUsed;
               kalibStepperUkur = true;
-              char msg[24];
-              sprintf(msg, "Ukur %d ml", targetMl);
-              tampilToast(msg);
+              tampilToast("Ramp ke RPM...");
             } else {
               tampilToast("Gagal start");
             }
@@ -884,7 +882,12 @@ void loop() {
       perluGambar = true;
       if (!jalan && kalibStepperUkur) {
         kalibStepperUkur = false;
-        tampilToast("Selesai, ukur ml");
+        if (pompaKalibGagal[kalibMotorIdx]) {
+          pompaKalibGagal[kalibMotorIdx] = false;
+          tampilToast("Gagal capai RPM");
+        } else {
+          tampilToast("Selesai, ukur ml");
+        }
       }
     }
     // Progres % berubah selama pompa berjalan.

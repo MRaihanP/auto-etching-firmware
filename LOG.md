@@ -27,6 +27,44 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-30] v0.6.5 — Kalibrasi stepper: rotasi dihitung hanya saat RPM target
+
+**Latar belakang:**
+- Uji kalibrasi v0.6.4 menghitung seluruh langkah perintah, termasuk ramp
+  up/down. Saat ramp up pompa belum menyedot cairan, sehingga ml/rotasi yang
+  dihitung menjadi terlalu kecil.
+- Rotasi yang dipakai untuk kalibrasi harus rotasi **setelah kecepatan
+  aktual mencapai RPM target**, bukan saat ramp.
+
+**Perubahan Kode:**
+- `motor.h`
+  - `pompaDosisKalibrasi()` sekarang menjalankan pompa kontinu dengan ramp
+    (`runForward()`), lalu menunggu kecepatan aktual ≥ 98% RPM target.
+  - Begitu speed target tercapai, posisi awal dicatat dan langkah target
+    (`target ml / kalibrasi`) dihitung dari titik itu.
+  - Setelah langkah target tercapai, pompa dihentikan dengan `pompaStop()`
+    (deselerasi/ramp turun), bukan `forceStop()`.
+  - Timeout 60 detik bila RPM target tidak tercapai → berhenti dengan ramp
+    dan toast `Gagal capai RPM`.
+  - Progres kalibrasi 0% selama ramp, lalu naik hanya untuk langkah yang
+    dihitung; status baris START menampilkan `RAMP...` saat ramp up.
+  - Status kalibrasi dibersihkan di `pompaStop()`, `pompaStopDarurat()`,
+    `pompaJalanLangkah()`, dan `pompaTestMulai()` agar tidak bentrok dengan
+    dosing/Test Motor.
+- `auto-etching-firmware.ino` — toast awal `Ramp ke RPM...`; saat selesai
+  tetap `Selesai, ukur ml`, dan membedakan kegagalan capai RPM.
+- `ui.h` — baris START/STOP menampilkan `RAMP...` selama fase ramp up.
+
+**Catatan:**
+- Target ml sekarang berarti volume yang keluar **saat pompa sudah di RPM
+  target**. Ramp up/down tetap berputar demi keamanan pump head, tetapi tidak
+  dihitung sebagai volume.
+- Karena ramp sangat landai (18,75 rpm/detik), uji kalibrasi akan terasa lama
+  (mis. 0→500 rpm ±26,7 detik, lalu ±26,7 detik turun). Ini konsekuensi dari
+  syarat start/stop yang sama dengan Test Motor.
+
+---
+
 ## [2026-10-30] v0.6.4 — Uji kalibrasi per motor (target ml → offset → kalibrasi ulang)
 
 **Latar belakang:**

@@ -517,8 +517,13 @@ void gambarKalibStepper() {
         oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
         oled.setTextColor(WHITE);
       }
-      if (pompaAktif(idx)) sprintf(buf, "STOP %d%%", pompaProgres(idx));
-      else                 strcpy(buf, "START");
+      if (pompaKalibRamp(idx)) {
+        strcpy(buf, "RAMP...");
+      } else if (pompaAktif(idx)) {
+        sprintf(buf, "STOP %d%%", pompaProgres(idx));
+      } else {
+        strcpy(buf, "START");
+      }
       teksTengah(buf, y + 2, 1);
     }
   }

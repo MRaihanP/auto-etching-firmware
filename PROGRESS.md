@@ -1,6 +1,6 @@
 # PROGRESS — Checklist Implementasi Firmware Etching Otomatis
 
-Firmware: **Etching v0.6.4** · Board: **ESP32-S3 DevKitC**
+Firmware: **Etching v0.6.5** · Board: **ESP32-S3 DevKitC**
 Rencana teknis lengkap: `PROCESS.md` · Ringkasan: `SUMMARY.md` · Riwayat: `LOG.md`
 
 Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/terpakai** · ⬜ **Belum ada**
@@ -92,7 +92,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ `pompaMulai()` / `pompaStopAll()` / `pompaSelesai()` / `pompaProgres()` tersedia
 - [x] ✅ Hitung otomatis %H2O dan ml tiap bahan dari %HCl/%H2O2 + volume (`presetops.h:17-22`)
 - [x] ✅ Validasi rentang semua field preset (`presetops.h:49-62`)
-- [x] ✅ Halaman kalibrasi stepper: START uji **target ml**, RPM 400–700, hasil ukur nyata, offset, ml/rotasi
+- [x] ✅ Halaman kalibrasi stepper: START uji **target ml** (hanya rotasi di RPM target yang dihitung), RPM 400–700, hasil ukur nyata, offset, ml/rotasi
 - [x] ✅ Dosis 3 pompa berjalan **paralel** (sesuai keputusan desain di `PROCESS.md` §0)
 - [x] ✅ Kecepatan pompa berbasis RPM (default 500, batas 400–700)
 - [x] ✅ `langkahPerMl = PUMP_STEP_PER_REV / mlPerRotasi` (DRV8825 1/16 = 3200)
@@ -193,6 +193,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ **v0.6.2: step/rev 6400 → 3200** — RPM kini sesuai target (sebelumnya fisik 2× lebih cepat); `PUMP_ACCEL_HZ2` = 1000 langkah/s² (sama dengan `accel` sketch); NVS `pompa` **v3** memigrasi `mlPerRev / 2`
 - [x] ✅ **v0.6.3: Test Motor = sketch** — `applySpeedAcceleration()` setelah start, RPM live langsung dipakai, `pompaRpmSekarang()` + UI `target/aktual` membuktikan kecepatan berhenti di target (400 tetap 400)
 - [x] ✅ **v0.6.4: uji kalibrasi target ml** — START/STOP memakai ramp yang sama seperti Test Motor; target ml → hasil ukur nyata → ENTER menghitung offset + kalibrasi ulang (stepper ml/rotasi, DC ml/detik); halaman kalibrasi 6 baris scrollable; uji DC tanpa margin
+- [x] ✅ **v0.6.5: kalibrasi hitung rotasi di RPM target** — ramp up/down tidak dihitung; posisi mulai dicatat saat kecepatan aktual ≥98% target, langkah target dihitung dari titik itu lalu diramp turun; UI `RAMP...` + progres 0% selama ramp; timeout 60 s → `Gagal capai RPM`
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]`/`[KALIB*]` ke Serial
 - [x] ✅ **v0.6.0: `kalibDuty[]` dihapus** — diganti `kalibDutyDC[2]` + `agitasiSpdDuty[3]`
 - [ ] ⚠️ **Address DS18B20 hardcode** di `sensor.h:119-123` — harus cocok address fisik

@@ -38,6 +38,16 @@ bool pompaSedangBerhenti[3] = { false, false, false }; // stopMove() berjalan
 bool pompaJedaPending[3]    = { false, false, false }; // jeda diminta, sisa dihitung saat diam
 bool pompaLanjutPending[3]  = { false, false, false }; // lanjut diminta saat masih deselerasi
 
+// Uji kalibrasi: rotasi yang dihitung hanya saat motor sudah di RPM target.
+// Ramp up/down tetap berjalan (aman untuk pump head) tetapi tidak dihitung
+// sebagai volume yang tersedot.
+bool          pompaKalibAktif[3]  = { false, false, false };
+bool          pompaKalibHitung[3] = { false, false, false }; // true = sudah di RPM target
+bool          pompaKalibGagal[3]  = { false, false, false }; // gagal capai RPM (timeout)
+long          pompaKalibLangkah[3]= { 0, 0, 0 };             // langkah yang dihitung
+unsigned long pompaKalibMulaiMs[3]= { 0, 0, 0 };
+#define POMPA_KALIB_RAMP_TIMEOUT_MS 60000UL
+
 // RPM dibatasi 400-700 dan hanya kelipatan 100 (400/500/600/700).
 int rpmPompaValid(int rpm) {
   int r = constrain(rpm, PUMP_RPM_MIN, PUMP_RPM_MAX);
@@ -124,6 +134,8 @@ bool pompaJalanLangkah(int idx, long langkah) {
 
   FastAccelStepper* s = pompaStepper[idx];
   if (s->isRunning()) s->forceStop();
+  pompaKalibAktif[idx]  = false;
+  pompaKalibHitung[idx] = false;
 
   uint32_t hz = rpmKeHz(kalibStepperRpm[idx]);
   if (s->setSpeedInHz(hz) != 0) {
@@ -182,16 +194,62 @@ bool pompaPutarRevolusi(int idx, int rev) {
   return pompaJalanLangkah(idx, (long)rev * PUMP_STEP_PER_REV);
 }
 
-// Uji kalibrasi berbasis target ml dengan kalibrasi tertentu (ml/rotasi).
-// Dipakai halaman kalibrasi: pompa bergerak sejauh `ml` menurut kalibrasi
-// yang sedang dipakai, lalu hasil ukur nyata dipakai untuk menghitung ulang.
-// Start/stop memakai jalur yang sama dengan Test Motor (ramp + deselerasi).
+// Mulai uji kalibrasi berbasis target ml. Pompa diramp dari 0 ke RPM target;
+// penghitungan langkah BARU dimulai setelah kecepatan aktual mencapai target
+// (ramp up tidak dihitung). Setelah langkah target tercapai, pompa diramp
+// turun. Dengan begitu ml/rotasi dihitung hanya dari rotasi di speed target.
 bool pompaDosisKalibrasi(int idx, int ml, float calMlPerRev) {
   if (idx < 0 || idx > 2 || ml <= 0 || calMlPerRev <= 0.0f) return false;
   long langkah = (long)lround((double)ml * (double)PUMP_STEP_PER_REV /
                               (double)calMlPerRev);
   if (langkah <= 0) return false;
-  return pompaJalanLangkah(idx, langkah);
+
+  FastAccelStepper* s = pompaStepper[idx];
+  if (s == nullptr) return false;
+  // Jangan pernah forceStop dari jalur kalibrasi: kalau masih bergerak,
+  // tunggu benar-benar diam (stop normal selalu memakai ramp).
+  if (s->isRunning()) return false;
+
+  uint32_t hz = rpmKeHz(kalibStepperRpm[idx]);
+  if (s->setSpeedInHz(hz) != 0) return false;
+  s->setAcceleration(PUMP_ACCEL_HZ2);
+
+  long pos = (long)s->getCurrentPosition();
+  pompaAwalLangkah[idx]     = pos;
+  pompaTargetLangkah[idx]   = langkah;   // progres = langkah yang dihitung
+  pompaPosisiTerakhir[idx]  = pos;
+  pompaTerakhirGerakMs[idx] = millis();
+  pompaSisaLangkah[idx]     = 0;
+  pompaTargetAktif[idx]     = true;
+  pompaSedangBerhenti[idx]  = false;
+  pompaJedaPending[idx]     = false;
+  pompaLanjutPending[idx]   = false;
+  pompaKalibAktif[idx]      = true;
+  pompaKalibHitung[idx]     = false;
+  pompaKalibGagal[idx]      = false;
+  pompaKalibLangkah[idx]    = langkah;
+  pompaKalibMulaiMs[idx]    = millis();
+
+  if (s->runForward() != MOVE_OK) {
+    pompaTargetAktif[idx] = false;
+    pompaKalibAktif[idx]  = false;
+    return false;
+  }
+  s->applySpeedAcceleration();
+
+  dbg.print(F("[POMPA] Kalib idx "));
+  dbg.print(idx);
+  dbg.print(F(" target="));
+  dbg.print(ml);
+  dbg.print(F(" ml ("));
+  dbg.print(langkah);
+  dbg.println(F(" langkah di speed target)"));
+  return true;
+}
+
+// True selama fase ramp up kalibrasi (belum mencapai RPM target).
+bool pompaKalibRamp(int idx) {
+  return idx >= 0 && idx < 3 && pompaKalibAktif[idx] && !pompaKalibHitung[idx];
 }
 
 // Uji manual (halaman Test Pompa): berjalan terus sampai pompaStop(idx).
@@ -201,6 +259,8 @@ bool pompaTestMulai(int idx) {
 
   FastAccelStepper* s = pompaStepper[idx];
   if (s->isRunning()) s->forceStop();
+  pompaKalibAktif[idx]  = false;
+  pompaKalibHitung[idx] = false;
 
   uint32_t hz = rpmKeHz(kalibStepperRpm[idx]);
   if (s->setSpeedInHz(hz) != 0) {
@@ -269,6 +329,8 @@ void pompaStop(int idx) {
 
   FastAccelStepper* s = pompaStepper[idx];
   bool aktif = pompaTargetAktif[idx];
+  pompaKalibAktif[idx]  = false;
+  pompaKalibHitung[idx] = false;
 
   if (!s->isRunning()) {
     // Sudah diam: cukup matikan driver.
@@ -312,6 +374,9 @@ void pompaStopDarurat(int idx) {
   pompaJedaPending[idx]    = false;
   pompaLanjutPending[idx]  = false;
   pompaSisaLangkah[idx]    = 0;
+  pompaKalibAktif[idx]     = false;
+  pompaKalibHitung[idx]    = false;
+  pompaKalibGagal[idx]     = false;
 
   if (aktif) {
     dbg.print(F("[POMPA] Stop darurat idx "));
@@ -400,6 +465,8 @@ bool semuaPompaSelesai() {
 
 int pompaProgres(int idx) {
   if (idx < 0 || idx > 2 || !pompaTargetAktif[idx] || pompaTargetLangkah[idx] <= 0) return 100;
+  // Kalibrasi: selama ramp up belum ada rotasi yang dihitung.
+  if (pompaKalibAktif[idx] && !pompaKalibHitung[idx]) return 0;
   long done = (long)pompaStepper[idx]->getCurrentPosition() - pompaAwalLangkah[idx];
   long persen = done * 100L / pompaTargetLangkah[idx];
   return (int)constrain(persen, 0L, 100L);
@@ -444,6 +511,45 @@ void motorUpdate() {
     }
 
     bool jalan = s->isRunning();
+
+    // Uji kalibrasi: hitung langkah hanya setelah kecepatan aktual mencapai
+    // RPM target (ramp up tidak dihitung sebagai volume tersedot).
+    if (pompaKalibAktif[i] && jalan) {
+      if (!pompaKalibHitung[i]) {
+        int32_t mhz = s->getCurrentSpeedInMilliHz();
+        if (mhz < 0) mhz = -mhz;
+        uint32_t hzTarget = rpmKeHz(kalibStepperRpm[i]);
+        if ((uint32_t)mhz >= hzTarget * 980UL) {   // >= 98% target
+          pompaKalibHitung[i]     = true;
+          pompaAwalLangkah[i]     = pos;
+          pompaPosisiTerakhir[i]  = pos;
+          pompaTerakhirGerakMs[i] = now;
+          dbg.print(F("[POMPA] Kalib capai RPM idx "));
+          dbg.print(i);
+          dbg.print(F(" ("));
+          dbg.print(rpmPompaValid(kalibStepperRpm[i]));
+          dbg.println(F(" rpm), mulai hitung"));
+        } else if (now - pompaKalibMulaiMs[i] > POMPA_KALIB_RAMP_TIMEOUT_MS) {
+          pompaKalibGagal[i] = true;
+          pompaKalibAktif[i] = false;
+          pompaKalibHitung[i] = false;
+          pompaStop(i);                           // ramp turun, bukan forceStop
+          dbg.print(F("[POMPA] Kalib gagal capai RPM idx "));
+          dbg.println(i);
+        }
+      } else {
+        long done = pos - pompaAwalLangkah[i];
+        if (done >= pompaKalibLangkah[i]) {
+          pompaKalibAktif[i]  = false;
+          pompaKalibHitung[i] = false;
+          pompaStop(i);                           // ramp turun
+          dbg.print(F("[POMPA] Kalib selesai idx "));
+          dbg.print(i);
+          dbg.print(F(" langkah="));
+          dbg.println(done);
+        }
+      }
+    }
 
     if (!jalan) {
       if (!pompaTargetAktif[i] && !pompaJedaPending[i]) continue;
