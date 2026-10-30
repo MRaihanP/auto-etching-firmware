@@ -1,6 +1,6 @@
 # PROGRESS — Checklist Implementasi Firmware Etching Otomatis
 
-Firmware: **Etching v0.6.5** · Board: **ESP32-S3 DevKitC**
+Firmware: **Etching v0.6.6** · Board: **ESP32-S3 DevKitC**
 Rencana teknis lengkap: `PROCESS.md` · Ringkasan: `SUMMARY.md` · Riwayat: `LOG.md`
 
 Legenda: ✅ **Sudah ada & berfungsi** · ⚠️ **Ada tapi belum fungsional/terpakai** · ⬜ **Belum ada**
@@ -193,6 +193,7 @@ fisik terbukti jalan**. Bukan rollback — v0.6–v0.8 adalah percobaan yang gag
 - [x] ✅ **v0.6.2: step/rev 6400 → 3200** — RPM kini sesuai target (sebelumnya fisik 2× lebih cepat); `PUMP_ACCEL_HZ2` = 1000 langkah/s² (sama dengan `accel` sketch); NVS `pompa` **v3** memigrasi `mlPerRev / 2`
 - [x] ✅ **v0.6.3: Test Motor = sketch** — `applySpeedAcceleration()` setelah start, RPM live langsung dipakai, `pompaRpmSekarang()` + UI `target/aktual` membuktikan kecepatan berhenti di target (400 tetap 400)
 - [x] ✅ **v0.6.4: uji kalibrasi target ml** — START/STOP memakai ramp yang sama seperti Test Motor; target ml → hasil ukur nyata → ENTER menghitung offset + kalibrasi ulang (stepper ml/rotasi, DC ml/detik); halaman kalibrasi 6 baris scrollable; uji DC tanpa margin
+- [x] ✅ **v0.6.6: verifikasi hasil kalibrasi (LULUS/GAGAL)** — baris ke-7 **Uji hasil** mendosis ulang target ml memakai kalibrasi tersimpan; isi **Hasil** → ENTER menilai LULUS (stepper ≤5%, DC ≤10%) atau GAGAL; LULUS tidak mengubah kalibrasi; GAGAL → ENTER kedua di baris Hasil mengoreksi lalu minta uji ulang; ENTER tanpa run baru ditolak agar tidak terkoreksi dua kali
 - [x] ✅ **v0.6.5: kalibrasi hitung rotasi di RPM target** — ramp up/down tidak dihitung; posisi mulai dicatat saat kecepatan aktual ≥98% target, langkah target dihitung dari titik itu lalu diramp turun; UI `RAMP...` + progres 0% selama ramp; timeout 60 s → `Gagal capai RPM`
 - [x] ✅ Log diagnostik `[SENSOR]`/`[SUHU]`/`[STORE]`/`[KALIB*]` ke Serial
 - [x] ✅ **v0.6.0: `kalibDuty[]` dihapus** — diganti `kalibDutyDC[2]` + `agitasiSpdDuty[3]`

@@ -106,20 +106,29 @@ int kalibStepperCursor = 0;
 int kalibStepperScroll = 0;
 int   kalibStepperRpm[3]        = { PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT };
 float kalibStepperMl[3]         = { 0.0f, 0.0f, 0.0f }; // ml per rotasi (hasil kalibrasi)
-int   kalibStepperStep          = 5;                     // langkah edit hasil: 1=0,1 5=0,5 10=1 ml
+int   kalibStepperStep          = 1;                     // langkah edit hasil: 1=0,1 5=0,5 10=1 ml
 int   kalibStepperTgtStep       = 5;                     // langkah edit target: 1/5/10 ml
 int   kalibStepperTargetMl[3]   = { 10, 10, 10 };        // target uji (ml)
 int   kalibStepperUkurMl10[3]   = { 0, 0, 0 };           // hasil ukur nyata (0,1 ml)
 int   kalibStepperOffsetX10[3]  = { 0, 0, 0 };           // offset terakhir (0,1 %)
 bool  kalibStepperOffsetAda[3]  = { false, false, false };
 float kalibStepperCalUsed[3]    = { 0.0f, 0.0f, 0.0f };  // ml/rotasi efektif saat uji
+// Verifikasi hasil kalibrasi (baris "Uji hasil"):
+// - ujiMode  : run yang sedang/baru dijalankan adalah uji, bukan kalibrasi
+// - ujiAda   : sudah ada hasil uji (LULUS/GAGAL)
+// - ujiLulus : hasil uji terakhir lulus toleransi
+// - koreksiSiap : uji gagal, ENTER di baris Hasil berikutnya = koreksi
+bool  kalibStepperUjiMode[3]    = { false, false, false };
+bool  kalibStepperUjiAda[3]     = { false, false, false };
+bool  kalibStepperUjiLulus[3]   = { false, false, false };
+bool  kalibStepperKoreksiSiap[3]= { false, false, false };
 
 // ---- Kalibrasi pompa DC (sabun/limbah) ----
 // Cursor 0=START/STOP, 1=Duty, 2=Target ml, 3=Hasil ukur, 4=Offset, 5=ml/detik
 int   kalibDCCursor       = 0;
 int   kalibDutyDC[2]      = { 80, 100 };   // duty pompa sabun & limbah (%)
 float kalibDcMlPerSec[2]  = { 0.0f, 0.0f }; // hasil kalibrasi ml/detik
-int   kalibDcStep         = 5;              // langkah edit hasil: 1/5/10 ml
+int   kalibDcStep         = 1;              // langkah edit hasil: 1/5/10 ml
 int   kalibDcTgtStep      = 5;              // langkah edit target: 1/5/10 ml
 int   kalibDcTargetMl[2]  = { 50, 50 };     // target uji (ml)
 int   kalibDcUkurMl[2]    = { 0, 0 };       // hasil ukur nyata (ml)
@@ -127,6 +136,11 @@ int   kalibDcOffsetX10[2] = { 0, 0 };       // offset terakhir (0,1 %)
 bool  kalibDcOffsetAda[2] = { false, false };
 float kalibDcCalUsed[2]   = { 0.0f, 0.0f }; // ml/detik efektif saat uji
 unsigned long kalibDcDurasiMs = 0;          // durasi uji target ml yang sedang berjalan
+// Verifikasi hasil kalibrasi DC (baris "Uji hasil").
+bool  kalibDcUjiMode[2]     = { false, false };
+bool  kalibDcUjiAda[2]      = { false, false };
+bool  kalibDcUjiLulus[2]    = { false, false };
+bool  kalibDcKoreksiSiap[2] = { false, false };
 
 // Status uji DC (dipakai dcmotor.h)
 enum KalibDcFase { KDC_IDLE, KDC_RAMPUP, KDC_UKUR, KDC_TURUN };

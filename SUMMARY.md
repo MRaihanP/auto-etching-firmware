@@ -1,6 +1,6 @@
 # SUMMARY — Mesin PCB Etching Otomatis
 
-Firmware **Etching v0.6.5** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
+Firmware **Etching v0.6.6** untuk **ESP32-S3**: alat etching PCB otomatis dengan dosing
 HCl/H2O2/H2O (stepper DRV8825 1/16 = 3200 langkah/putaran, 400–700 rpm), agitasi, draining, dan rinsing, dikendalikan lewat layar
 OLED 128x64 + 6 tombol (PCF8574).
 
@@ -29,6 +29,11 @@ OLED 128x64 + 6 tombol (PCF8574).
   saat kecepatan aktual sudah mencapai RPM target**; ramp up/down tetap berjalan
   untuk keamanan pump head tetapi tidak dihitung sebagai volume. Hasil disimpan
   di NVS (key `pompa`).
+- **Verifikasi hasil kalibrasi:** baris **Uji hasil** (baris ke-7) menjalankan
+  dosis ulang memakai kalibrasi tersimpan; isi **Hasil**, lalu ENTER menilai
+  **LULUS** (stepper ≤5%, DC ≤10%) atau **GAGAL**. Saat LULUS kalibrasi tidak
+  diubah; saat GAGAL, ENTER kedua di baris Hasil mengoreksi
+  `cal = calLama × hasil / target` lalu minta uji ulang.
 - **Kalibrasi pompa DC:** uji **target ml** pada duty terpilih (durasi tanpa
   margin), hasil ukur nyata → ENTER menghitung offset + **ml/detik** baru;
   dosing normal tetap diberi margin 10%.

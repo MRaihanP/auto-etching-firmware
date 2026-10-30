@@ -5,9 +5,17 @@
 // Diisi di inputInit() mengikuti define P_xxx, jadi aman kalau pin ditukar
 const char* namaTombol[JUMLAH_TOMBOL];
 
+// Auto-repeat KIRI/KANAN: tahan tombol untuk mengubah nilai lebih cepat.
+// Berguna saat memasukkan hasil ukur kalibrasi (langkah 0,1 ml). Tombol
+// ATAS/BAWAH/ENTER/BACK tidak diulang agar navigasi tetap satu langkah.
+#define TOMBOL_ULANG_DELAY_MS   600
+#define TOMBOL_ULANG_PERIOD_MS  120
+
 bool stateStabil[JUMLAH_TOMBOL];
 bool stateTerbaca[JUMLAH_TOMBOL];
 unsigned long waktuBerubah[JUMLAH_TOMBOL];
+unsigned long waktuTekan[JUMLAH_TOMBOL];
+bool sudahUlang[JUMLAH_TOMBOL];
 int tombolAktif = TIDAK_ADA;
 
 bool bacaPCF8574(uint8_t &data) {
@@ -37,6 +45,8 @@ void inputInit() {
     stateStabil[i]  = tertekan;
     stateTerbaca[i] = tertekan;
     waktuBerubah[i] = millis();
+    waktuTekan[i]   = millis();
+    sudahUlang[i]   = false;
   }
 }
 
@@ -60,9 +70,22 @@ int bacaTombolBaru() {
     if ((sekarang - waktuBerubah[i]) > DEBOUNCE_MS && mentah != stateStabil[i]) {
       stateStabil[i] = mentah;
       if (stateStabil[i]) {
+        waktuTekan[i] = sekarang;
+        sudahUlang[i] = false;
         if (tombolAktif == TIDAK_ADA) { tombolAktif = i; hasil = i; }
       } else {
         if (tombolAktif == i) tombolAktif = TIDAK_ADA;
+      }
+    }
+
+    // Auto-repeat hanya untuk KIRI/KANAN selama tombol itu masih aktif.
+    if (stateStabil[i] && (i == P_KIRI || i == P_KANAN) && tombolAktif == i) {
+      unsigned long jeda = sudahUlang[i] ? TOMBOL_ULANG_PERIOD_MS
+                                         : TOMBOL_ULANG_DELAY_MS;
+      if (sekarang - waktuTekan[i] >= jeda) {
+        waktuTekan[i] = sekarang;
+        sudahUlang[i] = true;
+        if (hasil == TIDAK_ADA) hasil = i;
       }
     }
   }

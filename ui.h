@@ -483,11 +483,11 @@ void gambarKalibMotorList() {
 
 // ================= HALAMAN: KALIBRASI STEPPER (Pompa HCl/H2O2/Air) =================
 // Baris: START/STOP (uji target ml), RPM, Target, Hasil ukur, Offset,
-// ml/rotasi. Start/stop memakai ramp yang sama seperti Test Motor. Konten
-// lebih tinggi dari area tampil -> scroll.
-const int KALIB_STEPPER_ROW_TOP[6] = { 0, 14, 24, 34, 44, 54 };
-const int KALIB_STEPPER_ROW_H[6]   = { 12, 10, 10, 10, 10, 10 };
-const int KALIB_STEPPER_CONTENT_H  = 64;
+// ml/rotasi, Uji hasil. Start/stop memakai ramp yang sama seperti Test Motor.
+// Konten lebih tinggi dari area tampil -> scroll.
+const int KALIB_STEPPER_ROW_TOP[7] = { 0, 14, 24, 34, 44, 54, 64 };
+const int KALIB_STEPPER_ROW_H[7]   = { 12, 10, 10, 10, 10, 10, 10 };
+const int KALIB_STEPPER_CONTENT_H  = 74;
 
 void gambarKalibStepper() {
   const char* nama[] = { "HCl", "H2O2", "Air" };
@@ -606,6 +606,26 @@ void gambarKalibStepper() {
     }
   }
 
+  // --- Baris 6: Uji hasil (verifikasi kalibrasi tersimpan) ---
+  {
+    int y = baseY + KALIB_STEPPER_ROW_TOP[6];
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      bool sel = (kalibStepperCursor == 6);
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("Uji hasil"));
+      if (kalibStepperUjiMode[idx]) {
+        strcpy(buf, pompaAktif(idx) ? "RUN" : "ISI HASIL");
+      } else if (kalibStepperUjiAda[idx]) {
+        strcpy(buf, kalibStepperUjiLulus[idx] ? "LULUS" : "GAGAL");
+      } else {
+        strcpy(buf, "ENTER");
+      }
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
   oled.setTextColor(WHITE);
 
   // --- Indikator scroll ---
@@ -706,10 +726,11 @@ void gambarTestMotor() {
 // Uji berbasis target ml: pompa diramp ke duty terpilih, dijalankan selama
 // durasi hasil hitung (ml / laju sekarang), lalu diramp turun. User mengukur
 // hasil nyata, mengisi baris Hasil, dan ENTER menghitung offset + kalibrasi.
-// Baris: START/STOP, Duty, Target, Hasil, Offset, ml/detik. Perlu scroll.
-const int KALIB_DC_CONTENT_H  = 64;
-const int KALIB_DC_ROW_TOP[6] = { 0, 14, 24, 34, 44, 54 };
-const int KALIB_DC_ROW_H[6]   = { 12, 10, 10, 10, 10, 10 };
+// Baris: START/STOP, Duty, Target, Hasil, Offset, ml/detik, Uji hasil.
+// Perlu scroll.
+const int KALIB_DC_CONTENT_H  = 74;
+const int KALIB_DC_ROW_TOP[7] = { 0, 14, 24, 34, 44, 54, 64 };
+const int KALIB_DC_ROW_H[7]   = { 12, 10, 10, 10, 10, 10, 10 };
 
 void gambarKalibDC() {
   const char* nama[] = { "Sabun", "Limbah" };
@@ -824,6 +845,26 @@ void gambarKalibDC() {
       oled.print(F("ml/detik"));
       if (kalibDcMlPerSec[idx] > 0.0f) sprintf(buf, "%.2f", kalibDcMlPerSec[idx]);
       else strcpy(buf, "--");
+      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    }
+  }
+
+  // --- Baris 6: Uji hasil (verifikasi kalibrasi tersimpan) ---
+  {
+    int y = baseY + KALIB_DC_ROW_TOP[6];
+    bool sel = (kalibDCCursor == 6);
+    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
+      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+      oled.setTextColor(sel ? BLACK : WHITE);
+      oled.setCursor(2, y);
+      oled.print(F("Uji hasil"));
+      if (kalibDcUjiMode[idx]) {
+        strcpy(buf, kalibDcJalan() ? "RUN" : "ISI HASIL");
+      } else if (kalibDcUjiAda[idx]) {
+        strcpy(buf, kalibDcUjiLulus[idx] ? "LULUS" : "GAGAL");
+      } else {
+        strcpy(buf, "ENTER");
+      }
       teksKanan(buf, SCREEN_WIDTH - 2, y);
     }
   }

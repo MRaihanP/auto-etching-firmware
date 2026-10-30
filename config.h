@@ -112,6 +112,10 @@
 // Batas target/hasil uji kalibrasi (ml).
 #define KALIB_ML_MIN         1
 #define KALIB_ML_MAX         999
+// Toleransi verifikasi hasil kalibrasi (%). Stepper harus ketat; pompa DC
+// lebih longgar karena berbasis waktu/duty dan dipengaruhi selang/viskositas.
+#define KALIB_TOLERANSI_STEPPER_PCT 5.0f
+#define KALIB_TOLERANSI_DC_PCT      10.0f
 // Timeout dosing = 2 x estimasi + margin ini.
 #define PUMP_TIMEOUT_MARGIN_MS 10000UL
 
@@ -158,4 +162,4 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.6.5"
+#define FW_VERSI  "v0.6.6"

@@ -252,12 +252,16 @@ void tanganiTombol(int t) {
     // Uji berbasis target ml: START menjalankan pompa dengan kalibrasi yang
     // sedang dipakai (ramp sama seperti Test Motor), user mengukur hasil nyata,
     // lalu ENTER di baris Hasil menghitung offset + kalibrasi ulang.
+    // Baris terakhir "Uji hasil" menjalankan verifikasi memakai kalibrasi
+    // tersimpan dan menampilkan LULUS/GAGAL.
     case HAL_KALIB_STEPPER: {
       int idx = kalibMotorIdx;
       bool ujiJalan = pompaAktif(idx);
 
       if (t == P_BACK) {
         if (ujiJalan) pompaStop(idx);
+        kalibStepperUjiMode[idx] = false;
+        kalibStepperCalUsed[idx] = 0.0f;   // run dibatalkan
         simpanPompa();
         kalibStepperScroll = 0;
         pindahHalaman(HAL_KALIB_MOTOR_LIST);
@@ -265,7 +269,7 @@ void tanganiTombol(int t) {
       }
       if (t == P_ATAS || t == P_BAWAH) {
         int arah = (t == P_BAWAH) ? +1 : -1;
-        kalibStepperCursor = (kalibStepperCursor + arah + 6) % 6;
+        kalibStepperCursor = (kalibStepperCursor + arah + 7) % 7;
         // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
         {
           int maxScroll = max(0, KALIB_STEPPER_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
@@ -292,11 +296,19 @@ void tanganiTombol(int t) {
           kalibStepperTargetMl[idx] = constrain(
               kalibStepperTargetMl[idx] + arah * kalibStepperTgtStep,
               KALIB_ML_MIN, KALIB_ML_MAX);
+          // Target berubah -> hasil run lama tidak lagi mewakili target ini.
+          kalibStepperCalUsed[idx]     = 0.0f;
+          kalibStepperUjiAda[idx]      = false;
+          kalibStepperUjiLulus[idx]    = false;
+          kalibStepperKoreksiSiap[idx] = false;
         } else if (kalibStepperCursor == 3) {
           // Hasil ukur dalam 0,1 ml; kalibrasi baru dihitung saat ENTER.
           if (ujiJalan) { tampilToast("Stop dulu"); break; }
           kalibStepperUkurMl10[idx] = constrain(
               kalibStepperUkurMl10[idx] + arah * kalibStepperStep, 0, 99999);
+          // Hasil diubah manual -> status LULUS/GAGAL lama tidak valid.
+          kalibStepperUjiAda[idx]   = false;
+          kalibStepperUjiLulus[idx] = false;
         }
         break;
       }
@@ -305,6 +317,8 @@ void tanganiTombol(int t) {
           if (ujiJalan) {
             pompaStop(idx);              // ramp turun, sama seperti Test Motor
             kalibStepperUkur = false;
+            kalibStepperUjiMode[idx] = false;
+            kalibStepperCalUsed[idx] = 0.0f;   // run dibatalkan, hasil tidak sah
             tampilToast("Dihentikan");
           } else {
             int targetMl = kalibStepperTargetMl[idx];
@@ -314,7 +328,10 @@ void tanganiTombol(int t) {
             if (targetMl <= 0) {
               tampilToast("Target 0 ml");
             } else if (pompaDosisKalibrasi(idx, targetMl, calUsed)) {
-              kalibStepperCalUsed[idx] = calUsed;
+              kalibStepperCalUsed[idx]  = calUsed;
+              kalibStepperUjiMode[idx]  = false;   // ini run kalibrasi
+              kalibStepperUjiAda[idx]   = false;
+              kalibStepperKoreksiSiap[idx] = false;
               kalibStepperUkur = true;
               tampilToast("Ramp ke RPM...");
             } else {
@@ -332,32 +349,90 @@ void tanganiTombol(int t) {
           if (ujiJalan) { tampilToast("Stop dulu"); break; }
           int targetMl = kalibStepperTargetMl[idx];
           float hasilMl = kalibStepperUkurMl10[idx] / 10.0f;
-          float calUsed = kalibStepperCalUsed[idx] > 0.0f
-                              ? kalibStepperCalUsed[idx]
-                              : (kalibStepperMl[idx] > 0.0f
-                                     ? kalibStepperMl[idx]
-                                     : PUMP_KALIB_NOMINAL_ML_PER_REV);
+          // calUsed hanya terisi oleh run yang baru selesai (kalibrasi/uji).
+          // Tanpa itu, ENTER tidak boleh mengubah kalibrasi (cegah dobel).
+          float calUsed = kalibStepperCalUsed[idx];
           if (hasilMl <= 0.0f || targetMl <= 0) {
             tampilToast("Isi hasil dulu");
+          } else if (calUsed <= 0.0f) {
+            kalibStepperUjiMode[idx] = false;
+            tampilToast("Jalankan START dulu");
           } else {
-            // Offset = selisih hasil nyata terhadap target.
-            kalibStepperOffsetX10[idx] =
-                (int)lround((hasilMl - targetMl) * 1000.0f / targetMl);
+            float errPct = (hasilMl - targetMl) * 100.0f / (float)targetMl;
+            kalibStepperOffsetX10[idx] = (int)lround(errPct * 10.0f);
             kalibStepperOffsetAda[idx] = true;
-            // Kalibrasi ulang: laju baru = laju lama * hasil / target.
-            kalibStepperMl[idx] = calUsed * hasilMl / (float)targetMl;
-            kalibStepperUkurMl10[idx] = 0;   // cegah dobel aplikasi
-            kalibStepperCalUsed[idx]  = 0.0f;
-            simpanPompa();
+
+            if (kalibStepperUjiMode[idx]) {
+              // ---- ENTER hasil = evaluasi verifikasi, kalibrasi TIDAK diubah
+              kalibStepperUjiMode[idx] = false;
+              kalibStepperUjiAda[idx]  = true;
+              if (fabsf(errPct) <= KALIB_TOLERANSI_STEPPER_PCT) {
+                kalibStepperUjiLulus[idx]    = true;
+                kalibStepperKoreksiSiap[idx] = false;
+                kalibStepperUkurMl10[idx]    = 0;
+                kalibStepperCalUsed[idx]     = 0.0f;
+                tampilToast("LULUS");
+              } else {
+                kalibStepperUjiLulus[idx]    = false;
+                kalibStepperKoreksiSiap[idx] = true;
+                tampilToast("GAGAL, ENTER lagi");
+              }
+            } else if (kalibStepperKoreksiSiap[idx]) {
+              // ---- ENTER kedua setelah GAGAL = pakai hasil yang sama untuk koreksi
+              kalibStepperMl[idx] = calUsed * hasilMl / (float)targetMl;
+              kalibStepperUkurMl10[idx]    = 0;
+              kalibStepperCalUsed[idx]     = 0.0f;
+              kalibStepperUjiAda[idx]      = false;
+              kalibStepperUjiLulus[idx]    = false;
+              kalibStepperKoreksiSiap[idx] = false;
+              simpanPompa();
+              tampilToast("Dikoreksi, uji lagi");
+            } else {
+              // ---- ENTER hasil run kalibrasi = hitung kalibrasi baru
+              kalibStepperMl[idx] = calUsed * hasilMl / (float)targetMl;
+              kalibStepperUkurMl10[idx]    = 0;   // cegah dobel aplikasi
+              kalibStepperCalUsed[idx]     = 0.0f;
+              kalibStepperUjiAda[idx]      = false;
+              kalibStepperUjiLulus[idx]    = false;
+              kalibStepperKoreksiSiap[idx] = false;
+              simpanPompa();
+              tampilToast("Kalibrasi OK");
+            }
+
             dbg.print(F("[KALIB-POMPA] target="));
             dbg.print(targetMl);
             dbg.print(F(" hasil="));
             dbg.print(hasilMl);
             dbg.print(F(" offset="));
-            dbg.print(kalibStepperOffsetX10[idx] / 10.0f);
+            dbg.print(errPct);
             dbg.print(F("% -> ml/rot="));
             dbg.println(kalibStepperMl[idx]);
-            tampilToast("Kalibrasi OK");
+          }
+        } else if (kalibStepperCursor == 6) {
+          // ---- Baris "Uji hasil": verifikasi memakai kalibrasi tersimpan
+          if (ujiJalan) {
+            pompaStop(idx);
+            kalibStepperUkur = false;
+            kalibStepperUjiMode[idx] = false;
+            kalibStepperCalUsed[idx] = 0.0f;   // run dibatalkan
+            tampilToast("Dihentikan");
+          } else if (kalibStepperMl[idx] <= 0.0f) {
+            tampilToast("Kalibrasi dulu");
+          } else {
+            int targetMl = kalibStepperTargetMl[idx];
+            float calUsed = kalibStepperMl[idx];
+            if (targetMl <= 0) {
+              tampilToast("Target 0 ml");
+            } else if (pompaDosisKalibrasi(idx, targetMl, calUsed)) {
+              kalibStepperCalUsed[idx]  = calUsed;
+              kalibStepperUjiMode[idx]  = true;    // ini run verifikasi
+              kalibStepperUjiAda[idx]   = false;
+              kalibStepperKoreksiSiap[idx] = false;
+              kalibStepperUkur = true;
+              tampilToast("Uji: ramp...");
+            } else {
+              tampilToast("Gagal start");
+            }
           }
         }
         break;
@@ -442,7 +517,8 @@ void tanganiTombol(int t) {
     // ---------- Kalibrasi DC (Pompa Sabun/Limbah) ----------
     // Uji berbasis target ml: durasi dihitung dari laju sekarang (tanpa margin),
     // start/stop memakai RAMP yang sama seperti Test Motor. Hasil ukur nyata
-    // dipakai untuk menghitung offset + kalibrasi ulang.
+    // dipakai untuk menghitung offset + kalibrasi ulang. Baris terakhir
+    // "Uji hasil" memverifikasi kalibrasi tersimpan (LULUS/GAGAL).
     case HAL_KALIB_DC: {
       int idx = kalibMotorIdx - 3;                 // 0=sabun, 1=limbah
       int ch  = idx + 1;
@@ -451,6 +527,8 @@ void tanganiTombol(int t) {
       if (t == P_BACK) {
         if (kalibDcJalan()) kalibDcStop();
         if (dcAktif(ch) || dcTargetPct[ch] > 0.0f) dcStop(ch);
+        kalibDcUjiMode[idx] = false;
+        kalibDcCalUsed[idx] = 0.0f;   // run dibatalkan
         simpanPompa();
         kalibDCScroll = 0;
         pindahHalaman(HAL_KALIB_MOTOR_LIST);
@@ -458,7 +536,7 @@ void tanganiTombol(int t) {
       }
       if (t == P_ATAS || t == P_BAWAH) {
         int arah = (t == P_BAWAH) ? +1 : -1;
-        kalibDCCursor = (kalibDCCursor + arah + 6) % 6;
+        kalibDCCursor = (kalibDCCursor + arah + 7) % 7;
         // Auto-scroll: pastikan baris terpilih sepenuhnya terlihat
         {
           int maxScroll = max(0, KALIB_DC_CONTENT_H - (AREA_BAWAH - HEADER_H - 4));
@@ -486,10 +564,18 @@ void tanganiTombol(int t) {
           kalibDcTargetMl[idx] = constrain(
               kalibDcTargetMl[idx] + arah * kalibDcTgtStep,
               KALIB_ML_MIN, KALIB_ML_MAX);
+          // Target berubah -> hasil run lama tidak lagi mewakili target ini.
+          kalibDcCalUsed[idx]     = 0.0f;
+          kalibDcUjiAda[idx]      = false;
+          kalibDcUjiLulus[idx]    = false;
+          kalibDcKoreksiSiap[idx] = false;
         } else if (kalibDCCursor == 3) {
           if (ujiJalan) { tampilToast("Stop dulu"); break; }
           kalibDcUkurMl[idx] = constrain(
               kalibDcUkurMl[idx] + arah * kalibDcStep, 0, KALIB_ML_MAX);
+          // Hasil diubah manual -> status LULUS/GAGAL lama tidak valid.
+          kalibDcUjiAda[idx]   = false;
+          kalibDcUjiLulus[idx] = false;
         }
         break;
       }
@@ -499,6 +585,8 @@ void tanganiTombol(int t) {
             kalibDcStop();               // ramp turun
             dcStop(ch);
             kalibDcUkur = false;
+            kalibDcUjiMode[idx] = false;
+            kalibDcCalUsed[idx] = 0.0f;   // run dibatalkan
             tampilToast("Dihentikan");
           } else {
             int targetMl = kalibDcTargetMl[idx];
@@ -511,13 +599,14 @@ void tanganiTombol(int t) {
             } else if (kalibDutyDC[idx] <= 0) {
               tampilToast("Duty 0%");
             } else {
-              kalibDcCalUsed[idx] = calUsed;
-              kalibDcDurasiMs     = durasi;
-              kalibDcUkur         = true;
-              kalibDcMulai(idx);          // ramp up, sama seperti Test Motor
-              char msg[24];
-              sprintf(msg, "Ukur %d ml", targetMl);
-              tampilToast(msg);
+              kalibDcCalUsed[idx]  = calUsed;
+              kalibDcDurasiMs      = durasi;
+              kalibDcUjiMode[idx]  = false;   // ini run kalibrasi
+              kalibDcUjiAda[idx]   = false;
+              kalibDcKoreksiSiap[idx] = false;
+              kalibDcUkur          = true;
+              kalibDcMulai(idx);           // ramp up, sama seperti Test Motor
+              tampilToast("Ukur target ml");
             }
           }
         } else if (kalibDCCursor == 2) {
@@ -531,31 +620,93 @@ void tanganiTombol(int t) {
           if (ujiJalan) { tampilToast("Stop dulu"); break; }
           int targetMl = kalibDcTargetMl[idx];
           float hasilMl = (float)kalibDcUkurMl[idx];
-          float calUsed = kalibDcCalUsed[idx] > 0.0f
-                              ? kalibDcCalUsed[idx]
-                              : (kalibDcMlPerSec[idx] > 0.0f
-                                     ? kalibDcMlPerSec[idx]
-                                     : DC_KALIB_NOMINAL_ML_PER_SEC);
+          // calUsed hanya terisi oleh run yang baru selesai (kalibrasi/uji).
+          float calUsed = kalibDcCalUsed[idx];
           if (hasilMl <= 0.0f || targetMl <= 0) {
             tampilToast("Isi hasil dulu");
+          } else if (calUsed <= 0.0f) {
+            kalibDcUjiMode[idx] = false;
+            tampilToast("Jalankan START dulu");
           } else {
-            kalibDcOffsetX10[idx] =
-                (int)lround((hasilMl - targetMl) * 1000.0f / targetMl);
+            float errPct = (hasilMl - targetMl) * 100.0f / (float)targetMl;
+            kalibDcOffsetX10[idx] = (int)lround(errPct * 10.0f);
             kalibDcOffsetAda[idx] = true;
-            // Kalibrasi ulang: laju baru = laju lama * hasil / target.
-            kalibDcMlPerSec[idx] = calUsed * hasilMl / (float)targetMl;
-            kalibDcUkurMl[idx]   = 0;    // cegah dobel aplikasi
-            kalibDcCalUsed[idx]  = 0.0f;
-            simpanPompa();
+
+            if (kalibDcUjiMode[idx]) {
+              // ---- ENTER hasil = evaluasi verifikasi, kalibrasi TIDAK diubah
+              kalibDcUjiMode[idx] = false;
+              kalibDcUjiAda[idx]  = true;
+              if (fabsf(errPct) <= KALIB_TOLERANSI_DC_PCT) {
+                kalibDcUjiLulus[idx]    = true;
+                kalibDcKoreksiSiap[idx] = false;
+                kalibDcUkurMl[idx]      = 0;
+                kalibDcCalUsed[idx]     = 0.0f;
+                tampilToast("LULUS");
+              } else {
+                kalibDcUjiLulus[idx]    = false;
+                kalibDcKoreksiSiap[idx] = true;
+                tampilToast("GAGAL, ENTER lagi");
+              }
+            } else if (kalibDcKoreksiSiap[idx]) {
+              // ---- ENTER kedua setelah GAGAL = koreksi dengan hasil yang sama
+              kalibDcMlPerSec[idx] = calUsed * hasilMl / (float)targetMl;
+              kalibDcUkurMl[idx]   = 0;
+              kalibDcCalUsed[idx]  = 0.0f;
+              kalibDcUjiAda[idx]   = false;
+              kalibDcUjiLulus[idx] = false;
+              kalibDcKoreksiSiap[idx] = false;
+              simpanPompa();
+              tampilToast("Dikoreksi, uji lagi");
+            } else {
+              // ---- ENTER hasil run kalibrasi = hitung laju baru
+              kalibDcMlPerSec[idx] = calUsed * hasilMl / (float)targetMl;
+              kalibDcUkurMl[idx]   = 0;   // cegah dobel aplikasi
+              kalibDcCalUsed[idx]  = 0.0f;
+              kalibDcUjiAda[idx]   = false;
+              kalibDcUjiLulus[idx] = false;
+              kalibDcKoreksiSiap[idx] = false;
+              simpanPompa();
+              tampilToast("Kalibrasi OK");
+            }
+
             dbg.print(F("[KALIB-DC] target="));
             dbg.print(targetMl);
             dbg.print(F(" hasil="));
             dbg.print(hasilMl);
             dbg.print(F(" offset="));
-            dbg.print(kalibDcOffsetX10[idx] / 10.0f);
+            dbg.print(errPct);
             dbg.print(F("% -> ml/det="));
             dbg.println(kalibDcMlPerSec[idx]);
-            tampilToast("Kalibrasi OK");
+          }
+        } else if (kalibDCCursor == 6) {
+          // ---- Baris "Uji hasil": verifikasi memakai kalibrasi tersimpan
+          if (ujiJalan) {
+            kalibDcStop();
+            dcStop(ch);
+            kalibDcUkur = false;
+            kalibDcUjiMode[idx] = false;
+            kalibDcCalUsed[idx] = 0.0f;   // run dibatalkan
+            tampilToast("Dihentikan");
+          } else if (kalibDcMlPerSec[idx] <= 0.0f) {
+            tampilToast("Kalibrasi dulu");
+          } else {
+            int targetMl = kalibDcTargetMl[idx];
+            float calUsed = kalibDcMlPerSec[idx];
+            unsigned long durasi = dcKalibrasiMs(targetMl, calUsed);
+            if (targetMl <= 0 || durasi == 0) {
+              tampilToast("Target 0 ml");
+            } else if (kalibDutyDC[idx] <= 0) {
+              tampilToast("Duty 0%");
+            } else {
+              kalibDcCalUsed[idx]  = calUsed;
+              kalibDcDurasiMs      = durasi;
+              kalibDcUjiMode[idx]  = true;    // ini run verifikasi
+              kalibDcUjiAda[idx]   = false;
+              kalibDcKoreksiSiap[idx] = false;
+              kalibDcUkur          = true;
+              kalibDcMulai(idx);
+              tampilToast("Uji hasil...");
+            }
           }
         }
         break;
@@ -885,6 +1036,8 @@ void loop() {
         if (pompaKalibGagal[kalibMotorIdx]) {
           pompaKalibGagal[kalibMotorIdx] = false;
           tampilToast("Gagal capai RPM");
+        } else if (kalibStepperUjiMode[kalibMotorIdx]) {
+          tampilToast("Uji selesai, ukur");
         } else {
           tampilToast("Selesai, ukur ml");
         }
@@ -910,7 +1063,11 @@ void loop() {
       perluGambar = true;
       if (dcJalanTerakhir == false && kalibDcUkur) {
         kalibDcUkur = false;
-        tampilToast("Selesai, ukur ml");
+        if (kalibDcUjiMode[kalibMotorIdx - 3]) {
+          tampilToast("Uji selesai, ukur");
+        } else {
+          tampilToast("Selesai, ukur ml");
+        }
       }
     }
   }

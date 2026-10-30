@@ -17,6 +17,7 @@ dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
 - **Dosing 3 pompa peristaltik paralel** (DRV8825 1/16 = 3200 langkah/putaran, **400–700 rpm**, ml → langkah, non-blocking)
 - **Kecepatan pompa berbasis RPM** — default 500 rpm, dapat diubah 400/500/600/700 per pompa
 - **Kalibrasi pompa** — uji **target ml**: masukkan ml → START (dosing pakai kalibrasi sekarang, ramp sama seperti Test Motor) → ukur hasil nyata → isi **Hasil** → ENTER menghitung **offset** dan mengkalibrasi ulang ml/rotasi
+- **Verifikasi hasil kalibrasi** — baris **Uji hasil**: ENTER mendosis ulang target ml dengan kalibrasi tersimpan → isi **Hasil** → ENTER menampilkan **LULUS** (stepper ≤5%, DC ≤10%) atau **GAGAL**; bila GAGAL, ENTER kedua di baris Hasil mengoreksi kalibrasi lalu uji ulang
 - **Kalibrasi pompa DC** — uji **target ml** pada duty terpilih, hasil nyata diisi di baris Hasil → ENTER menghitung offset + ml/detik baru (margin dosing 10%)
 - **Agitasi 3 level** — SPD1/SPD2/SPD3 dalam %, tanpa kalibrasi ml
 - **3 aktuator DC via TB6612FNG PWM** — motor agitasi, pompa air sabun, pompa limbah
@@ -55,6 +56,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v0.6.6** | 2026-10-30 | `v0.6.6` | **Verifikasi hasil kalibrasi di layar** — halaman kalibrasi stepper & DC menjadi 7 baris dengan baris **Uji hasil**: ENTER menjalankan dosis ulang memakai kalibrasi tersimpan (ramp sama seperti START), pengguna mengisi **Hasil**, lalu ENTER menilai **LULUS** (stepper ≤5%, DC ≤10%) atau **GAGAL**; kalibrasi tidak diubah saat LULUS; bila GAGAL, ENTER kedua di baris Hasil mengoreksi `cal = calLama × hasil/target` lalu minta uji ulang; mengubah Target/Hasil membatalkan status lama; `FW_VERSI`→v0.6.6 |
 | **v0.6.5** | 2026-10-30 | `v0.6.5` | **Kalibrasi stepper menghitung rotasi hanya saat RPM target** — ramp up/down tetap berjalan untuk keamanan pump head tetapi tidak dihitung; posisi awal dicatat saat kecepatan aktual ≥98% target, lalu langkah target dihitung dari titik itu dan dihentikan dengan ramp turun; progres 0% + label `RAMP...` selama ramp; timeout 60 s → `Gagal capai RPM`; `FW_VERSI`→v0.6.5 |
 | **v0.6.4** | 2026-10-30 | `v0.6.4` | **Uji kalibrasi target ml per motor** — masukkan target ml, START (ramp sama seperti Test Motor), ukur hasil nyata, isi **Hasil**, ENTER menghitung **offset** + kalibrasi ulang (`cal = calLama × hasil / target`); halaman stepper & DC jadi 6 baris (START/STOP, RPM/Duty, Target, Hasil, Offset, ml/rotasi atau ml/detik); uji DC tanpa margin; `FW_VERSI`→v0.6.4 |
 | **v0.6.3** | 2026-10-29 | `v0.6.3` | **Test Motor = sketch `test/test-motor`**: start memakai `applySpeedAcceleration()` seperti sketch, RPM live langsung dipakai ramp; baris HCl/H2O2/Air menampilkan **target/aktual** (mis. `400/400`) sehingga terlihat kecepatan berhenti di target; `st` di sketch uji juga mencetak RPM aktual; `FW_VERSI`→v0.6.3 |

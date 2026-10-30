@@ -27,6 +27,57 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-10-30] v0.6.6 — Verifikasi hasil kalibrasi (LULUS/GAGAL)
+
+**Latar belakang:**
+- Setelah kalibrasi, pengguna tidak punya cara di layar untuk membuktikan
+  apakah kalibrasi baru benar-benar akurat. Tanpa verifikasi, hasil kalibrasi
+  hanya bisa dipercaya berdasarkan satu kali ukur.
+- Halaman kalibrasi perlu baris **Uji hasil** yang menjalankan dosis ulang
+  memakai kalibrasi tersimpan, lalu menilai hasil ukur terhadap toleransi.
+
+**Perubahan Kode:**
+- `config.h` — `KALIB_TOLERANSI_STEPPER_PCT` 5,0% dan
+  `KALIB_TOLERANSI_DC_PCT` 10,0%.
+- `data.h` — flag verifikasi per motor (`kalibStepperUjiMode/UjiAda/UjiLulus/
+  KoreksiSiap`, `kalibDcUjiMode/UjiAda/UjiLulus/KoreksiSiap`); langkah edit
+  Hasil default 0,1 ml (stepper) dan 1 ml (DC) agar hasil ukur presisi.
+- `auto-etching-firmware.ino`
+  - Baris ke-7 **Uji hasil**: ENTER menjalankan dosis dengan kalibrasi
+    tersimpan (alur ramp sama seperti START kalibrasi), lalu pengguna mengisi
+    **Hasil** dan ENTER mengevaluasi.
+  - `|offset| <= toleransi` → **LULUS**; kalibrasi tidak diubah.
+  - Di luar toleransi → **GAGAL**; ENTER kedua di baris Hasil memakai hasil
+    ukur yang sama untuk mengoreksi kalibrasi (`cal = calLama × hasil/target`),
+    lalu pengguna diminta menguji lagi.
+  - ENTER di Hasil tanpa run yang baru selesai ditolak (`Jalankan START dulu`)
+    agar kalibrasi tidak terkoreksi dua kali.
+  - Mengubah Target membatalkan hasil run/verifikasi lama; mengubah Hasil
+    membatalkan status LULUS/GAGAL lama.
+  - Toast membedakan `Selesai, ukur ml` (kalibrasi) dan `Uji selesai, ukur`
+    (verifikasi).
+- `ui.h` — halaman kalibrasi stepper & DC menjadi **7 baris** scrollable;
+  baris **Uji hasil** menampilkan `ENTER`, `RUN`, `ISI HASIL`, `LULUS`, atau
+  `GAGAL`.
+- `input.h` — **auto-repeat KIRI/KANAN** (tahan 600 ms, lalu ulang tiap 120 ms)
+  agar memasukkan hasil ukur presisi (0,1 ml) tidak perlu menekan puluhan kali.
+  ATAS/BAWAH/ENTER/BACK tetap satu langkah.
+
+**Cara verifikasi (di layar):**
+1. Selesaikan kalibrasi sampai baris **ml/rotasi** / **ml/detik** terisi.
+2. Pilih baris **Uji hasil** → ENTER (muncul `RUN` / `RAMP...`).
+3. Setelah pompa diam, ukur cairan dan isi **Hasil** → ENTER.
+4. Layar menampilkan **LULUS** (dalam toleransi) atau **GAGAL**.
+5. Bila GAGAL, ENTER sekali lagi di baris Hasil untuk mengoreksi, lalu ulangi
+   langkah 2–4 sampai LULUS.
+
+**Catatan:**
+- Verifikasi memakai target ml yang sama dengan baris **Target**.
+- Toleransi stepper 5% (positif-displacement presisi), DC 10% (dipengaruhi
+  duty, selang, dan viskositas).
+
+---
+
 ## [2026-10-30] v0.6.5 — Kalibrasi stepper: rotasi dihitung hanya saat RPM target
 
 **Latar belakang:**
