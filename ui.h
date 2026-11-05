@@ -6,6 +6,7 @@
 #include "process.h"
 #include "presetops.h"
 #include "sensor.h"
+#include "safety.h"
 #include "fontmini.h"
 
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
@@ -35,7 +36,7 @@ void geserGambar(int dy) {
     for (int x = 0; x < SCREEN_WIDTH; x++) {
       uint8_t v = 0;
       if (s >= 0) {
-        v = (uint8_t)(buf[s * SCREEN_WIDTH + x] << geserBit);   // bit tetap di halaman ini
+        v = (uint8_t)(buf[s * SCREEN_WIDTH + x] << geserBit);
         if (geserBit && s - 1 >= 0)
           v |= (uint8_t)(buf[(s - 1) * SCREEN_WIDTH + x] >> (8 - geserBit));
       }
@@ -62,7 +63,7 @@ const unsigned int DURASI_ANIMASI_MS = 200;
 
 void listGeser(int L, int delta, int jumlahItem) {
   int baru = lsSel[L] + delta;
-  if (baru < 0 || baru > jumlahItem - 1) return;   // mentok di ujung
+  if (baru < 0 || baru > jumlahItem - 1) return;
   lsSel[L]        = baru;
   lsAwal[L]       = lsPos[L];
   lsTujuan[L]     = baru;
@@ -75,7 +76,6 @@ void listReset(int L) {
   lsTujuan[L] = 0; lsAnimasi[L] = false;
 }
 
-// Lompat ke index tanpa animasi
 void listSet(int L, int idx) {
   lsSel[L] = idx; lsPos[L] = idx; lsAwal[L] = idx;
   lsTujuan[L] = idx; lsAnimasi[L] = false;
@@ -88,7 +88,7 @@ void listUpdateAnimasi(int L) {
     lsPos[L] = lsTujuan[L];
     lsAnimasi[L] = false;
   } else {
-    float te = 1.0 - (1.0 - t) * (1.0 - t);   // ease-out
+    float te = 1.0 - (1.0 - t) * (1.0 - t);
     lsPos[L] = lsAwal[L] + (lsTujuan[L] - lsAwal[L]) * te;
   }
 }
@@ -122,7 +122,6 @@ void gambarHeader(const char* judul) {
   oled.setTextColor(WHITE);
 }
 
-// List generik dengan kotak seleksi statik di tengah area
 void gambarList(const char* const* items, int jumlah, int L,
                 int areaAtas, int rowHeight) {
   int areaTinggi = SCREEN_HEIGHT - areaAtas;
@@ -138,7 +137,7 @@ void gambarList(const char* const* items, int jumlah, int L,
     int16_t x1, y1; uint16_t w, h;
     oled.getTextBounds(items[j], 0, 0, &x1, &y1, &w, &h);
     int ty = (int)round(y - h / 2.0);
-    if (ty + (int)h <= areaAtas) continue;   // jangan tumpang tindih header
+    if (ty + (int)h <= areaAtas) continue;
     oled.setCursor((SCREEN_WIDTH - w) / 2, ty);
     oled.print(items[j]);
   }
@@ -150,7 +149,7 @@ void gambarList(const char* const* items, int jumlah, int L,
 
 // ================= HALAMAN: MAIN MENU =================
 void gambarMenuUtama() {
-  gambarList(menuUtama, JUMLAH_MENU, L_UTAMA, 0, 20);
+  gambarList(menuUtama, JUMLAH_MENU, L_UTAMA, 0, 16);
 }
 
 // ================= HALAMAN: PRESET LIST =================
@@ -181,6 +180,7 @@ void gambarPresetList() {
 
 // ================= HALAMAN: DETAIL PRESET =================
 void formatMMSS(int totalDetik, char* buf) {
+  if (totalDetik < 0) totalDetik = 0;
   sprintf(buf, "%02d:%02d", totalDetik / 60, totalDetik % 60);
 }
 
@@ -219,7 +219,6 @@ void gambarPresetDetail() {
     teksKanan(buf, xKanan, y);
   }
   y += dy;
-
   if (terlihat(y, 1)) oled.drawFastHLine(0, y, SCREEN_WIDTH, WHITE);
   y += 3;
 
@@ -229,45 +228,47 @@ void gambarPresetDetail() {
     teksKanan(buf, xKanan, y);
   }
   y += dy;
-
   if (terlihat(y, dy)) {
     oled.setCursor(2, y);  oled.print(F("H2O2"));
     sprintf(buf, "%d%%  %d ml", p.persenH2O2, p.mlH2O2);
     teksKanan(buf, xKanan, y);
   }
   y += dy;
-
   if (terlihat(y, dy)) {
     oled.setCursor(2, y);  oled.print(F("H2O"));
     sprintf(buf, "%d%%  %d ml", p.persenH2O, p.mlH2O);
     teksKanan(buf, xKanan, y);
   }
-  y += dy;
-
-  int barY = y + 1, barH = 4, barW = SCREEN_WIDTH - 8;
-  if (terlihat(barY, barH)) {
-    int w1 = barW * p.persenHCl  / 100;
-    int w2 = barW * p.persenH2O2 / 100;
-    oled.drawRect(4, barY, barW, barH, WHITE);
-    oled.fillRect(4, barY, w1, barH, WHITE);                  // HCl: solid
-    for (int x = 4 + w1; x < 4 + w1 + w2; x += 2)             // H2O2: arsir
-      oled.drawFastVLine(x, barY + 1, barH - 2, WHITE);
-  }
-  y += barH + 4;                                               // H2O: kosong
-
+  y += dy + 2;
   if (terlihat(y, 1)) oled.drawFastHLine(0, y, SCREEN_WIDTH, WHITE);
   y += 3;
 
   if (terlihat(y, dy)) {
-    oled.setCursor(2, y);  oled.print(F("Agitasi"));
+    oled.setCursor(2, y);  oled.print(F("Etching"));
     sprintf(buf, "%ds  Spd %d", p.agitasiDetik, p.agitasiSpeed);
     teksKanan(buf, xKanan, y);
   }
   y += dy;
-
   if (terlihat(y, dy)) {
-    oled.setCursor(2, y);  oled.print(F("Total"));
-    formatMMSS(p.totalDetik, buf);
+    oled.setCursor(2, y);  oled.print(F("Siklus"));
+    sprintf(buf, "%d x", p.siklus);
+    teksKanan(buf, xKanan, y);
+  }
+  y += dy;
+  if (terlihat(y, dy)) {
+    oled.setCursor(2, y);  oled.print(F("Bilas"));
+    sprintf(buf, "S%d A%d %dml", p.bilasSabun, p.bilasAir, p.bilasMl);
+    teksKanan(buf, xKanan, y);
+  }
+  y += dy;
+  if (terlihat(y, dy)) {
+    oled.setCursor(2, y);  oled.print(F("Konfirmasi"));
+    teksKanan(p.konfirmasiSiklus ? "Ya" : "Tidak", xKanan, y);
+  }
+  y += dy;
+  if (terlihat(y, dy)) {
+    oled.setCursor(2, y);  oled.print(F("Estimasi"));
+    formatMMSS(estimasiTotalDetikPreset(p), buf);
     teksKanan(buf, xKanan, y);
   }
 
@@ -275,7 +276,6 @@ void gambarPresetDetail() {
 }
 
 // ================= HALAMAN: PROSES =================
-// Hanya MENGGAMBAR state dari process.h (tidak mengubah state proses)
 void gambarDialog(const char* l1, const char* l2, const char* l3) {
   oled.fillRect(10, 14, 108, 38, BLACK);
   oled.drawRect(10, 14, 108, 38, WHITE);
@@ -286,50 +286,87 @@ void gambarDialog(const char* l1, const char* l2, const char* l3) {
   teksTengah(l3, 41, 1);
 }
 
-void gambarProses() {
-  Preset &p = daftarPreset[presetTerpilih];
+void gambarWaitPcb() {
+  oled.setTextColor(WHITE);
+  teksTengah("TARUH PCB", 4, 1);
+  teksTengah("di wadah etching,", 16, 1);
+  teksTengah("lalu tekan ENTER", 26, 1);
+  teksTengah("BACK : batal", 40, 1);
+}
 
-  unsigned long totalMs = (unsigned long)p.totalDetik * 1000UL;
-  int lewatDetik = prosesAkumMs / 1000;
-  float frac = (float)prosesAkumMs / (float)totalMs;
+void gambarKonfirmasiSiklus() {
+  Preset &p = daftarPreset[presetTerpilih];
+  char buf[24];
+  oled.setTextColor(WHITE);
+  sprintf(buf, "Siklus %d/%d selesai", prosesSiklus, p.siklus);
+  teksTengah(buf, 2, 1);
+  teksTengah("Trace sudah OK?", 12, 1);
+  oled.setCursor(2, 26);
+  oled.print(konfirmasiSel == 0 ? "> Ulangi siklus" : "  Ulangi siklus");
+  oled.setCursor(2, 36);
+  oled.print(konfirmasiSel == 1 ? "> Selesai & bilas" : "  Selesai & bilas");
+  teksTengah("ATAS/BAWAH pilih, ENTER", 46, 1);
+}
+
+void gambarProses() {
+  if (prosesTungguPcb) { gambarWaitPcb(); return; }
+  if (prosesKonfirmasi) { gambarKonfirmasiSiklus(); return; }
+
+  Preset &p = daftarPreset[presetTerpilih];
+  unsigned long totalMs = prosesTotalMsEst;
+  if (totalMs == 0) totalMs = (unsigned long)prosesTotalDetik() * 1000UL;
+  float frac = 0.0f;
+  if (totalMs > 0) frac = (float)prosesAkumMs / (float)totalMs;
   if (frac < 0) frac = 0;
   if (frac > 1) frac = 1;
 
-  // Tanpa header. Urutan dari atas: timer, loading bar, status (paling kecil).
   oled.setTextColor(WHITE);
-
   char buf[24];
   int persen = (int)(frac * 100);
 
-  // --- Baris 1: nama layer singkat (kiri) + persen (kanan) -------------
-  char layer[8];
+  char layer[10];
   strncpy(layer, p.nama, sizeof(layer) - 1);
   layer[sizeof(layer) - 1] = '\0';
   oled.setTextSize(1);
   oled.setCursor(0, 0);
   oled.print(layer);
   sprintf(buf, "%d%%", persen);
-  teksKanan(buf, SCREEN_WIDTH, 0);                       // 0..7
+  teksKanan(buf, SCREEN_WIDTH, 0);
 
-  // --- Timer, diperkecil (size 1, bukan size 2) -------------------------
+  int lewatDetik = prosesAkumMs / 1000;
   formatMMSS(lewatDetik, buf);
-  teksTengah(buf, 10, 1);                                // 10..17
+  teksTengah(buf, 9, 1);
 
-  // --- Loading bar ------------------------------------------------------
-  int barX = 0, barY = 20, barW = SCREEN_WIDTH, barH = 7;  // 20..26
+  int barX = 0, barY = 19, barW = SCREEN_WIDTH, barH = 7;
   oled.drawRoundRect(barX, barY, barW, barH, 3, WHITE);
   int isi = (int)((barW - 6) * frac);
   if (isi > 0) oled.fillRect(barX + 3, barY + 1, isi, barH - 2, WHITE);
 
-  // --- Sisa waktu, tetap di bawah timer, sebelum bar -------------------
+  int sisaDetik = 0;
+  if (totalMs > prosesAkumMs) sisaDetik = (totalMs - prosesAkumMs) / 1000;
   char sisa[12];
-  formatMMSS(p.totalDetik - lewatDetik, sisa);
-  sprintf(buf, "sisa %s", sisa);
-  teksTengah(buf, 28, 1);                                // 28..35
+  formatMMSS(sisaDetik, sisa);
 
-  // --- Status, ukuran paling kecil (font mini 3x5) ---------------------
-  const char* st = prosesJeda ? "JEDA" : namaFase[prosesFase];
-  teksMiniTengah(oled, st, 38, WHITE);                   // 38..42
+  // Baris status: siklus/fase + suhu
+  sprintf(buf, "S%d/%d", prosesSiklus, p.siklus);
+  oled.setCursor(0, 30);
+  oled.print(buf);
+  oled.setCursor(24, 30);
+  oled.print(namaFase[prosesFase]);
+  float t = sensorSuhuChamber();
+  if (sensorSuhuValid(2)) {
+    sprintf(buf, "%.1fC", t);
+  } else {
+    strcpy(buf, "--C");
+  }
+  teksKanan(buf, SCREEN_WIDTH, 30);
+
+  sprintf(buf, "sisa %s", sisa);
+  oled.setCursor(0, 40);
+  oled.print(buf);
+  const char* st = prosesJeda ? "JEDA" : (prosesPeringatanSuhu ? "TEMP!" :
+                   (prosesTangkiMenipis() ? "TANK!" : "OK"));
+  teksKanan(st, SCREEN_WIDTH, 40);
 }
 
 // ================= HALAMAN: PLACEHOLDER =================
@@ -375,8 +412,13 @@ void formatField(const Preset &p, int f, char* buf) {
     case 4: sprintf(buf, "%d%% auto", p.persenH2O); break;
     case 5: sprintf(buf, "%d ml", volumeTotal(p)); break;
     case 6: sprintf(buf, "%d s", p.agitasiDetik); break;
-    case 7: sprintf(buf, "%d", p.agitasiSpeed);   break;
-    case 8: formatMMSS(p.totalDetik, buf);        break;
+    case 7: sprintf(buf, "SPD%d", p.agitasiSpeed); break;
+    case 8: sprintf(buf, "%d", p.siklus); break;
+    case 9: sprintf(buf, "%d", p.bilasSabun); break;
+    case 10: sprintf(buf, "%d", p.bilasAir); break;
+    case 11: sprintf(buf, "%d ml", p.bilasMl); break;
+    case 12: sprintf(buf, "%d s", p.bilasDetik); break;
+    case 13: sprintf(buf, "%s", p.konfirmasiSiklus ? "Ya" : "Tidak"); break;
   }
 }
 
@@ -401,16 +443,13 @@ void gambarCfgEdit() {
   }
   oled.setTextColor(WHITE);
 
-  // scrollbar tipis di kanan
   int trackY = HEADER_H + 1, trackH = SCREEN_HEIGHT - trackY;
   int thumbH = trackH * EDIT_VISIBLE / JUMLAH_FIELD;
-  int thumbY = trackY + (trackH - thumbH) * editScroll / (JUMLAH_FIELD - EDIT_VISIBLE);
+  int thumbY = trackY + (trackH - thumbH) * editScroll / max(1, JUMLAH_FIELD - EDIT_VISIBLE);
   oled.fillRect(SCREEN_WIDTH - 2, thumbY, 2, thumbH, WHITE);
 }
 
 // ================= HALAMAN: LEVEL CAIRAN =================
-// Layout: nama (kiri) + persen (kanan) + bar progres di bawah.
-// Scroll tanpa cursor, seperti preset detail.
 void gambarLevel() {
   gambarHeader("Level Cairan");
 
@@ -439,8 +478,9 @@ void gambarLevel() {
     oled.setCursor(1, y);
     oled.print(namaSensor[i]);
 
-    char buf[12];
-    sprintf(buf, "%d%%", sensorPersen[i]);
+    char buf[16];
+    const char* st = sensorFault[i] ? "FAULT" : (sensorBasah[i] ? "BASAH" : "KERING");
+    sprintf(buf, "%d%% %s", sensorPersen[i], st);
     teksKanan(buf, SCREEN_WIDTH - 1, y);
 
     int barY = y + 9;
@@ -453,12 +493,10 @@ void gambarLevel() {
 
   if (maxScroll > 0) {
     const int x = SCREEN_WIDTH - 4;
-    if (levelScroll > 0) {
+    if (levelScroll > 0)
       oled.fillTriangle(x - 2, HEADER_H + 3, x + 2, HEADER_H + 3, x, HEADER_H + 1, WHITE);
-    }
-    if (levelScroll < maxScroll) {
+    if (levelScroll < maxScroll)
       oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
-    }
   }
 }
 
@@ -466,7 +504,6 @@ void gambarLevel() {
 const char* const menuKalib[] = { "Motor", "Sensor Level", "Sensor Suhu", "Sensor Udara" };
 const int JUMLAH_MENU_KALIB = 4;
 
-// ================= HALAMAN: KALIBRASI MOTOR LIST =================
 const char* const menuMotor[] = {
   "Pompa HCl", "Pompa H2O2", "Pompa Air",
   "Pompa Sabun", "Pompa Limbah", "Motor Agitasi",
@@ -481,13 +518,10 @@ void gambarKalibMotorList() {
   gambarList(item, JUMLAH_MENU_MOTOR, L_AKSI, HEADER_H, 16);
 }
 
-// ================= HALAMAN: KALIBRASI STEPPER (Pompa HCl/H2O2/Air) =================
-// Baris: START/STOP (uji target ml), RPM, Target, Hasil ukur, Offset,
-// ml/rotasi, Uji hasil. Start/stop memakai ramp yang sama seperti Test Motor.
-// Konten lebih tinggi dari area tampil -> scroll.
-const int KALIB_STEPPER_ROW_TOP[7] = { 0, 14, 24, 34, 44, 54, 64 };
-const int KALIB_STEPPER_ROW_H[7]   = { 12, 10, 10, 10, 10, 10, 10 };
-const int KALIB_STEPPER_CONTENT_H  = 74;
+// ================= HALAMAN: KALIBRASI STEPPER =================
+const int KALIB_STEPPER_ROW_TOP[8] = { 0, 14, 24, 34, 44, 54, 64, 74 };
+const int KALIB_STEPPER_ROW_H[8]   = { 12, 10, 10, 10, 10, 10, 10, 10 };
+const int KALIB_STEPPER_CONTENT_H  = 84;
 
 void gambarKalibStepper() {
   const char* nama[] = { "HCl", "H2O2", "Air" };
@@ -502,10 +536,8 @@ void gambarKalibStepper() {
 
   int baseY = HEADER_H + 4 - kalibStepperScroll;
   char buf[20];
-
   oled.setTextSize(1);
 
-  // --- Baris 0: START / STOP (uji target ml) ---
   {
     int y = baseY + KALIB_STEPPER_ROW_TOP[0];
     if (y + 12 > HEADER_H && y < AREA_BAWAH) {
@@ -517,9 +549,7 @@ void gambarKalibStepper() {
         oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
         oled.setTextColor(WHITE);
       }
-      if (pompaKalibRamp(idx)) {
-        strcpy(buf, "RAMP...");
-      } else if (pompaAktif(idx)) {
+      if (pompaAktif(idx)) {
         sprintf(buf, "STOP %d%%", pompaProgres(idx));
       } else {
         strcpy(buf, "START");
@@ -528,107 +558,56 @@ void gambarKalibStepper() {
     }
   }
 
-  // --- Baris 1: RPM ---
-  {
-    int y = baseY + KALIB_STEPPER_ROW_TOP[1];
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      bool sel = (kalibStepperCursor == 1);
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("RPM"));
-      sprintf(buf, "%d", rpmPompaValid(kalibStepperRpm[idx]));
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
+  const int rowCursor[7] = { 1, 2, 3, 4, 5, 6, 7 };
+  for (int r = 0; r < 7; r++) {
+    int cur = rowCursor[r];
+    int y = baseY + KALIB_STEPPER_ROW_TOP[cur];
+    if (y + 10 <= HEADER_H || y >= AREA_BAWAH) continue;
+    bool sel = (kalibStepperCursor == cur);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+    oled.setTextColor(sel ? BLACK : WHITE);
+    oled.setCursor(2, y);
 
-  // --- Baris 2: target ml yang akan didosis ---
-  {
-    int y = baseY + KALIB_STEPPER_ROW_TOP[2];
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      bool sel = (kalibStepperCursor == 2);
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      sprintf(buf, "Target x%d", kalibStepperTgtStep);
-      oled.print(buf);
-      sprintf(buf, "%d ml", kalibStepperTargetMl[idx]);
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    switch (cur) {
+      case 1:
+        oled.print(F("RPM"));
+        sprintf(buf, "%d", rpmPompaValid(kalibStepperRpm[idx]));
+        break;
+      case 2:
+        sprintf(buf, "Target x%d", kalibStepperTgtStep);
+        oled.print(buf);
+        sprintf(buf, "%d ml", kalibStepperTargetMl[idx]);
+        break;
+      case 3:
+        oled.print(F("Hasil"));
+        if (kalibStepperUkurMl10[idx] > 0) sprintf(buf, "%.1f ml", kalibStepperUkurMl10[idx] / 10.0f);
+        else strcpy(buf, "--");
+        break;
+      case 4:
+        oled.print(F("Offset"));
+        if (kalibStepperOffsetAda[idx]) sprintf(buf, "%+.1f%%", kalibStepperOffsetX10[idx] / 10.0f);
+        else strcpy(buf, "--");
+        break;
+      case 5:
+        oled.print(F("a/b"));
+        if (kalibStepperA[idx] > 0.0f) sprintf(buf, "%.1f/%.1f", kalibStepperA[idx], kalibStepperB[idx]);
+        else strcpy(buf, "--");
+        break;
+      case 6:
+        oled.print(F("Uji hasil"));
+        if (kalibStepperUjiMode[idx]) strcpy(buf, pompaAktif(idx) ? "RUN" : "ISI HASIL");
+        else if (kalibStepperUjiAda[idx]) strcpy(buf, kalibStepperUjiLulus[idx] ? "LULUS" : "GAGAL");
+        else strcpy(buf, "ENTER");
+        break;
+      case 7:
+        oled.print(F("Reset titik"));
+        sprintf(buf, "%d", kalibStepperTitikN[idx]);
+        break;
     }
-  }
-
-  // --- Baris 3: hasil ukur nyata (ENTER = hitung offset) ---
-  {
-    int y = baseY + KALIB_STEPPER_ROW_TOP[3];
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      bool sel = (kalibStepperCursor == 3);
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("Hasil"));
-      if (kalibStepperUkurMl10[idx] > 0)
-        sprintf(buf, "%.1f ml", kalibStepperUkurMl10[idx] / 10.0f);
-      else
-        strcpy(buf, "--");
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
-
-  // --- Baris 4: offset terakhir (hasil hitung, % terhadap target) ---
-  {
-    int y = baseY + KALIB_STEPPER_ROW_TOP[4];
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      bool sel = (kalibStepperCursor == 4);
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("Offset"));
-      if (kalibStepperOffsetAda[idx])
-        sprintf(buf, "%+.1f%%", kalibStepperOffsetX10[idx] / 10.0f);
-      else
-        strcpy(buf, "--");
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
-
-  // --- Baris 5: ml per rotasi (hasil kalibrasi) ---
-  {
-    int y = baseY + KALIB_STEPPER_ROW_TOP[5];
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      bool sel = (kalibStepperCursor == 5);
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("ml/rotasi"));
-      if (kalibStepperMl[idx] > 0.0f) sprintf(buf, "%.3f", kalibStepperMl[idx]);
-      else strcpy(buf, "--");
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
-
-  // --- Baris 6: Uji hasil (verifikasi kalibrasi tersimpan) ---
-  {
-    int y = baseY + KALIB_STEPPER_ROW_TOP[6];
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      bool sel = (kalibStepperCursor == 6);
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("Uji hasil"));
-      if (kalibStepperUjiMode[idx]) {
-        strcpy(buf, pompaAktif(idx) ? "RUN" : "ISI HASIL");
-      } else if (kalibStepperUjiAda[idx]) {
-        strcpy(buf, kalibStepperUjiLulus[idx] ? "LULUS" : "GAGAL");
-      } else {
-        strcpy(buf, "ENTER");
-      }
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
+    teksKanan(buf, SCREEN_WIDTH - 2, y);
   }
 
   oled.setTextColor(WHITE);
-
-  // --- Indikator scroll ---
   if (maxScroll > 0) {
     const int x = SCREEN_WIDTH - 4;
     if (kalibStepperScroll > 0)
@@ -638,10 +617,7 @@ void gambarKalibStepper() {
   }
 }
 
-// ================= HALAMAN: TEST MOTOR (semua motor) =================
-// Baris: Semua / HCl / H2O2 / Air / Sabun / Limbah / Agitasi.
-// ATAS/BAWAH pilih, KIRI/KANAN ubah nilai (RPM/duty/SPD), ENTER START/STOP.
-// Semua motor selalu ramp dari 0 ke target (stepper: akselerasi, DC: duty).
+// ================= HALAMAN: TEST MOTOR =================
 #define TEST_MOTOR_JUMLAH 7
 const char* const testMotorLabel[TEST_MOTOR_JUMLAH] = {
   "Semua", "HCl", "H2O2", "Air", "Sabun", "Limbah", "Agitasi"
@@ -655,7 +631,7 @@ bool testMotorAktifBaris(int row) {
            dcAktif(DC_SABUN) || dcAktif(DC_LIMBAH) || dcAktif(DC_AGI);
   }
   if (row >= 1 && row <= 3) return pompaAktif(row - 1);
-  if (row == 4 || row == 5) return dcAktif(row - 3);   // 4->SABUN, 5->LIMBAH
+  if (row == 4 || row == 5) return dcAktif(row - 3);
   if (row == 6)             return dcAktif(DC_AGI);
   return false;
 }
@@ -695,8 +671,6 @@ void gambarTestMotor() {
     if (j >= 1 && j <= 3) {
       int idx = j - 1;
       if (pompaAktif(idx)) {
-        // Saat berjalan tampilkan target/aktual supaya terlihat RPM berhenti
-        // tepat di target (mis. "400/400"), sama seperti sketch test-motor.
         sprintf(buf, "%d/%d", rpmPompaValid(kalibStepperRpm[idx]),
                 (int)(pompaRpmSekarang(idx) + 0.5f));
       } else {
@@ -712,7 +686,6 @@ void gambarTestMotor() {
   }
   oled.setTextColor(WHITE);
 
-  // Indikator scroll
   if (maxScroll > 0) {
     const int x = SCREEN_WIDTH - 3;
     if (testMotorScroll > 0)
@@ -722,19 +695,14 @@ void gambarTestMotor() {
   }
 }
 
-// ================= HALAMAN: KALIBRASI DC (Pompa Sabun/Limbah) =================
-// Uji berbasis target ml: pompa diramp ke duty terpilih, dijalankan selama
-// durasi hasil hitung (ml / laju sekarang), lalu diramp turun. User mengukur
-// hasil nyata, mengisi baris Hasil, dan ENTER menghitung offset + kalibrasi.
-// Baris: START/STOP, Duty, Target, Hasil, Offset, ml/detik, Uji hasil.
-// Perlu scroll.
-const int KALIB_DC_CONTENT_H  = 74;
-const int KALIB_DC_ROW_TOP[7] = { 0, 14, 24, 34, 44, 54, 64 };
-const int KALIB_DC_ROW_H[7]   = { 12, 10, 10, 10, 10, 10, 10 };
+// ================= HALAMAN: KALIBRASI DC =================
+const int KALIB_DC_CONTENT_H  = 84;
+const int KALIB_DC_ROW_TOP[8] = { 0, 14, 24, 34, 44, 54, 64, 74 };
+const int KALIB_DC_ROW_H[8]   = { 12, 10, 10, 10, 10, 10, 10, 10 };
 
 void gambarKalibDC() {
   const char* nama[] = { "Sabun", "Limbah" };
-  int idx = kalibMotorIdx - 3;                 // 0=sabun, 1=limbah
+  int idx = kalibMotorIdx - 3;
   char judul[16];
   sprintf(judul, "Kal %s", nama[idx]);
   gambarHeader(judul);
@@ -749,7 +717,6 @@ void gambarKalibDC() {
   int baseY = HEADER_H + 4 - kalibDCScroll;
   char buf[20];
 
-  // --- Baris 0: START / STOP (dengan sisa detik saat mengukur) ---
   {
     int y = baseY + KALIB_DC_ROW_TOP[0];
     bool sel = (kalibDCCursor == 0);
@@ -764,7 +731,7 @@ void gambarKalibDC() {
       if (kalibDcJalan()) {
         int sisa = kalibDcSisaDetik();
         if (sisa > 0) sprintf(buf, "STOP %ds", sisa);
-        else          strcpy(buf, "STOP");
+        else strcpy(buf, "STOP");
       } else {
         strcpy(buf, "START");
       }
@@ -772,106 +739,57 @@ void gambarKalibDC() {
     }
   }
 
-  // --- Baris 1: Duty cycle ---
-  {
-    int y = baseY + KALIB_DC_ROW_TOP[1];
-    bool sel = (kalibDCCursor == 1);
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("Duty"));
-      sprintf(buf, "%d%%", kalibDutyDC[idx]);
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
+  const int rowCursor[7] = { 1, 2, 3, 4, 5, 6, 7 };
+  for (int r = 0; r < 7; r++) {
+    int cur = rowCursor[r];
+    int y = baseY + KALIB_DC_ROW_TOP[cur];
+    if (y + 10 <= HEADER_H || y >= AREA_BAWAH) continue;
+    bool sel = (kalibDCCursor == cur);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
+    oled.setTextColor(sel ? BLACK : WHITE);
+    oled.setCursor(2, y);
 
-  // --- Baris 2: target ml yang akan didosis ---
-  {
-    int y = baseY + KALIB_DC_ROW_TOP[2];
-    bool sel = (kalibDCCursor == 2);
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      sprintf(buf, "Target x%d", kalibDcTgtStep);
-      oled.print(buf);
-      sprintf(buf, "%d ml", kalibDcTargetMl[idx]);
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
+    switch (cur) {
+      case 1:
+        oled.print(F("Duty"));
+        sprintf(buf, "%d%%", kalibDutyDC[idx]);
+        break;
+      case 2:
+        sprintf(buf, "Target x%d", kalibDcTgtStep);
+        oled.print(buf);
+        sprintf(buf, "%d ml", kalibDcTargetMl[idx]);
+        break;
+      case 3:
+        sprintf(buf, "Hasil x%d", kalibDcStep);
+        oled.print(buf);
+        if (kalibDcUkurMl[idx] > 0) sprintf(buf, "%d ml", kalibDcUkurMl[idx]);
+        else strcpy(buf, "--");
+        break;
+      case 4:
+        oled.print(F("Offset"));
+        if (kalibDcOffsetAda[idx]) sprintf(buf, "%+.1f%%", kalibDcOffsetX10[idx] / 10.0f);
+        else strcpy(buf, "--");
+        break;
+      case 5:
+        oled.print(F("r/c"));
+        if (kalibDcMlPerSec[idx] > 0.0f) sprintf(buf, "%.2f/%.1f", kalibDcMlPerSec[idx], kalibDcC[idx]);
+        else strcpy(buf, "--");
+        break;
+      case 6:
+        oled.print(F("Uji hasil"));
+        if (kalibDcUjiMode[idx]) strcpy(buf, kalibDcJalan() ? "RUN" : "ISI HASIL");
+        else if (kalibDcUjiAda[idx]) strcpy(buf, kalibDcUjiLulus[idx] ? "LULUS" : "GAGAL");
+        else strcpy(buf, "ENTER");
+        break;
+      case 7:
+        oled.print(F("Reset titik"));
+        sprintf(buf, "%d", kalibDcTitikN[idx]);
+        break;
     }
-  }
-
-  // --- Baris 3: hasil ukur nyata (ENTER = hitung offset) ---
-  {
-    int y = baseY + KALIB_DC_ROW_TOP[3];
-    bool sel = (kalibDCCursor == 3);
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      sprintf(buf, "Hasil x%d", kalibDcStep);
-      oled.print(buf);
-      if (kalibDcUkurMl[idx] > 0) sprintf(buf, "%d ml", kalibDcUkurMl[idx]);
-      else                        strcpy(buf, "--");
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
-
-  // --- Baris 4: offset terakhir (% terhadap target) ---
-  {
-    int y = baseY + KALIB_DC_ROW_TOP[4];
-    bool sel = (kalibDCCursor == 4);
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("Offset"));
-      if (kalibDcOffsetAda[idx])
-        sprintf(buf, "%+.1f%%", kalibDcOffsetX10[idx] / 10.0f);
-      else
-        strcpy(buf, "--");
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
-
-  // --- Baris 5: ml/detik (hasil kalibrasi) ---
-  {
-    int y = baseY + KALIB_DC_ROW_TOP[5];
-    bool sel = (kalibDCCursor == 5);
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("ml/detik"));
-      if (kalibDcMlPerSec[idx] > 0.0f) sprintf(buf, "%.2f", kalibDcMlPerSec[idx]);
-      else strcpy(buf, "--");
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
-  }
-
-  // --- Baris 6: Uji hasil (verifikasi kalibrasi tersimpan) ---
-  {
-    int y = baseY + KALIB_DC_ROW_TOP[6];
-    bool sel = (kalibDCCursor == 6);
-    if (y + 10 > HEADER_H && y < AREA_BAWAH) {
-      if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
-      oled.setTextColor(sel ? BLACK : WHITE);
-      oled.setCursor(2, y);
-      oled.print(F("Uji hasil"));
-      if (kalibDcUjiMode[idx]) {
-        strcpy(buf, kalibDcJalan() ? "RUN" : "ISI HASIL");
-      } else if (kalibDcUjiAda[idx]) {
-        strcpy(buf, kalibDcUjiLulus[idx] ? "LULUS" : "GAGAL");
-      } else {
-        strcpy(buf, "ENTER");
-      }
-      teksKanan(buf, SCREEN_WIDTH - 2, y);
-    }
+    teksKanan(buf, SCREEN_WIDTH - 2, y);
   }
 
   oled.setTextColor(WHITE);
-
-  // --- Indikator scroll ---
   if (maxScroll > 0) {
     const int x = SCREEN_WIDTH - 4;
     if (kalibDCScroll > 0)
@@ -881,89 +799,67 @@ void gambarKalibDC() {
   }
 }
 
-// ================= HALAMAN: KALIBRASI / SETTING AGITASI =================
-// Tidak perlu kalibrasi ml. Cukup 3 level kecepatan (SPD1..SPD3) dalam %.
-// KIRI/KANAN ubah duty baris terpilih; ENTER = jalankan/hentikan agitasi
-// pada SPD tersebut (selalu ramp dari 0%).
+// ================= HALAMAN: AGITASI =================
 void gambarKalibAgitasi() {
   gambarHeader("Motor Agitasi");
-
   oled.setTextSize(1);
   oled.setTextColor(WHITE);
-
   const char* spd[] = { "SPD1", "SPD2", "SPD3" };
   char buf[12];
-
   int y = HEADER_H + 5;
   for (int i = 0; i < 3; i++, y += 11) {
     bool sel = (kalibDCCursor == i);
     if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
     oled.setTextColor(sel ? BLACK : WHITE);
-
     oled.setCursor(2, y);
     oled.print(spd[i]);
-
     sprintf(buf, "%d%%", constrain(agitasiSpdDuty[i], 0, 100));
     teksKanan(buf, 95, y);
-
     bool jalan = agitasiAktif() && (agitasiSpdUji == i + 1);
     teksKanan(jalan ? "ON" : "OFF", SCREEN_WIDTH - 2, y);
   }
-
   oled.setTextColor(WHITE);
 }
 
-// ================= HALAMAN: KALIBRASI SENSOR SUHU =================
-// 3 blok. Tiap blok: nama di atas tengah; baris bawah berisi "addr: x" (kiri)
-// dan "xx.x°C" (kanan). ENTER pindah field aktif, KIRI/KANAN mengubahnya.
+// ================= HALAMAN: KALIBRASI SUHU =================
 void gambarKalibSuhu() {
   gambarHeader("Sensor Suhu");
-
   int maxScroll = max(0, SUHU_CONTENT_H - (AREA_BAWAH - HEADER_H - 3));
   if (kalibSuhuScroll > maxScroll) kalibSuhuScroll = maxScroll;
   if (kalibSuhuScroll < 0) kalibSuhuScroll = 0;
 
   int baseY = HEADER_H + 3 - kalibSuhuScroll;
-
   oled.setTextSize(1);
   for (int i = 0; i < JUMLAH_SUHU; i++) {
     int y = baseY + SUHU_ROW_TOP[i];
     if (y + SUHU_ROW_H < HEADER_H || y > AREA_BAWAH) continue;
 
     bool blokSel = (i == kalibSuhuIdx);
-    // Kotak selector: inset 2px dari kiri/kanan, 1px dari bawah blok.
     if (blokSel) oled.drawRoundRect(2, y - 1, SCREEN_WIDTH - 4, SUHU_ROW_H - 2, 3, WHITE);
-
-    // Nama sensor di atas tengah (2px dari atas kotak)
     oled.setTextColor(WHITE);
     teksTengah(namaSensorSuhu[i], y + 1, 1);
 
-    int rowY = y + 10;              // baris addr + suhu, 2px dari nama
+    int rowY = y + 10;
     bool fieldAddr  = blokSel && kalibSuhuField == 0;
     bool fieldSuhu  = blokSel && kalibSuhuField == 1;
-
     char buf[16];
 
-    // --- addr: x (kiri) ---
     sprintf(buf, "addr:%d", kalibSuhuAddr[i]);
     if (fieldAddr) oled.fillRect(4, rowY - 1, 38, 10, WHITE);
     oled.setTextColor(fieldAddr ? BLACK : WHITE);
     oled.setCursor(5, rowY);
     oled.print(buf);
 
-    // --- xx.x °C (kanan) ---
     int vx = SCREEN_WIDTH - 7;
     uint16_t warnaTeks = fieldSuhu ? BLACK : WHITE;
     if (fieldSuhu) oled.fillRect(vx - 30, rowY - 1, 31, 10, WHITE);
     oled.setTextColor(warnaTeks);
-    float t = sensorSuhu(i);
     if (sensorSuhuValid(i)) {
-      sprintf(buf, "%.1f", t);
+      sprintf(buf, "%.1f", sensorSuhu(i));
       int16_t x1, y1; uint16_t w, h;
       oled.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
       oled.setCursor(vx - (int)w - 6, rowY);
       oled.print(buf);
-      // Simbol derajat = lingkaran kecil (font tidak punya glyph "°")
       oled.drawCircle(vx - 5, rowY + 3, 1, warnaTeks);
       oled.setCursor(vx - 1, rowY);
       oled.print(F("C"));
@@ -974,7 +870,6 @@ void gambarKalibSuhu() {
   }
   oled.setTextColor(WHITE);
 
-  // Indikator scroll
   if (maxScroll > 0) {
     const int x = SCREEN_WIDTH - 4;
     if (kalibSuhuScroll > 0)
@@ -984,13 +879,10 @@ void gambarKalibSuhu() {
   }
 }
 
-// ================= HALAMAN: KALIBRASI SENSOR UDARA (MQ-135) =================
-// Dua baris acuan (Normal / Kotor) + bacaan real-time di bawah.
+// ================= HALAMAN: SENSOR UDARA =================
 void gambarKalibUdara() {
   gambarHeader("Sensor Udara");
-
   oled.setTextSize(1);
-
   static const char* label[2] = { "Udara Normal", "Udara Kotor" };
   int nilai[2] = { mq135Normal, mq135Kotor };
   int y = HEADER_H + 4;
@@ -1004,12 +896,11 @@ void gambarKalibUdara() {
     sprintf(buf, "%d", nilai[i]);
     teksKanan(buf, SCREEN_WIDTH - 4, y);
   }
-
-  // Bacaan real-time di bawah tengah, dengan gap dari baris di atasnya
   oled.setTextColor(WHITE);
   char buf[24];
-  int ppm = (int)mq135PPM();
-  sprintf(buf, "Bacaan: %d ppm", ppm);
+  int ppm = pengaturan.mqAktif ? (int)mq135PPM() : 0;
+  if (pengaturan.mqAktif) sprintf(buf, "Bacaan: %d ppm", ppm);
+  else strcpy(buf, "MQ135 nonaktif");
   teksTengah(buf, y + 4, 1);
 }
 
@@ -1020,10 +911,9 @@ void gambarKalibMain() {
   gambarList(item, JUMLAH_MENU_KALIB, L_AKSI, HEADER_H, 16);
 }
 
-// ================= HALAMAN: KALIBRASI SENSOR LEVEL =================
+// ================= HALAMAN: KALIBRASI LEVEL =================
 void gambarKalibLevel() {
   gambarHeader("Sensor Level");
-
   const int ROW_H = 10;
   const int VISIBLE = (AREA_BAWAH - HEADER_H) / ROW_H;
   int maxScroll = max(0, JUMLAH_SENSOR - VISIBLE);
@@ -1041,39 +931,31 @@ void gambarKalibLevel() {
     oled.print(namaSensor[i]);
   }
   oled.setTextColor(WHITE);
-
-  // Indikator scroll
   if (maxScroll > 0) {
     const int x = SCREEN_WIDTH - 4;
-    if (kalibLevelScroll > 0) {
+    if (kalibLevelScroll > 0)
       oled.fillTriangle(x - 2, HEADER_H + 3, x + 2, HEADER_H + 3, x, HEADER_H + 1, WHITE);
-    }
-    if (kalibLevelScroll < maxScroll) {
+    if (kalibLevelScroll < maxScroll)
       oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
-    }
   }
 }
 
-// ================= HALAMAN: SET 0% / 100% =================
 void gambarKalibLevelSet() {
   gambarHeader(namaSensor[kalibSensorIdx]);
-
   oled.setTextSize(1);
   oled.setTextColor(WHITE);
-
   int y = HEADER_H + 4;
-  // 0%
+  char buf[16];
+
   bool sel0 = (kalibSetStep == 0);
   if (sel0) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
   oled.setTextColor(sel0 ? BLACK : WHITE);
   oled.setCursor(2, y);
   oled.print(F("0%"));
-  char buf[16];
   sprintf(buf, "= %d", sensorKalibKosong[kalibSensorIdx]);
   teksKanan(buf, SCREEN_WIDTH - 2, y);
   y += 12;
 
-  // 100%
   bool sel100 = (kalibSetStep == 1);
   if (sel100) oled.fillRect(0, y - 1, SCREEN_WIDTH, 10, WHITE);
   oled.setTextColor(sel100 ? BLACK : WHITE);
@@ -1083,13 +965,124 @@ void gambarKalibLevelSet() {
   teksKanan(buf, SCREEN_WIDTH - 2, y);
   y += 14;
 
-  // Raw value live
   oled.setTextColor(WHITE);
   sprintf(buf, "Raw: %d", sensorRaw[kalibSensorIdx]);
   teksTengah(buf, y, 1);
 }
 
-// ================= TOAST (pesan singkat) =================
+// ================= HALAMAN: PENGATURAN =================
+const char* const labelSet[] = {
+  "Suhu peringatan", "Suhu bahaya", "Margin drain",
+  "Stabil level", "MQ135", "IoT"
+};
+const int JUMLAH_SET = 6;
+
+void gambarPengaturan() {
+  gambarHeader("Pengaturan");
+  oled.setTextSize(1);
+  char buf[16];
+  int y = HEADER_H + 3;
+  for (int i = 0; i < JUMLAH_SET; i++, y += 9) {
+    if (y + 8 > AREA_BAWAH) break;
+    bool sel = (settingCursor == i);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 9, WHITE);
+    oled.setTextColor(sel ? BLACK : WHITE);
+    oled.setCursor(2, y);
+    oled.print(labelSet[i]);
+    switch (i) {
+      case 0: sprintf(buf, "%.1fC", pengaturan.tempPeringatanX10 / 10.0f); break;
+      case 1: sprintf(buf, "%.1fC", pengaturan.tempBahayaX10 / 10.0f); break;
+      case 2: sprintf(buf, "%d%%", pengaturan.drainMarginPct); break;
+      case 3: sprintf(buf, "%.1fs", pengaturan.levelStabilMs / 1000.0f); break;
+      case 4: strcpy(buf, pengaturan.mqAktif ? "ON" : "OFF"); break;
+      case 5: strcpy(buf, pengaturan.iotEnabled ? "ON" : "OFF"); break;
+    }
+    teksKanan(buf, SCREEN_WIDTH - 2, y);
+  }
+  oled.setTextColor(WHITE);
+}
+
+// ================= HALAMAN: ISI ULANG TANGKI =================
+void gambarTank() {
+  gambarHeader("Isi Ulang Tangki");
+  const char* label[5] = { "HCl", "H2O2", "H2O", "Sabun", "Limbah" };
+  long nilai[5] = { tankHclMl, tankH2o2Ml, tankH2oMl, tankSabunMl, tankLimbahMl };
+  oled.setTextSize(1);
+  char buf[16];
+  int y = HEADER_H + 3;
+  for (int i = 0; i < 5; i++, y += 9) {
+    bool sel = (tankEditIdx == i);
+    if (sel) oled.fillRect(0, y - 1, SCREEN_WIDTH, 9, WHITE);
+    oled.setTextColor(sel ? BLACK : WHITE);
+    oled.setCursor(2, y);
+    oled.print(label[i]);
+    sprintf(buf, "%ld ml", nilai[i]);
+    teksKanan(buf, SCREEN_WIDTH - 2, y);
+  }
+  oled.setTextColor(WHITE);
+  teksTengah("KIRI/KANAN ubah, ENTER simpan", 44, 1);
+}
+
+// ================= HALAMAN: INFO / STATUS =================
+// 11 baris (versi, 3 suhu, 5 level, MQ135, alasan reset) di area 128x37 px,
+// jadi halaman ini bisa di-scroll ATAS/BAWAH.
+void gambarInfo() {
+  gambarHeader("Info/Status");
+  oled.setTextSize(1);
+
+  const int dy = 9;
+  const int totalBaris = 1 + JUMLAH_SUHU + JUMLAH_SENSOR + 2;
+  int contentH = totalBaris * dy + 2;
+  int viewH = AREA_BAWAH - HEADER_H;
+  int maxScroll = max(0, contentH - viewH);
+  infoScroll = constrain(infoScroll, 0, maxScroll);
+
+  int y = HEADER_H + 2 - infoScroll;
+  char buf[24];
+  for (int i = 0; i < totalBaris; i++, y += dy) {
+    if (y + 7 < HEADER_H || y + 7 > AREA_BAWAH) continue;
+    const char* label = "";
+    const char* nilai = buf;
+    buf[0] = 0;
+
+    if (i == 0) {
+      label = "Versi";
+      strncpy(buf, FW_VERSI, sizeof(buf) - 1);
+      buf[sizeof(buf) - 1] = '\0';
+    } else if (i >= 1 && i <= JUMLAH_SUHU) {
+      int s = i - 1;
+      label = namaSensorSuhu[s];
+      if (sensorSuhuValid(s)) snprintf(buf, sizeof(buf), "%.1fC", sensorSuhu(s));
+      else strcpy(buf, "--");
+    } else if (i <= JUMLAH_SUHU + JUMLAH_SENSOR) {
+      int s = i - JUMLAH_SUHU - 1;
+      label = namaSensor[s];
+      const char* st = sensorFault[s] ? "FLT" : (sensorBasah[s] ? "BASAH" : "KER");
+      snprintf(buf, sizeof(buf), "%d%% %s", sensorPersen[s], st);
+    } else if (i == totalBaris - 2) {
+      label = "MQ135";
+      if (pengaturan.mqAktif) snprintf(buf, sizeof(buf), "%d ppm", mq135PPMTerkini);
+      else strcpy(buf, "OFF");
+    } else {
+      label = "Reset";
+      nilai = infoAlasanReset;
+    }
+
+    oled.setCursor(2, y);
+    oled.print(label);
+    teksKanan(nilai, SCREEN_WIDTH - 2, y);
+  }
+
+  if (maxScroll > 0) {
+    const int x = SCREEN_WIDTH - 4;
+    if (infoScroll > 0)
+      oled.fillTriangle(x - 2, HEADER_H + 3, x + 2, HEADER_H + 3, x, HEADER_H + 1, WHITE);
+    if (infoScroll < maxScroll)
+      oled.fillTriangle(x - 2, AREA_BAWAH - 3, x + 2, AREA_BAWAH - 3, x, AREA_BAWAH - 1, WHITE);
+  }
+}
+
+// ================= TOAST =================
 const char* toastTeks = "";
 bool toastAktif = false;
 unsigned long toastSampai = 0;
@@ -1106,6 +1099,48 @@ void gambarToast() {
   oled.drawRect(14, 26, 100, 14, WHITE);
   oled.setTextColor(WHITE);
   teksTengah(toastTeks, 30, 1);
+}
+
+// ================= OVERLAY KESELAMATAN =================
+void gambarSafety() {
+  oled.fillRect(0, 0, SCREEN_WIDTH, AREA_BAWAH, BLACK);
+  oled.drawRect(0, 0, SCREEN_WIDTH, AREA_BAWAH, WHITE);
+  oled.setTextColor(WHITE);
+  oled.setTextSize(1);
+
+  if (safetyState == SAF_ESTOP) {
+    teksTengah("!! E-STOP !!", 4, 1);
+    teksTengah("Semua aktuator padam", 16, 1);
+    if (digitalRead(PIN_ESTOP) == LOW) {
+      teksTengah("Lepas tombol darurat", 30, 1);
+    } else {
+      teksTengah("Tekan ENTER untuk reset", 30, 1);
+    }
+  } else {
+    const SafetyFaultInfo& f = safetyInfo(safetyKode);
+    char buf[24];
+    sprintf(buf, "!! %s !!", f.nama);
+    teksTengah(buf, 4, 1);
+    teksTengah(f.pesan, 18, 1);
+    teksTengah("ENTER : lanjut", 34, 1);
+  }
+}
+
+void gambarPemulihan() {
+  oled.fillRect(0, 0, SCREEN_WIDTH, AREA_BAWAH, BLACK);
+  oled.drawRect(0, 0, SCREEN_WIDTH, AREA_BAWAH, WHITE);
+  oled.setTextColor(WHITE);
+  oled.setTextSize(1);
+  teksTengah("Proses terputus", 2, 1);
+  char buf[24];
+  sprintf(buf, "Siklus %d / %s", pemulihanSiklus,
+          (pemulihanFase >= 0 && pemulihanFase <= FASE_SELESAI) ? namaFase[pemulihanFase] : "?");
+  teksTengah(buf, 12, 1);
+  oled.setCursor(2, 26);
+  oled.print(konfirmasiSel == 0 ? "> Drain & bilas" : "  Drain & bilas");
+  oled.setCursor(2, 36);
+  oled.print(konfirmasiSel == 1 ? "> Abaikan" : "  Abaikan");
+  teksTengah("ATAS/BAWAH, ENTER", 46, 1);
 }
 
 // ================= RENDER =================
@@ -1131,15 +1166,30 @@ void gambarLayar() {
     case HAL_KALIB_SUHU:       gambarKalibSuhu();       break;
     case HAL_KALIB_UDARA:      gambarKalibUdara();      break;
     case HAL_TEST_MOTOR:       gambarTestMotor();       break;
+    case HAL_PENGATURAN:       gambarPengaturan();      break;
+    case HAL_TANK:             gambarTank();            break;
+    case HAL_INFO:             gambarInfo();            break;
+    default: break;
   }
-  // Overlay
-  if (halaman == HAL_PROSES && dialogBatal)
-    gambarDialog("Batalkan proses?", "ENTER : Ya", "BACK  : Tidak");
-  if (dialogCfg == DLG_SIMPAN)
-    gambarDialog("Simpan perubahan?", "ENTER : Simpan", "BACK  : Buang");
-  if (dialogCfg == DLG_HAPUS)
-    gambarDialog("Hapus preset?", "ENTER : Ya", "BACK  : Tidak");
-  if (toastAktif) gambarToast();
-  geserGambar(UI_Y_OFFSET);   // hindarkan baris atas yang rusak
+
+  // Overlay berprioritas: keselamatan > pemulihan > dialog proses > toast.
+  // Keselamatan harus selalu menang agar E-STOP tidak pernah tertutup layar lain.
+  if (safetyState != SAF_AMAN) {
+    gambarSafety();
+  } else if (pemulihanTersedia) {
+    gambarPemulihan();
+  } else {
+    if (halaman == HAL_PROSES && dialogBatalMinta)
+      gambarDialog("Batalkan proses?", "ENTER : Ya", "BACK  : Tidak");
+    else if (halaman == HAL_PROSES && dialogBatal)
+      gambarDialog("Drain wadah?", "ENTER : Ya", "BACK  : Tidak");
+    if (dialogCfg == DLG_SIMPAN)
+      gambarDialog("Simpan perubahan?", "ENTER : Simpan", "BACK  : Buang");
+    if (dialogCfg == DLG_HAPUS)
+      gambarDialog("Hapus preset?", "ENTER : Ya", "BACK  : Tidak");
+    if (toastAktif) gambarToast();
+  }
+
+  geserGambar(UI_Y_OFFSET);
   oled.display();
 }

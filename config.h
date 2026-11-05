@@ -56,7 +56,9 @@
 #define PIN_LEVEL_H2O       13
 #define PIN_LEVEL_SABUN     14
 #define PIN_LEVEL_LIMBAH    3
-#define INTERVAL_SENSOR_MS  50     // periode baca sensor
+#define INTERVAL_SENSOR_MS  50     // periode baca sensor level
+#define INTERVAL_SUHU_MS    1000   // periode baca DS18B20
+#define INTERVAL_UDARA_MS   500    // periode baca MQ-135
 #define SENSOR_AVG_N        4      // rata-rata bergerak (sampel)
 #define AMBANG_MARGIN       10     // ENTER di Level Cairan: ambang = nilai sekarang - margin
 #define AMBANG_HYST         3      // histeresis di sekitar ambang
@@ -69,8 +71,15 @@
 #define TOUCH_DELTA_MIN     300    // minimal selisih absolut (untuk raw kecil)
 #define TOUCH_ADAPT_CEPAT   8      // adaptasi baseline saat nilai dekat
 #define TOUCH_ADAPT_LAMBAT  512    // adaptasi baseline saat nilai jauh (jangan serap sentuhan)
-#define TOUTH_KALIB_SAMPEL  40     // jumlah sampel awal untuk mencari baseline (kering)
+#define TOUCH_KALIB_SAMPEL  40     // jumlah sampel awal untuk mencari baseline (kering)
 #define SENSOR_LOG_PERIOD_MS 1000  // cetak diagnostik raw semua sensor (0 = mati)
+// Ambang status basah/kering untuk logika proses (persen hasil kalibrasi).
+// Histeresis mencegah status berkedip saat permukaan cairan bergelombang.
+#define LEVEL_ON_PCT        55     // >= ini dianggap BASAH
+#define LEVEL_OFF_PCT       45     // <= ini dianggap KERING
+#define LEVEL_STABIL_MS     5000   // status harus stabil selama ini sebelum baseline diadaptasi
+#define LEVEL_RAW_MIN       1000L  // di luar rentang ini -> sensor FAULT
+#define LEVEL_RAW_MAX       900000L
 
 // Driver TB6612FNG x2 (1 arah: INA->3.3V, INB->GND)
 #define PIN_PWA_D1          15    // driver 1 PWA: motor agitasi
@@ -93,15 +102,11 @@
 #define PUMP_RPM_MAX         700
 #define PUMP_RPM_DEFAULT     500
 #define PUMP_RPM_STEP        100
-// Akselerasi profil trapezoid, dinyatakan dalam rpm/detik supaya perilakunya
-// sama persis dengan sketch test/test-motor (accel 1000 langkah/detik^2 pada
-// 3200 langkah/putaran = 18,75 rpm/detik). Nilai ini tidak bergantung pada
-// microstep, jadi tetap sama walau PUMP_STEP_PER_REV diubah.
-// Efek: 0 -> 400 rpm +-21,3 detik, 0 -> 500 rpm +-26,7 detik, dan deselerasi
-// (stopMove) memakai laju yang sama. Ramp sehalus ini mencegah pump head
-// rusak akibat lonjakan torsi saat start/stop. Naikkan bila dosing terlalu
-// lambat, turunkan bila masih ada hentakan.
-#define PUMP_ACCEL_RPM_PER_SEC  18.75f
+// Akselerasi profil trapezoid, dinyatakan dalam rpm/detik (lihat PUMP_ACCEL_HZ2
+// untuk konversi ke langkah/detik^2). Dengan 500 rpm/s, 0 -> 500 rpm sekitar
+// 1 detik. Nilai ini tidak bergantung pada microstep dan dipakai untuk ramp
+// naik maupun turun (stopMove). Turunkan bila pump head masih tersentak.
+#define PUMP_ACCEL_RPM_PER_SEC  500.0f
 #define PUMP_ACCEL_HZ2 \
   ((uint32_t)(PUMP_ACCEL_RPM_PER_SEC * (float)PUMP_STEP_PER_REV / 60.0f + 0.5f))
 // Uji kalibrasi v0.6.4 memakai target ml; jumlah rotasi dihitung dari target
@@ -152,7 +157,7 @@
 #define PIN_MQ135       9     // analog (kualitas udara)
 
 // ===== MQ-135: divider analog sebelum ADC =====
-#define MQ135_PIN   9
+// Catatan: PIN_MQ135 di atas adalah satu-satunya definisi pin MQ-135.
 #define VREF        3.3
 #define ADC_RES     4095.0
 #define R1          10000.0   // R4
@@ -162,4 +167,33 @@
 #define MQ135_RLOAD   10.0     // resistor load modul (kOhm)
 #define PIN_ESTOP       8     // estop_sense
 
-#define FW_VERSI  "v0.6.6"
+// ===== KESELAMATAN & PROSES =====
+#define TEMP_PERINGATAN_C   45.0f  // di atas ini: peringatan (buzzer + layar)
+#define TEMP_BAHAYA_C       60.0f  // di atas ini: ERROR E02
+#define DRAIN_MARGIN_PCT    25     // margin waktu drain (%)
+#define DRAIN_TAMBAHAN_MS   3000UL // tambahan tetap di akhir drain
+#define PROSES_TIMEOUT_MARGIN_MS 10000UL
+#define PROSES_POLL_MS      20UL
+#define TANGKI_MAKS_ML      5000
+#define TANK_PERINGATAN_ML  100    // sisa tangki sumber / ruang limbah minimum
+#define WDT_TIMEOUT_S       15
+#define BACK_TAHAN_MS       1000UL // tahan BACK -> kembali ke menu utama
+
+// Skala waktu untuk uji alur cepat (air saja). Aktifkan lewat
+// #define DEBUG_PROSES_CEPAT saat menguji urutan lengkap.
+#ifdef DEBUG_PROSES_CEPAT
+  #define SKALA_UJI_CEPAT(detik)  max(2, (detik) / 10)
+#else
+  #define SKALA_UJI_CEPAT(detik)  (detik)
+#endif
+
+// Boot delay + dbgInit kedua hanya untuk debugging USB. Alat standalone
+// tidak perlu menunggu 2 detik.
+// #define DEBUG_BOOT_WAIT
+
+// Level log: 0 = mati, 1 = penting, 2 = normal, 3 = detail.
+#ifndef LOG_LEVEL
+#define LOG_LEVEL 2
+#endif
+
+#define FW_VERSI  "v1.0.0"

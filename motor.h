@@ -75,9 +75,9 @@ float pompaRpmSekarang(int idx) {
   return (float)milliHz * 0.001f * 60.0f / (float)PUMP_STEP_PER_REV;
 }
 
-// Siap untuk dosing: stepper ada + ml/rotasi sudah dikalibrasi.
+// Siap untuk dosing: stepper ada + model kalibrasi (langkah/ml) tersedia.
 bool pompaSiap(int idx) {
-  return pompaBisaGerak(idx) && kalibStepperMl[idx] > 0.0f;
+  return pompaBisaGerak(idx) && (kalibStepperA[idx] > 0.0f || kalibStepperMl[idx] > 0.0f);
 }
 
 bool pompaSiapSemua() {
@@ -85,9 +85,72 @@ bool pompaSiapSemua() {
   return true;
 }
 
+// Model v1.0.0: langkah = a * ml + b. Nilai a diturunkan dari ml/rotasi lama
+// bila model baru belum ada (b = 0).
 float pompaLangkahPerMl(int idx) {
-  if (!pompaSiap(idx)) return 0.0f;
-  return (float)PUMP_STEP_PER_REV / kalibStepperMl[idx];
+  if (idx < 0 || idx >= 3) return 0.0f;
+  if (kalibStepperA[idx] > 0.0f) return kalibStepperA[idx];
+  if (kalibStepperMl[idx] > 0.0f) return (float)PUMP_STEP_PER_REV / kalibStepperMl[idx];
+  return 0.0f;
+}
+
+long pompaLangkahDariMl(int idx, int ml) {
+  float a = pompaLangkahPerMl(idx);
+  if (a <= 0.0f || ml <= 0) return 0;
+  long langkah = (long)lround((double)a * (double)ml + (double)kalibStepperB[idx]);
+  return (langkah > 0) ? langkah : 0;
+}
+
+// Regresi linear titik uji: langkah = a*volume + b.
+// Titik disimpan sebagai (volume terukur ml, langkah yang diperintahkan).
+void pompaHitungModel(int idx) {
+  if (idx < 0 || idx >= 3) return;
+  int n = kalibStepperTitikN[idx];
+  if (n <= 0) return;
+  if (n == 1) {
+    if (kalibStepperTitikMl[idx][0] > 0.0f)
+      kalibStepperA[idx] = kalibStepperTitikStep[idx][0] / kalibStepperTitikMl[idx][0];
+    kalibStepperB[idx] = 0.0f;
+  } else {
+    double sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (int i = 0; i < n; i++) {
+      double x = kalibStepperTitikMl[idx][i];
+      double y = kalibStepperTitikStep[idx][i];
+      sx += x; sy += y; sxx += x * x; sxy += x * y;
+    }
+    double den = n * sxx - sx * sx;
+    if (fabs(den) < 1e-9) return;
+    double a = (n * sxy - sx * sy) / den;
+    double b = (sy - a * sx) / n;
+    if (a <= 0.0) return;
+    kalibStepperA[idx] = (float)a;
+    kalibStepperB[idx] = (float)b;
+  }
+  kalibStepperMl[idx] = (float)PUMP_STEP_PER_REV / kalibStepperA[idx];
+}
+
+void pompaTambahTitik(int idx, float mlTerukur, float langkah) {
+  if (idx < 0 || idx >= 3 || mlTerukur <= 0.0f || langkah <= 0.0f) return;
+  int n = kalibStepperTitikN[idx];
+  if (n >= 6) {
+    for (int i = 1; i < 6; i++) {
+      kalibStepperTitikMl[idx][i - 1]   = kalibStepperTitikMl[idx][i];
+      kalibStepperTitikStep[idx][i - 1] = kalibStepperTitikStep[idx][i];
+    }
+    n = 5;
+  }
+  kalibStepperTitikMl[idx][n]   = mlTerukur;
+  kalibStepperTitikStep[idx][n] = langkah;
+  kalibStepperTitikN[idx] = n + 1;
+  pompaHitungModel(idx);
+}
+
+void pompaResetTitik(int idx) {
+  if (idx < 0 || idx >= 3) return;
+  kalibStepperTitikN[idx] = 0;
+  kalibStepperA[idx] = 0.0f;
+  kalibStepperB[idx] = 0.0f;
+  kalibStepperMl[idx] = 0.0f;
 }
 
 void motorInit() {
@@ -176,7 +239,7 @@ bool pompaJalanLangkah(int idx, long langkah) {
   return true;
 }
 
-// Dosing: ml -> langkah memakai hasil kalibrasi ml/rotasi.
+// Dosing: ml -> langkah memakai model kalibrasi (a*ml + b).
 bool pompaMulai(int idx, int ml) {
   if (idx < 0 || idx > 2 || ml <= 0) return false;
   if (!pompaSiap(idx)) {
@@ -184,7 +247,8 @@ bool pompaMulai(int idx, int ml) {
     dbg.println(idx);
     return false;
   }
-  long langkah = (long)lround((double)ml * (double)PUMP_STEP_PER_REV / (double)kalibStepperMl[idx]);
+  long langkah = pompaLangkahDariMl(idx, ml);
+  if (langkah <= 0) return false;
   return pompaJalanLangkah(idx, langkah);
 }
 
@@ -194,60 +258,39 @@ bool pompaPutarRevolusi(int idx, int rev) {
   return pompaJalanLangkah(idx, (long)rev * PUMP_STEP_PER_REV);
 }
 
-// Mulai uji kalibrasi berbasis target ml. Pompa diramp dari 0 ke RPM target;
-// penghitungan langkah BARU dimulai setelah kecepatan aktual mencapai target
-// (ramp up tidak dihitung). Setelah langkah target tercapai, pompa diramp
-// turun. Dengan begitu ml/rotasi dihitung hanya dari rotasi di speed target.
-bool pompaDosisKalibrasi(int idx, int ml, float calMlPerRev) {
-  if (idx < 0 || idx > 2 || ml <= 0 || calMlPerRev <= 0.0f) return false;
-  long langkah = (long)lround((double)ml * (double)PUMP_STEP_PER_REV /
-                              (double)calMlPerRev);
+// Uji kalibrasi berbasis target ml. Sejak v1.0.0 jalur ini memakai
+// pompaJalanLangkah() yang SAMA dengan dosing, sehingga profil ramp identik
+// dan volume terukur mewakili perilaku dosing sebenarnya.
+bool pompaDosisKalibrasi(int idx, int ml, float calA) {
+  if (idx < 0 || idx > 2 || ml <= 0 || calA <= 0.0f) return false;
+  // Pakai jalur model yang sama dengan dosing (a*ml + b). calA hanya cadangan
+  // saat model belum ada, supaya uji verifikasi benar-benar menguji dosing.
+  long langkah = pompaLangkahDariMl(idx, ml);
+  if (langkah <= 0) langkah = (long)lround((double)calA * (double)ml);
   if (langkah <= 0) return false;
+  kalibStepperStepUsed[idx] = langkah;
 
   FastAccelStepper* s = pompaStepper[idx];
   if (s == nullptr) return false;
-  // Jangan pernah forceStop dari jalur kalibrasi: kalau masih bergerak,
-  // tunggu benar-benar diam (stop normal selalu memakai ramp).
-  if (s->isRunning()) return false;
+  if (s->isRunning()) return false;   // jangan forceStop dari jalur kalibrasi
 
-  uint32_t hz = rpmKeHz(kalibStepperRpm[idx]);
-  if (s->setSpeedInHz(hz) != 0) return false;
-  s->setAcceleration(PUMP_ACCEL_HZ2);
-
-  long pos = (long)s->getCurrentPosition();
-  pompaAwalLangkah[idx]     = pos;
-  pompaTargetLangkah[idx]   = langkah;   // progres = langkah yang dihitung
-  pompaPosisiTerakhir[idx]  = pos;
-  pompaTerakhirGerakMs[idx] = millis();
-  pompaSisaLangkah[idx]     = 0;
-  pompaTargetAktif[idx]     = true;
-  pompaSedangBerhenti[idx]  = false;
-  pompaJedaPending[idx]     = false;
-  pompaLanjutPending[idx]   = false;
-  pompaKalibAktif[idx]      = true;
-  pompaKalibHitung[idx]     = false;
-  pompaKalibGagal[idx]      = false;
-  pompaKalibLangkah[idx]    = langkah;
-  pompaKalibMulaiMs[idx]    = millis();
-
-  if (s->runForward() != MOVE_OK) {
-    pompaTargetAktif[idx] = false;
-    pompaKalibAktif[idx]  = false;
-    return false;
+  bool ok = pompaJalanLangkah(idx, langkah);
+  pompaKalibAktif[idx] = false;
+  pompaKalibGagal[idx] = false;
+  if (ok) {
+    dbg.print(F("[POMPA] Uji kalib idx "));
+    dbg.print(idx);
+    dbg.print(F(" target="));
+    dbg.print(ml);
+    dbg.print(F(" ml ("));
+    dbg.print(langkah);
+    dbg.println(F(" langkah, ramp ikut)"));
   }
-  s->applySpeedAcceleration();
-
-  dbg.print(F("[POMPA] Kalib idx "));
-  dbg.print(idx);
-  dbg.print(F(" target="));
-  dbg.print(ml);
-  dbg.print(F(" ml ("));
-  dbg.print(langkah);
-  dbg.println(F(" langkah di speed target)"));
-  return true;
+  return ok;
 }
 
-// True selama fase ramp up kalibrasi (belum mencapai RPM target).
+// True selama fase ramp up kalibrasi (tidak dipakai lagi; dipertahankan agar
+// UI lama tetap kompatibel).
 bool pompaKalibRamp(int idx) {
   return idx >= 0 && idx < 3 && pompaKalibAktif[idx] && !pompaKalibHitung[idx];
 }
@@ -479,10 +522,9 @@ int pompaProgres(int idx) {
 unsigned long pompaPerkiraanMs(int idx, int ml) {
   if (!pompaSiap(idx) || ml <= 0) return 0;
   double hz   = (double)rpmKeHz(kalibStepperRpm[idx]);
-  double rev  = (double)ml / (double)kalibStepperMl[idx];
-  double langkah = rev * (double)PUMP_STEP_PER_REV;
+  double langkah = (double)pompaLangkahDariMl(idx, ml);
   double a    = (double)PUMP_ACCEL_HZ2;
-  if (hz <= 0.0 || a <= 0.0) return 0;
+  if (hz <= 0.0 || a <= 0.0 || langkah <= 0.0) return 0;
 
   double langkahRamp = hz * hz / a;          // total langkah untuk naik + turun
   double detik;

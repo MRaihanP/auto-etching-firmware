@@ -50,6 +50,12 @@ void inputInit() {
   }
 }
 
+// True bila tombol i masih ditahan minimal ms. Dipakai untuk BACK tahan lama.
+bool tombolDitahan(int i, unsigned long ms) {
+  return (i >= 0 && i < JUMLAH_TOMBOL) &&
+         stateStabil[i] && (millis() - waktuTekan[i] >= ms);
+}
+
 // Baca tombol + debounce + blocking (tombol pertama mengunci).
 // Return index tombol yang baru saja valid ditekan, atau -1.
 int bacaTombolBaru() {

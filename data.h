@@ -1,9 +1,14 @@
 #pragma once
 #include <Arduino.h>
 #include "config.h"
+#include "dbg.h"
 
-// ================= DATA PRESET =================
-// Catatan: semua field int + char[12] -> tanpa padding (aman untuk disimpan sebagai blob)
+// ================= DATA PRESET (v2) =================
+// Semua field int + char[12] -> tanpa padding (aman untuk blob NVS).
+// Perubahan v2 (v1.0.0):
+//   - totalDetik DIHAPUS (dihitung dari model kalibrasi)
+//   - siklus, bilasSabun, bilasAir, bilasMl, bilasDetik, konfirmasiSiklus
+//   - agitasiDetik = lama etching/agitasi PER SIKLUS (30..1800 s)
 struct Preset {
   char  nama[12];
   int   pcbPanjang;      // mm
@@ -14,33 +19,69 @@ struct Preset {
   int   mlHCl;
   int   mlH2O2;
   int   mlH2O;
-  int   agitasiDetik;    // durasi agitasi per siklus
-  int   agitasiSpeed;    // level kecepatan 1-3 (SPD1/SPD2/SPD3)
-  int   totalDetik;      // estimasi lama total proses
+  int   agitasiDetik;    // lama etching per siklus (30..1800 s)
+  int   agitasiSpeed;    // 1..3 (SPD1/SPD2/SPD3)
+  int   siklus;          // jumlah siklus etching 1..6
+  int   bilasSabun;      // jumlah bilas sabun 0..3
+  int   bilasAir;        // jumlah bilas air 0..5
+  int   bilasMl;         // volume tiap bilas (ml)
+  int   bilasDetik;      // agitasi tiap bilas (s)
+  int   konfirmasiSiklus; // 0/1
 };
 
 #define MAKS_PRESET    10
 #define JUMLAH_DEFAULT 5
 
-// Data default (dipakai saat pertama kali / data korup)
+// Data default (dipakai saat pertama kali / data korup).
+// Rasio kimia dipertahankan seperti v0.6.6 (33:17:50) sampai pengguna
+// mengonfirmasi rasio baru; field siklus/bilas memakai nilai aman awal.
 const Preset presetDefault[JUMLAH_DEFAULT] = {
-  { "Preset 1", 100, 80, 33, 17, 50, 120,  60, 180,  5, 3, 270 },
-  { "Preset 2",  80, 60, 40, 20, 40, 100,  50, 100,  8, 3, 330 },
-  { "Preset 3", 150,100, 25, 25, 50, 150, 150, 300,  4, 2, 420 },
-  { "Preset 4",  60, 40, 50, 10, 40,  90,  18,  72, 10, 3, 210 },
-  { "Preset 5", 120, 90, 30, 20, 50, 135,  90, 225,  6, 3, 360 }
+  { "Preset 1", 100, 80, 33, 17, 50, 120,  60, 180, 300, 3, 3, 1, 2, 100, 20, 0 },
+  { "Preset 2",  80, 60, 40, 20, 40, 100,  50, 100, 240, 3, 3, 1, 2, 100, 20, 0 },
+  { "Preset 3", 150,100, 25, 25, 50, 150, 150, 300, 420, 2, 3, 1, 2, 120, 30, 0 },
+  { "Preset 4",  60, 40, 50, 10, 40,  90,  18,  72, 360, 3, 2, 0, 2,  80, 15, 0 },
+  { "Preset 5", 120, 90, 30, 20, 50, 135,  90, 225, 330, 3, 3, 1, 2, 100, 20, 0 }
 };
 
 Preset daftarPreset[MAKS_PRESET];   // data kerja (dimuat dari NVS saat boot)
 int jumlahPreset = 0;
 
+// ================= PENGATURAN GLOBAL =================
+struct Pengaturan {
+  int tempPeringatanX10;   // °C x10
+  int tempBahayaX10;       // °C x10
+  int drainMarginPct;      // %
+  int levelStabilMs;
+  int mqAktif;             // 0/1
+  int iotEnabled;          // 0/1 (v1.1)
+};
+Pengaturan pengaturan = {
+  (int)(TEMP_PERINGATAN_C * 10.0f),
+  (int)(TEMP_BAHAYA_C * 10.0f),
+  DRAIN_MARGIN_PCT,
+  LEVEL_STABIL_MS,
+  1,
+  0
+};
+
+// ================= PELACAK TANGKI (ml) =================
+// Sisa volume di tangki sumber + isi tangki limbah.
+long tankHclMl   = 0;
+long tankH2o2Ml  = 0;
+long tankH2oMl   = 0;
+long tankSabunMl = 0;
+long tankLimbahMl = 0;
+
 // ================= MENU UTAMA =================
-#define JUMLAH_MENU 4
+#define JUMLAH_MENU 7
 const char* menuUtama[JUMLAH_MENU] = {
   "Pilih Preset",
   "Konfigurasi Preset",
   "Level Cairan",
-  "Kalibrasi"
+  "Kalibrasi",
+  "Pengaturan",
+  "Isi Ulang Tangki",
+  "Info/Status"
 };
 
 // ================= HALAMAN & STATE =================
@@ -63,13 +104,18 @@ enum Halaman {
   HAL_KALIB_AGITASI,
   HAL_KALIB_SUHU,
   HAL_KALIB_UDARA,
-  HAL_TEST_MOTOR
+  HAL_TEST_MOTOR,
+  HAL_PENGATURAN,
+  HAL_TANK,
+  HAL_TANK_EDIT,
+  HAL_INFO
 };
 const char* namaHalaman[] = {
   "MENU_UTAMA", "PRESET_LIST", "PRESET_DETAIL", "PROSES", "PLACEHOLDER",
   "CFG_LIST", "CFG_AKSI", "CFG_EDIT", "LEVEL", "KALIB_MAIN", "KALIB_LEVEL", "KALIB_LEVEL_SET",
   "KALIB_MOTOR_LIST", "KALIB_STEPPER", "KALIB_DC", "KALIB_AGITASI",
-  "KALIB_SUHU", "KALIB_UDARA", "TEST_MOTOR"
+  "KALIB_SUHU", "KALIB_UDARA", "TEST_MOTOR",
+  "PENGATURAN", "TANK", "TANK_EDIT", "INFO"
 };
 
 Halaman halaman = HAL_MENU_UTAMA;
@@ -81,7 +127,7 @@ bool perluGambar = true;
 // State scroll Detail Preset
 int presetDetailScroll = 0;
 const int DETAIL_SCROLL_STEP = 5;
-const int DETAIL_CONTENT_H   = 90;   // tinggi total konten (virtual)
+const int DETAIL_CONTENT_H   = 104;   // tinggi total konten (virtual)
 
 // State scroll Level Cairan
 int levelScroll = 0;
@@ -98,43 +144,52 @@ int kalibMotorScroll = 0;
 int kalibDCScroll = 0;        // scroll offset untuk halaman DC
 
 // ---- Kalibrasi pompa stepper (HCl/H2O2/Air) ----
-// Uji kalibrasi v0.6.4: user memasukkan target ml -> START (dosing memakai
-// kalibrasi sekarang, ramp sama seperti Test Motor) -> ukur hasil nyata ->
-// isi "Hasil" -> ENTER = hitung offset + kalibrasi ulang.
-// Cursor 0=START/STOP, 1=RPM, 2=Target ml, 3=Hasil ukur, 4=Offset, 5=ml/rotasi
+// Model v1.0.0: langkah = a * ml + b, dibangun dari titik (volume terukur,
+// langkah yang diperintahkan). Uji memakai jalur pompaJalanLangkah() yang sama
+// dengan dosing sehingga ramp ikut terhitung.
+// Cursor 0=START/STOP, 1=RPM, 2=Target ml, 3=Hasil ukur, 4=Offset,
+//        5=a (langkah/ml), 6=Uji hasil, 7=Reset titik
 int kalibStepperCursor = 0;
 int kalibStepperScroll = 0;
 int   kalibStepperRpm[3]        = { PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT };
-float kalibStepperMl[3]         = { 0.0f, 0.0f, 0.0f }; // ml per rotasi (hasil kalibrasi)
+float kalibStepperMl[3]         = { 0.0f, 0.0f, 0.0f };   // ml/rotasi (diturunkan dari a)
+float kalibStepperA[3]          = { 0.0f, 0.0f, 0.0f };   // langkah per ml
+float kalibStepperB[3]          = { 0.0f, 0.0f, 0.0f };   // offset langkah
+int   kalibStepperTitikN[3]     = { 0, 0, 0 };            // jumlah titik uji
+float kalibStepperTitikMl[3][6];                          // volume terukur (ml)
+float kalibStepperTitikStep[3][6];                        // langkah yang diperintahkan
 int   kalibStepperStep          = 1;                     // langkah edit hasil: 1=0,1 5=0,5 10=1 ml
 int   kalibStepperTgtStep       = 5;                     // langkah edit target: 1/5/10 ml
-int   kalibStepperTargetMl[3]   = { 10, 10, 10 };        // target uji (ml)
+int   kalibStepperTargetMl[3]   = { 20, 20, 20 };        // target uji (ml)
 int   kalibStepperUkurMl10[3]   = { 0, 0, 0 };           // hasil ukur nyata (0,1 ml)
 int   kalibStepperOffsetX10[3]  = { 0, 0, 0 };           // offset terakhir (0,1 %)
 bool  kalibStepperOffsetAda[3]  = { false, false, false };
-float kalibStepperCalUsed[3]    = { 0.0f, 0.0f, 0.0f };  // ml/rotasi efektif saat uji
-// Verifikasi hasil kalibrasi (baris "Uji hasil"):
-// - ujiMode  : run yang sedang/baru dijalankan adalah uji, bukan kalibrasi
-// - ujiAda   : sudah ada hasil uji (LULUS/GAGAL)
-// - ujiLulus : hasil uji terakhir lulus toleransi
-// - koreksiSiap : uji gagal, ENTER di baris Hasil berikutnya = koreksi
+float kalibStepperCalUsed[3]    = { 0.0f, 0.0f, 0.0f };  // a efektif saat uji
+long  kalibStepperStepUsed[3]   = { 0, 0, 0 };           // langkah yang diperintahkan saat uji
+// Verifikasi hasil kalibrasi (baris "Uji hasil").
 bool  kalibStepperUjiMode[3]    = { false, false, false };
 bool  kalibStepperUjiAda[3]     = { false, false, false };
 bool  kalibStepperUjiLulus[3]   = { false, false, false };
 bool  kalibStepperKoreksiSiap[3]= { false, false, false };
 
 // ---- Kalibrasi pompa DC (sabun/limbah) ----
-// Cursor 0=START/STOP, 1=Duty, 2=Target ml, 3=Hasil ukur, 4=Offset, 5=ml/detik
+// Model v1.0.0: ml = r * detik + c, dibangun dari titik (durasi, volume).
+// Cursor 0=START/STOP, 1=Duty, 2=Target ml, 3=Hasil ukur, 4=Offset,
+//        5=r (ml/detik), 6=Uji hasil, 7=Reset titik
 int   kalibDCCursor       = 0;
 int   kalibDutyDC[2]      = { 80, 100 };   // duty pompa sabun & limbah (%)
-float kalibDcMlPerSec[2]  = { 0.0f, 0.0f }; // hasil kalibrasi ml/detik
+float kalibDcMlPerSec[2]  = { 0.0f, 0.0f }; // r (ml/detik)
+float kalibDcC[2]         = { 0.0f, 0.0f }; // c (ml)
+int   kalibDcTitikN[2]    = { 0, 0 };
+float kalibDcTitikDetik[2][6];
+float kalibDcTitikMl[2][6];
 int   kalibDcStep         = 1;              // langkah edit hasil: 1/5/10 ml
 int   kalibDcTgtStep      = 5;              // langkah edit target: 1/5/10 ml
-int   kalibDcTargetMl[2]  = { 50, 50 };     // target uji (ml)
+int   kalibDcTargetMl[2]  = { 100, 100 };   // target uji (ml)
 int   kalibDcUkurMl[2]    = { 0, 0 };       // hasil ukur nyata (ml)
 int   kalibDcOffsetX10[2] = { 0, 0 };       // offset terakhir (0,1 %)
 bool  kalibDcOffsetAda[2] = { false, false };
-float kalibDcCalUsed[2]   = { 0.0f, 0.0f }; // ml/detik efektif saat uji
+float kalibDcCalUsed[2]   = { 0.0f, 0.0f }; // r efektif saat uji
 unsigned long kalibDcDurasiMs = 0;          // durasi uji target ml yang sedang berjalan
 // Verifikasi hasil kalibrasi DC (baris "Uji hasil").
 bool  kalibDcUjiMode[2]     = { false, false };
@@ -177,6 +232,7 @@ int kalibUdaraSel    = 0;     // 0 = normal, 1 = kotor
 int mq135Normal      = 0;     // acuan udara bersih (ppm)
 int mq135Kotor       = 0;     // acuan udara kotor (ppm)
 int mq135Bacaan      = 0;     // ADC real-time (diupdate di loop)
+int mq135PPMTerkini  = 0;     // ppm hasil konversi terakhir
 
 // State Konfigurasi Preset
 enum DialogCfg { DLG_NONE, DLG_SIMPAN, DLG_HAPUS };
@@ -186,6 +242,38 @@ Preset presetEdit;            // salinan kerja saat edit
 bool   editBerubah = false;
 int    editField = 0;
 int    editScroll = 0;
+
+// ================= STATE PROSES (dipakai UI + storage runstate) =================
+enum FaseProses {
+  FASE_IDLE,
+  FASE_PRECHECK,
+  FASE_WAIT_PCB,
+  FASE_ETCH,
+  FASE_BILAS_SABUN,
+  FASE_BILAS_AIR,
+  FASE_DRAIN_BATAL,
+  FASE_PEMULIHAN,
+  FASE_SELESAI
+};
+enum LangkahProses {
+  LANGKAH_NONE = 0,
+  L_DOSE_AIR,
+  L_DOSE_H2O2,
+  L_DOSE_HCL,
+  L_AGITASI,
+  L_DRAIN,
+  L_DECIDE,
+  L_KONFIRMASI,
+  L_ISI,
+  L_BILAS_AGITASI
+};
+
+// ================= PENGATURAN: STATE UI =================
+int settingCursor = 0;
+int tankEditIdx   = 0;
+int tankEditStep  = 10;
+int infoScroll    = 0;
+const char* infoAlasanReset = "-";
 
 void pindahHalaman(Halaman h) {
   dbg.print(F("[NAV] "));

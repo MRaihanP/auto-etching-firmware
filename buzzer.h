@@ -32,6 +32,8 @@ const Note N_START[]  = {{1319, 100}, {1568, 120}};
 const Note N_CANCEL[] = {{1568, 120}, {1319, 120}, {1047, 250}};
 const Note N_DONE[]   = {{1047, 110}, {1319, 110}, {1568, 110}, {2093, 400}};
 const Note N_KEY[]    = {{2093, 20}};
+const Note N_WARN[]   = {{1760, 90}, {0, 60}, {1760, 90}};
+const Note N_ERROR[]  = {{523, 220}, {0, 60}, {392, 220}, {0, 60}, {262, 400}};
 
 // ================= SCHEDULER =================
 const Note* melodi     = nullptr;
@@ -51,6 +53,8 @@ void buzzerBoot()    { buzzerPutar(N_BOOT,   3); }
 void buzzerMulai()   { buzzerPutar(N_START,  2); }
 void buzzerBatal()   { buzzerPutar(N_CANCEL, 3); }
 void buzzerSelesai() { buzzerPutar(N_DONE,   4); }
+void buzzerWarn()    { buzzerPutar(N_WARN,   3); }
+void buzzerError()   { buzzerPutar(N_ERROR,  5); }
 
 void buzzerStop() {
   melodi = nullptr;

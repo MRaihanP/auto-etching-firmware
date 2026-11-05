@@ -27,6 +27,51 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-11-05] v1.0.0 — Mesin standalone lengkap
+
+**Latar belakang:**
+- v0.6.6 masih berupa urutan 5 fase berbasis persentase waktu, tanpa siklus,
+  pelacak tangki, pemulihan setelah listrik padam, atau kalibrasi model.
+- Target v1.0.0: proses etching yang dapat diulang, aman, dan dapat
+  dilanjutkan setelah gangguan, tanpa bergantung pada satu kali kalibrasi.
+
+**Perubahan Kode:**
+- `config.h` — versi v1.0.0; ambang suhu, margin drain, kapasitas tangki,
+  watchdog, jeda BACK, toleransi kalibrasi, dan `SKALA_UJI_CEPAT`.
+- `data.h` — Preset v2 (`siklus`, `agitasiDetik` per siklus, `agitasiSpeed`,
+  `bilasSabun`, `bilasAir`, `bilasMl`, `bilasDetik`, `konfirmasiSiklus`);
+  `totalDetik` dihapus; enum fase/langkah baru; state pengaturan, tangki,
+  pemulihan, dan UI.
+- `safety.h` — modul baru: latch E-stop via interrupt + debounce, tabel fault
+  E01–E10, `safetyRaise`, dan blokir aktuator saat state bukan AMAN.
+- `sensor.h` — `sensorTick()` tunggal (level 50 ms, suhu 1 s, MQ-135 500 ms),
+  status basah/kering dengan histeresis + FAULT, adaptasi baseline, dan
+  penyimpanan kalibrasi sensor di `kal2`.
+- `motor.h` / `dcmotor.h` — model kalibrasi `langkah = a·ml + b` dan
+  `ml = r·detik + c`, titik uji, verifikasi LULUS/GAGAL, perhitungan durasi
+  dosing/drain, serta ramp yang tetap dipakai dosing dan kalibrasi.
+- `storage.h` — NVS `cfg` v2 (migrasi Preset v1), `pompa` v4 (migrasi v3),
+  `kal2`, `set`, `tank`, dan `runstate` dengan checksum/versi.
+- `process.h` — mesin proses baru: precheck lengkap, dosing satu per satu,
+  siklus + konfirmasi, bilas sabun/air, drain berbasis model, timeout tiap
+  langkah (E04), pelacak volume wadah, pelacak tangki, jeda/lanjut, batal +
+  tawaran drain, serta pemulihan drain & bilas setelah listrik padam.
+- `ui.h` / `.ino` — layar proses (siklus, fase, suhu, sisa waktu, peringatan
+  tangki), WAIT_PCB, konfirmasi siklus, error/E-stop, pemulihan, dialog drain,
+  menu Pengaturan, Isi Ulang Tangki, Info/Status, editor 14 field, dan tahan
+  BACK ≥ 1 detik.
+- `DOKUMENTASI.md` — prosedur kalibrasi, daftar error, parameter default,
+  alur pemulihan, dan checklist pengujian.
+
+**Catatan:**
+- Build bersih dengan FQBN `esp32:esp32:esp32s3:CDCOnBoot=cdc`
+  (482.859 byte flash, 29.748 byte RAM).
+- Uji aktuator/sensor dengan larutan asli masih menunggu hardware; checklist
+  bench tersedia di `DOKUMENTASI.md`.
+- IoT/MQTT (Tahap 8) dijadwalkan v1.1.0 dan belum diimplementasikan.
+
+---
+
 ## [2026-10-30] v0.6.6 — Verifikasi hasil kalibrasi (LULUS/GAGAL)
 
 **Latar belakang:**

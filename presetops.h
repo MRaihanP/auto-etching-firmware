@@ -3,14 +3,17 @@
 #include "config.h"
 #include "data.h"
 
-// ================= FIELD EDIT =================
-#define JUMLAH_FIELD 9
+// ================= FIELD EDIT (Preset v2) =================
+#define JUMLAH_FIELD 14
 const char* namaField[JUMLAH_FIELD] = {
   "PCB panjang", "PCB lebar", "HCl", "H2O2", "H2O",
-  "Volume", "Agitasi", "Speed agit", "Durasi"
+  "Volume", "Etching", "Speed agit", "Siklus",
+  "Bilas sabun", "Bilas air", "Bilas ml", "Bilas detik", "Konfirmasi"
 };
-// idx: 0 panjang, 1 lebar, 2 %HCl, 3 %H2O2, 4 %H2O (otomatis, tidak bisa diubah),
-//      5 volume total, 6 agitasi (s), 7 speed, 8 durasi total (s)
+// idx: 0 panjang, 1 lebar, 2 %HCl, 3 %H2O2, 4 %H2O (otomatis),
+//      5 volume total, 6 lama etching/siklus, 7 speed, 8 siklus,
+//      9 bilas sabun, 10 bilas air, 11 ml tiap bilas, 12 detik tiap bilas,
+//      13 konfirmasi tiap akhir siklus (0/1)
 
 // Hitung ulang %H2O dan ml dari persen HCl/H2O2 + volume total.
 // ml H2O = sisa, jadi total ml selalu = vol.
@@ -39,9 +42,14 @@ void ubahField(Preset &p, int f, int arah) {
     case 5:
       vol = constrain(vol + arah * 10, VOL_MIN, VOL_MAX);
       hitungUlang(p, vol); break;
-    case 6: p.agitasiDetik = constrain(p.agitasiDetik + arah, 1, 60); break;
+    case 6: p.agitasiDetik = constrain(p.agitasiDetik + arah * 10, 30, 1800); break;
     case 7: p.agitasiSpeed = constrain(p.agitasiSpeed + arah, 1, 3); break;
-    case 8: p.totalDetik   = constrain(p.totalDetik + arah * 10, 30, 3600); break;
+    case 8: p.siklus       = constrain(p.siklus + arah, 1, 6); break;
+    case 9: p.bilasSabun   = constrain(p.bilasSabun + arah, 0, 3); break;
+    case 10: p.bilasAir    = constrain(p.bilasAir + arah, 0, 5); break;
+    case 11: p.bilasMl     = constrain(p.bilasMl + arah * 10, 20, VOL_MAX); break;
+    case 12: p.bilasDetik  = constrain(p.bilasDetik + arah * 5, 5, 300); break;
+    case 13: p.konfirmasiSiklus = (p.konfirmasiSiklus ? 0 : 1); break;
   }
 }
 
@@ -55,9 +63,14 @@ bool validasiPreset(const Preset &p) {
   if (p.mlHCl < 0 || p.mlH2O2 < 0 || p.mlH2O < 0) return false;
   int vol = volumeTotal(p);
   if (vol < VOL_MIN || vol > VOL_MAX) return false;
-  if (p.agitasiDetik < 1 || p.agitasiDetik > 60) return false;
-  if (p.agitasiSpeed < 1 || p.agitasiSpeed > 5) return false;
-  if (p.totalDetik < 30 || p.totalDetik > 3600) return false;
+  if (p.agitasiDetik < 30 || p.agitasiDetik > 1800) return false;
+  if (p.agitasiSpeed < 1 || p.agitasiSpeed > 3) return false;
+  if (p.siklus < 1 || p.siklus > 6) return false;
+  if (p.bilasSabun < 0 || p.bilasSabun > 3) return false;
+  if (p.bilasAir < 0 || p.bilasAir > 5) return false;
+  if (p.bilasMl < 20 || p.bilasMl > VOL_MAX) return false;
+  if (p.bilasDetik < 5 || p.bilasDetik > 300) return false;
+  if (p.konfirmasiSiklus < 0 || p.konfirmasiSiklus > 1) return false;
   return true;
 }
 
@@ -88,8 +101,11 @@ bool tambahPreset() {
   p.pcbPanjang = 100; p.pcbLebar = 80;
   p.persenHCl = 33;   p.persenH2O2 = 17;
   hitungUlang(p, 360);
-  p.agitasiDetik = 5; p.agitasiSpeed = 3;
-  p.totalDetik = 270;
+  p.agitasiDetik = 300; p.agitasiSpeed = 3;
+  p.siklus = 3;
+  p.bilasSabun = 1; p.bilasAir = 2;
+  p.bilasMl = 100;  p.bilasDetik = 20;
+  p.konfirmasiSiklus = 0;
   daftarPreset[jumlahPreset++] = p;
   return true;
 }

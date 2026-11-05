@@ -124,6 +124,72 @@ bool agitasiAktif() { return dcAktif(DC_AGI); }
 void pompaSabunSet(bool on)  { dcSetPct(DC_SABUN,  on ? kalibDutyDC[0] : 0.0f); }
 void pompaLimbahSet(bool on) { dcSetPct(DC_LIMBAH, on ? kalibDutyDC[1] : 0.0f); }
 
+// ================= MODEL KALIBRASI DC =================
+// v1.0.0: ml = r * detik + c. Dibangun dari titik (durasi, volume terukur).
+// Data lama (ml/detik saja) tetap dipakai dengan c = 0.
+float dcRate(int idx) {
+  return (idx >= 0 && idx < 2) ? kalibDcMlPerSec[idx] : 0.0f;
+}
+
+void dcHitungModel(int idx) {
+  if (idx < 0 || idx >= 2) return;
+  int n = kalibDcTitikN[idx];
+  if (n <= 0) return;
+  if (n == 1) {
+    if (kalibDcTitikDetik[idx][0] > 0.0f)
+      kalibDcMlPerSec[idx] = kalibDcTitikMl[idx][0] / kalibDcTitikDetik[idx][0];
+    kalibDcC[idx] = 0.0f;
+  } else {
+    double sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (int i = 0; i < n; i++) {
+      double x = kalibDcTitikDetik[idx][i];
+      double y = kalibDcTitikMl[idx][i];
+      sx += x; sy += y; sxx += x * x; sxy += x * y;
+    }
+    double den = n * sxx - sx * sx;
+    if (fabs(den) < 1e-9) return;
+    double r = (n * sxy - sx * sy) / den;
+    double c = (sy - r * sx) / n;
+    if (r <= 0.0) return;
+    kalibDcMlPerSec[idx] = (float)r;
+    kalibDcC[idx] = (float)c;
+  }
+}
+
+void dcTambahTitik(int idx, float detik, float mlTerukur) {
+  if (idx < 0 || idx >= 2 || detik <= 0.0f || mlTerukur <= 0.0f) return;
+  int n = kalibDcTitikN[idx];
+  if (n >= 6) {
+    for (int i = 1; i < 6; i++) {
+      kalibDcTitikDetik[idx][i - 1] = kalibDcTitikDetik[idx][i];
+      kalibDcTitikMl[idx][i - 1]    = kalibDcTitikMl[idx][i];
+    }
+    n = 5;
+  }
+  kalibDcTitikDetik[idx][n] = detik;
+  kalibDcTitikMl[idx][n]    = mlTerukur;
+  kalibDcTitikN[idx] = n + 1;
+  dcHitungModel(idx);
+}
+
+void dcResetTitik(int idx) {
+  if (idx < 0 || idx >= 2) return;
+  kalibDcTitikN[idx] = 0;
+  kalibDcMlPerSec[idx] = 0.0f;
+  kalibDcC[idx] = 0.0f;
+}
+
+// Durasi (ms) untuk memindahkan `ml` memakai model r*t + c.
+// Sudah termasuk DC_MARGIN_PCT. 0 = laju belum diketahui.
+unsigned long dcDurasiDariMl(int idx, int ml, int marginPct) {
+  float r = dcRate(idx);
+  if (idx < 0 || idx > 1 || ml <= 0 || r <= 0.0f) return 0;
+  float detik = ((float)ml - kalibDcC[idx]) / r;
+  if (detik <= 0.0f) return 0;
+  detik *= (1.0f + marginPct / 100.0f);
+  return (unsigned long)(detik * 1000.0f);
+}
+
 // Durasi (ms) untuk memindahkan `ml` pada laju `rate` (ml/detik).
 // Sudah termasuk DC_MARGIN_PCT. 0 = laju belum diketahui.
 unsigned long dcDosisMsRate(int ml, float rate) {
@@ -139,11 +205,46 @@ unsigned long dcKalibrasiMs(int ml, float rate) {
   return (unsigned long)(((float)ml / rate) * 1000.0f);
 }
 
+// Durasi uji memakai model (tanpa margin).
+unsigned long dcKalibrasiMsModel(int idx, int ml) {
+  if (idx < 0 || idx > 1 || ml <= 0) return 0;
+  float r = dcRate(idx);
+  if (r <= 0.0f) return 0;
+  float detik = ((float)ml - kalibDcC[idx]) / r;
+  if (detik <= 0.0f) return 0;
+  return (unsigned long)(detik * 1000.0f);
+}
+
 // Durasi (ms) untuk memindahkan `ml` pada pompa DC idx (0=sabun, 1=limbah).
 // 0 = pompa belum dikalibrasi.
 unsigned long dcDosisMs(int idx, int ml) {
-  if (idx < 0 || idx > 1) return 0;
-  return dcDosisMsRate(ml, kalibDcMlPerSec[idx]);
+  return dcDurasiDariMl(idx, ml, DC_MARGIN_PCT);
+}
+
+// Durasi drain: model limbah + margin global + tambahan tetap.
+unsigned long dcDrainMs(int ml) {
+  unsigned long ms = dcDurasiDariMl(1, ml, pengaturan.drainMarginPct);
+  if (ms == 0) return 0;
+  return ms + DRAIN_TAMBAHAN_MS;
+}
+
+// ================= JEDA / LANJUT POMPA DC =================
+float dcTargetSebelumJeda[3] = { 0.0f, 0.0f, 0.0f };
+bool  dcJedaAktif = false;
+
+// Hentikan semua kanal dengan ramp, tetapi ingat target aslinya.
+void dcJedaSemua() {
+  if (dcJedaAktif) return;
+  for (int ch = 0; ch < 3; ch++) dcTargetSebelumJeda[ch] = dcTargetPct[ch];
+  dcStopAll();
+  dcJedaAktif = true;
+}
+
+// Pulihkan target sebelum jeda (ramp naik lagi).
+void dcLanjutSemua() {
+  if (!dcJedaAktif) return;
+  for (int ch = 0; ch < 3; ch++) dcTargetPct[ch] = dcTargetSebelumJeda[ch];
+  dcJedaAktif = false;
 }
 
 // ================= UJI KALIBRASI DC (target ml) =================
