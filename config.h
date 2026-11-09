@@ -109,11 +109,27 @@
 #define PUMP_ACCEL_RPM_PER_SEC  500.0f
 #define PUMP_ACCEL_HZ2 \
   ((uint32_t)(PUMP_ACCEL_RPM_PER_SEC * (float)PUMP_STEP_PER_REV / 60.0f + 0.5f))
-// Uji kalibrasi v0.6.4 memakai target ml; jumlah rotasi dihitung dari target
-// dan kalibrasi yang sedang dipakai (lihat pompaDosisKalibrasi()). Nilai
-// nominal hanya dipakai saat pompa BELUM pernah dikalibrasi (ml/rotasi = 0)
-// supaya uji pertama tetap bisa jalan; hasil ukur user menggantikannya.
-#define PUMP_KALIB_NOMINAL_ML_PER_REV 2.0f
+// Kalibrasi stepper memakai SATU target tetap 100 ml. Nilai nominal hanya
+// dipakai saat pompa BELUM pernah dikalibrasi (a = 0 dan ml/rotasi = 0),
+// supaya run pertama tetap bisa jalan; hasil ukur user menggantikannya.
+//
+// 2,0 ml/rotasi ternyata terlalu optimis untuk pompa yang dipakai: hasil uji
+// nyata 20-30 ml pada run pertama (target 100 ml), sehingga koreksi pertama
+// melonjak 3-5x. Nilai 0,5 ml/rotasi (6400 langkah/ml) membuat run pertama
+// lebih panjang dan lebih dekat ke hasil sebenarnya, sehingga kalibrasi
+// tidak "kejauhan" sejak awal. Nilai ini tetap hanya titik awal.
+#define PUMP_KALIB_NOMINAL_ML_PER_REV 0.5f
+#define KALIB_STEPPER_TARGET_ML      100
+#define KALIB_STEPPER_RUN_MIN        3
+// Koreksi lebih besar dari ini (persen) harus dikonfirmasi ENTER kedua untuk
+// mencegah salah ketik yang merusak model.
+#define KALIB_STEPPER_KOREKSI_BESAR  50.0f
+// Batas langkah per run kalibrasi. 2.000.000 langkah ~ 75 detik pada 500 rpm;
+// di atas ini hampir pasti model/prime bermasalah, jadi run ditolak.
+#define KALIB_STEPPER_MAX_STEPS      2000000L
+// Hasil run dianggap turun drastis bila < 30% hasil terakhir yang diterapkan
+// padahal langkah tidak berkurang. Perlu konfirmasi ENTER kedua.
+#define KALIB_STEPPER_TURUN_PCT      30.0f
 // Batas target/hasil uji kalibrasi (ml).
 #define KALIB_ML_MIN         1
 #define KALIB_ML_MAX         999
@@ -130,6 +146,23 @@
 // Nilai nominal ml/detik untuk uji kalibrasi pertama saat pompa DC belum
 // pernah dikalibrasi (ml/detik = 0). Hasil ukur user menggantikannya.
 #define DC_KALIB_NOMINAL_ML_PER_SEC 10.0f
+// Run PERTAMA setiap sesi kalibrasi DC memakai pulse pendek, bukan target
+// 100 ml. Tujuannya: pompa 100% tidak menyemprot jauh melewati target saat
+// laju sebenarnya belum diketahui (mis. limbah ~24 ml/detik, bukan 10).
+#define DC_KALIB_PULSE_MS_SABUN   5000UL
+#define DC_KALIB_PULSE_MS_LIMBAH  3000UL
+// Model baru langsung dipakai untuk run target setelah pulse. Minimal 3 run
+// (pulse + 2 run target) dan error <= toleransi sebelum status LULUS.
+#define KALIB_DC_RUN_MIN          3
+// Batas laju wajar (ml/detik) agar salah ukur tidak merusak model.
+#define KALIB_DC_R_MIN            0.5f
+#define KALIB_DC_R_MAX            100.0f
+// Jalankan target kalibrasi maksimal selama ini; lebih dari ini berarti model
+// atau target salah dan run dibatalkan.
+#define KALIB_DC_MAKS_MS          120000UL
+// Fallback drain bila pompa limbah belum dikalibrasi. Sengaja lebih lambat
+// dari laju nyata agar wadah tetap tersedot (bukan berhenti terlalu cepat).
+#define DC_DRAIN_FALLBACK_ML_PER_SEC 10.0f
 // Margin pompa DC: dosing berbasis waktu diberi kelebihan 10% karena laju DC
 // kurang presisi (selang, tegangan, viskositas) dan cenderung kurang, bukan
 // berlebih. Dipakai oleh dcDosisMs().
@@ -196,4 +229,4 @@
 #define LOG_LEVEL 2
 #endif
 
-#define FW_VERSI  "v1.0.0"
+#define FW_VERSI  "v1.0.1"

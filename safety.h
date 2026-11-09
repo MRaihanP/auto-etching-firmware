@@ -27,6 +27,8 @@ bool          safetyTombolDitekan = false;
 
 // Didefinisikan di process.h; dipanggil sekali saat transisi darurat.
 void prosesBatalDarurat();
+// Evakuasi cairan lewat pompa limbah saat E-stop/ERROR (process.h).
+extern bool evakuasiAktif;
 
 struct SafetyFaultInfo {
   int kode;
@@ -116,6 +118,11 @@ bool safetyBolehAktuator() { return safetyState == SAF_AMAN; }
 // sudah tidak ditekan.
 bool safetyKonfirmasi() {
   if (safetyState == SAF_AMAN) return false;
+  // Jangan izinkan reset selama pompa limbah masih mengevakuasi cairan.
+  if (evakuasiAktif) {
+    dbg.println(F("[SAFETY] Evakuasi cairan masih berjalan"));
+    return false;
+  }
   if (safetyState == SAF_ESTOP && digitalRead(PIN_ESTOP) == LOW) {
     dbg.println(F("[SAFETY] E-stop masih ditekan"));
     return false;

@@ -27,6 +27,55 @@ Setiap versi di-backup ke folder `backup/vX.Y.Z_tanggal/` sebelum perubahan dila
 
 ---
 
+## [2026-11-09] v1.0.1 — Siklus penuh berulang + evakuasi cairan
+
+**Latar belakang:**
+- Uji hardware v1.0.0 menunjukkan kalibrasi pompa limbah overshoot ekstrem
+  saat duty 100% (model lama menganggap laju 10 ml/detik, kenyataannya jauh
+  lebih tinggi), dan pompa sabun tidak konsisten setelah dipakai lama.
+- Proses juga baru mengulang tahap dosing/etching; bilas sabun/air hanya
+  sekali di akhir, sehingga preset `siklus` tidak benar-benar mengulang
+  siklus penuh.
+- Saat cancel/E-stop, cairan di wadah dibiarkan dan pompa limbah tidak
+  menyala, sehingga wadah harus dikosongkan manual.
+
+**Perubahan Kode:**
+- `config.h` — `DC_KALIB_PULSE_MS_SABUN` (5000 ms) dan
+  `DC_KALIB_PULSE_MS_LIMBAH` (3000 ms), `KALIB_DC_RUN_MIN` = 3,
+  batas laju wajar `KALIB_DC_R_MIN/MAX`, `KALIB_DC_MAKS_MS`, dan
+  `DC_DRAIN_FALLBACK_ML_PER_SEC` = 10; `FW_VERSI` → v1.0.1.
+- `data.h` — state sesi kalibrasi DC baru (`kalibDcRunKe`, `kalibDcLulus`,
+  `kalibDcPulseRun`, `kalibDcModelDuty`, `kalibDcDetikAktual`); state
+  evakuasi darurat (`evakuasiAktif`, `evakuasiMulaiMs`, `evakuasiDurasiMs`,
+  `evakuasiMl`).
+- `dcmotor.h` — `kalibDcResetModel()`, `kalibDcResetSesi()`,
+  `kalibDcPulseMs()`, timer dihitung sejak perintah ON (termasuk ramp),
+  `kalibDcStop()` mencatat durasi perintah; `dcDosisMs()` dan `dcDrainMs()`
+  memakai fallback nominal bila model belum ada.
+- `process.h` — satu siklus penuh = dosing + etching + drain + bilas
+  sabun/air, diulang `siklus` kali; `mulaiBilasSiklus()`,
+  `mulaiBilasBerikut()`, `selesaiSiklus()`, `mulaiIsiSabun()`,
+  `mulaiIsiAir()`; `prosesBatal()` langsung drain; `FASE_DRAIN_BATAL`;
+  `mulaiEvakuasiDarurat()`, `evakuasiUpdate()`, `evakuasiSisaDetik()`;
+  precheck tidak lagi mewajibkan kalibrasi limbah; kebutuhan tangki dan
+  estimasi waktu dihitung per siklus.
+- `safety.h` — `safetyKonfirmasi()` menolak reset selama evakuasi aktif;
+  deklarasi `evakuasiAktif` untuk process.h.
+- `storage.h` — `kalibDcModelDuty` diisi saat model dimuat dari NVS.
+- `.ino` — handler kalibrasi DC baru (START pulse/target, Reset kalib),
+  loop memanggil `evakuasiUpdate()`, redraw overlay safety saat evakuasi,
+  dialog batal langsung drain.
+- `ui.h` — baris kalibrasi DC (`START pulse`, `Run n/3 LULUS`,
+  `Reset kalib`), konfirmasi siklus (`Siklus lagi`/`Selesai`), overlay
+  safety menampilkan hitung mundur drain, label preset `Bilas/siklus`.
+
+**Build:** 483.887 byte flash (36%), 29.788 byte RAM (9%).
+
+**Uji hardware:** belum dilakukan — perlu uji pulse+3 run kalibrasi DC,
+proses beberapa siklus, cancel auto-drain, dan E-stop/evakuasi.
+
+---
+
 ## [2026-11-05] v1.0.0 — Mesin standalone lengkap
 
 **Latar belakang:**

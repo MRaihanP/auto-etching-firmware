@@ -1,7 +1,7 @@
-# Dokumentasi Firmware v1.0.0
+# Dokumentasi Firmware v1.0.1
 
 Dokumen ini merangkum cara pakai, prosedur kalibrasi, daftar error, dan
-parameter default firmware **v1.0.0** untuk mesin etching PCB otomatis
+parameter default firmware **v1.0.1** untuk mesin etching PCB otomatis
 berbasis ESP32-S3. Untuk riwayat perubahan lihat [`LOG.md`](./LOG.md) dan
 [`RELEASES.md`](./RELEASES.md).
 
@@ -47,23 +47,28 @@ Tombol:
 2. **PRECHECK** memeriksa kalibrasi pompa, sensor wajib, level sumber, level
    limbah, sisa tangki, dan kapasitas tangki limbah.
 3. **WAIT_PCB** — pasang PCB, lalu **ENTER**.
-4. Tiap siklus: dosing air → H2O2 → HCl (satu pompa pada satu waktu) →
-   agitasi sesuai `agitasiDetik` → drain.
-5. Setelah siklus terakhir: bilas sabun (`bilasSabun` kali), lalu bilas air
-   (`bilasAir` kali). Tiap bilas memakai `bilasMl` dan agitasi `bilasDetik`.
-6. Bila `konfirmasiSiklus` aktif, layar konfirmasi muncul di akhir **setiap**
-   siklus, termasuk siklus terakhir:
-   - **Selesai & bilas** — langsung ke tahap bilas.
-   - **Ulangi** — mengulang siklus terakhir.
+4. Satu **siklus penuh** terdiri dari: dosing air → H2O2 → HCl (satu pompa
+   pada satu waktu) → agitasi `agitasiDetik` → drain → bilas sabun
+   (`bilasSabun` kali) → bilas air (`bilasAir` kali) → drain.
+   Tiap bilas memakai `bilasMl` dan agitasi `bilasDetik`.
+5. Siklus penuh diulang sebanyak `siklus` di preset. Jumlah bilas pada preset
+   adalah **per siklus**, bukan total di akhir.
+6. Bila `konfirmasiSiklus` aktif, layar konfirmasi muncul di akhir **setiap
+   siklus penuh** (termasuk siklus terakhir):
+   - **Siklus lagi** — menjalankan siklus penuh berikutnya.
+   - **Selesai** — mengakhiri proses.
 7. **SELESAI** — tekan **ENTER/BACK** untuk keluar; wadah sudah kosong.
 
 Saat proses berjalan:
 
 - **ENTER** — jeda / lanjut. Jeda menghentikan stepper, DC, dan agitasi;
   lanjut meneruskan sisa langkah/waktu.
-- **BACK** — dialog batal. Setelah batal, bila wadah masih berisi, muncul
-  dialog **“Drain wadah?”** (ENTER = drain, BACK = lewati).
-- **E-stop** — semua aktuator langsung mati dan proses dibatalkan.
+- **BACK** — dialog batal. Setelah dikonfirmasi, semua motor lain dimatikan
+  dan **pompa limbah langsung menyala** sampai cairan wadah tersedot. Tidak
+  perlu memilih drain lagi.
+- **E-stop** — semua motor mati seketika, lalu **pompa limbah menyala**
+  sampai cairan tersedot (durasi memakai model limbah atau fallback waktu).
+  Reset E-stop menunggu evakuasi selesai.
 
 Proses baru **ditolak** bila `volumeWadah > 0`; drain dulu lewat dialog yang
 muncul saat mencoba mulai.
@@ -75,37 +80,111 @@ Lakukan kalibrasi **sebelum** menjalankan proses dengan larutan asli.
 
 ### 4.1 Pompa stepper (HCl, H2O2, air)
 
-1. **Kalibrasi → Motor → Pompa HCl/H2O2/Air**.
-2. Isi **Target** (ml), misalnya 20 ml untuk titik pertama.
-3. **ENTER** pada START untuk menjalankan dosing memakai profil yang sama
-   dengan proses nyata (ramp naik → jalan → ramp turun).
-4. Ukur volume nyata dengan gelas ukur, lalu isi **Hasil**.
-5. **ENTER** pada baris Hasil menambah titik uji `(langkah, ml)`.
-6. Ulangi dengan volume berbeda (misalnya 120 ml). Model
-   **`langkah = a·ml + b`** dihitung dari minimal dua titik dengan volume
-   berbeda.
-7. Baris **Uji hasil** menjalankan verifikasi memakai model tersimpan;
-   **LULUS** bila galat ≤ 5%, **GAGAL** bila lebih. Bila GAGAL, **ENTER**
-   pada Hasil menambahkan titik koreksi lalu uji ulang.
-8. **Reset titik** menghapus semua titik dan mengembalikan model ke nol.
+Alur ini memakai **target tetap 100 ml**. Target tidak bisa diedit.
 
-Bila pompa belum pernah dikalibrasi, firmware memakai nilai nominal
-2,0 ml/rotasi agar uji pertama tetap bisa dijalankan.
+1. **Kalibrasi → Motor → Pompa HCl/H2O2/Air**.
+2. Isi jeriken dengan air/cairan, masukkan selang input ke jeriken.
+   Siapkan **wadah buang** untuk priming dan **gelas takar kosong/kering**
+   untuk pengukuran.
+3. Pilih baris **Priming**, tekan **ENTER**. Setelah cairan mulai keluar,
+   **biarkan pompa jalan 10–15 detik lagi** ke wadah buang. Durasi priming
+   tampil di tombol START (misalnya `PRIME 12s`). Tekan **ENTER** untuk
+   berhenti.
+4. Pindahkan selang output ke gelas takar. Tunggu sampai tetesan terakhir
+   berhenti. Gelas harus benar-benar kosong dan kering.
+5. Pilih **START 100 ml**, tekan **ENTER**. Pompa memakai model saat ini:
+   - sudah dikalibrasi → memakai `a`/`b` tersimpan;
+   - belum dikalibrasi → memakai base **6400 langkah/ml** (0,5 ml/rotasi).
+6. Setelah motor berhenti, tunggu tetesan terakhir, lalu baca volume di
+   gelas takar. Baris **Hasil** mulai dari `--`:
+   - tekan **ENTER** untuk mengisi cepat **100 ml**, lalu sesuaikan dengan
+     **KIRI/KANAN**; atau
+   - langsung **KIRI/KANAN** dari 0 untuk hasil di bawah 100 ml.
+   Resolusi default **1 ml**; **ENTER** pada baris **Koreksi** mengganti
+   resolusi **0,1 / 1 / 5 ml** (tampil sebagai `Hasil x1`, `x0.1`, `x5`).
+7. Tekan **ENTER lagi** pada baris **Hasil**. Firmware menghitung koreksi,
+   menyimpan, dan langsung menerapkannya ke pompa tersebut. Tombol START
+   berubah menjadi **“Gelas kosong?”** — kosongkan dan keringkan gelas,
+   lalu tekan **ENTER** dua kali (konfirmasi, lalu mulai run berikutnya).
+8. **Kosongkan dan keringkan gelas takar** sebelum run berikutnya, lalu
+   ulangi langkah 5–7 minimal **3 kali**. Baris **Run** menampilkan
+   `0/3` … `3/3 LULUS` atau `3/3 ULANGI`. Jika aliran tidak keluar atau
+   ada gelembung udara, ulangi **Priming** ke wadah buang sebelum START
+   berikutnya.
+
+Rumus koreksi:
+
+```text
+S = jumlah langkah yang diperintahkan pada run ini
+V = volume terukur yang dimasukkan (ml)
+a_baru = S / V
+b_baru = 0
+```
+
+Contoh: target 100 ml, hasil 130 ml → `a_baru = S / 130`, sehingga run
+berikutnya memakai langkah 100/130 dari sebelumnya.
+
+Catatan penting:
+
+- **Gelas harus kosong dan kering setiap run.** Sisa air dari priming atau
+  run sebelumnya membuat hasil ukur terlalu besar dan kalibrasi menjadi
+  berulang-ulang (gejala seperti H2O2: 25 → 50 → 90 → 98 → 100).
+- Jika **tidak ada cairan keluar**, jangan isi hasil. Tekan **START** lagi
+  setelah priming; hasil run yang belum diterapkan otomatis dibuang dan
+  model tidak berubah.
+- Jika muncul **“Cek priming!”**, hasil turun drastis dibanding run
+  sebelumnya. Periksa selang input (harus terendam), udara di selang,
+  sambungan longgar, atau selang pompa yang aus. Tekan **ENTER** lagi hanya
+  jika hasil ukur memang benar.
+- Jika muncul **“Cek pompa/prime”** saat START, model meminta langkah
+  terlalu panjang (> 2.000.000 langkah). Reset lalu kalibrasi ulang; periksa
+  juga priming dan selang.
+- Jika muncul **“Hasil tak wajar”**, hasil ukur akan menghasilkan model di
+  luar batas langkah aman. Periksa kembali angka hasil dan priming; model
+  tidak diubah.
+- **LULUS** bila selisih hasil ukur terhadap 100 ml ≤ 5%; **ULANGI** bila
+  lebih.
+- Selisih lebih dari 50% (misalnya hasil < 50 ml atau > 150 ml) harus
+  dikonfirmasi dengan **ENTER** kedua untuk mencegah salah ketik.
+- Setelah run pertama, model langsung dipakai oleh proses. Proses **tidak
+  diblokir** menunggu 3 run, tetapi UI menandai status 3 run.
+- **STOP** di tengah run tidak mengubah model. START berikutnya juga
+  meminta konfirmasi **“Gelas kosong?”** karena gelas berisi sisa run
+  parsial.
+- **Reset** menghapus model dan mengembalikan pompa ke base nominal; proses
+  akan menolak start dengan E09 sampai pompa dikalibrasi ulang.
+- Pengaturan **RPM** tidak bisa diubah saat pompa berjalan. Jika aliran
+  tidak stabil atau motor terasa kehilangan langkah, coba **RPM 400** dan
+  kalibrasi ulang pada RPM tersebut.
+- Model lama yang sudah tersimpan tetap dipakai. Tekan **Reset** bila ingin
+  memulai ulang dengan base 6400 langkah/ml.
 
 ### 4.2 Pompa DC (sabun dan limbah)
 
-1. **Kalibrasi → Motor → Pompa Sabun / Pompa Limbah**.
-2. Isi **Target** (ml) dan pilih duty.
-3. **ENTER** pada START; pompa berjalan selama durasi yang dihitung.
-4. Ukur hasil nyata, isi **Hasil**, lalu **ENTER** untuk menambah titik
-   `(detik, ml)`.
-5. Model **`ml = r·detik + c`** dipakai dosing dan perhitungan drain
-   (termasuk margin 10% untuk dosing dan 25% untuk drain).
-6. Ulangi pada durasi/volume berbeda untuk memperkuat model.
+Alur baru memakai **run pulse pendek** pada run pertama setiap sesi. Ini
+mencegah pompa 100% menyemprot jauh melewati target saat laju sebenarnya
+belum diketahui. Setelah itu target tetap **100 ml** (bisa diubah).
 
-Pompa sabun dan pompa limbah **wajib terkalibrasi** agar proses dapat
-berjalan. Bila kalibrasi limbah belum ada, drain ditolak dengan **E09**,
-bukan dianggap selesai.
+1. **Kalibrasi → Motor → Pompa Sabun / Pompa Limbah**.
+2. Atur **Duty** (perubahan duty otomatis menghapus model lama karena laju
+   berubah). Atur **Target** bila perlu; default 100 ml.
+3. Siapkan **gelas takar kosong/kering**.
+4. **ENTER** pada **START pulse** (run pertama). Pompa berjalan ±3 detik
+   untuk limbah atau ±5 detik untuk sabun. Setelah berhenti, ukur volume
+   nyata dan isi di baris **Hasil**, lalu **ENTER**.
+5. **ENTER** pada **START** untuk run target 100 ml. Ukur lagi, isi Hasil,
+   **ENTER**. Model langsung dikoreksi dengan `r = hasil / detik perintah`,
+   `c = 0`; durasi perintah sudah mencakup ramp-up/down, sama seperti dosing
+   proses.
+6. Ulangi sampai baris **Run** menampilkan **LULUS** (minimal 3 run dan
+   error ≤ 10%). Baris **Reset kalib** menghapus model dan memulai sesi baru.
+
+Catatan:
+- Pompa **sabun wajib terkalibrasi** bila preset memakai bilas sabun.
+- Pompa **limbah tidak wajib** untuk memulai proses: drain memakai waktu
+  fallback (laju 10 ml/detik + margin) sampai model tersedia.
+- Bila hasil ukur tidak wajar (mis. > 4× target atau < ¼ target), hasil
+  ditolak agar model tidak rusak. Jalankan START lagi.
 
 ### 4.3 Agitasi
 
@@ -222,12 +301,16 @@ yang memiliki `agitasiDetik < 30` dinaikkan ke 300 s dan dicatat di log.
 
 Checklist minimum di bench (tanpa larutan asli):
 
-- [ ] Boot normal, versi v1.0.0 tercetak, tidak ada reset berulang.
+- [ ] Boot normal, versi v1.0.1 tercetak, tidak ada reset berulang.
 - [ ] Semua menu terbuka; preset tambah/edit/hapus bertahan setelah restart.
-- [ ] Kalibrasi stepper dan DC menghasilkan model dan lulus verifikasi.
+- [ ] Kalibrasi stepper dan DC menghasilkan model dan lulus verifikasi
+      (DC: run pertama pulse pendek, lalu target 100 ml, minimal 3 run).
 - [ ] Test Motor: tiap motor dan “Semua” start/stop dengan ramp.
-- [ ] Proses dengan air: mulai, jeda, lanjut, batal, drain, selesai.
-- [ ] E-stop saat proses dan saat Test Motor.
+- [ ] Proses dengan air: mulai, jeda, lanjut, beberapa siklus penuh, selesai.
+- [ ] Cancel proses → semua motor lain mati dan pompa limbah menyala
+      sampai wadah tersedot.
+- [ ] E-stop saat proses dan saat Test Motor → pompa limbah mengevakuasi
+      cairan; reset baru bisa setelah evakuasi selesai.
 - [ ] Cabut listrik di tengah proses → layar pemulihan muncul di boot.
 - [ ] Tangki habis / limbah penuh / suhu tinggi memunculkan error yang benar.
 

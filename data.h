@@ -21,7 +21,7 @@ struct Preset {
   int   mlH2O;
   int   agitasiDetik;    // lama etching per siklus (30..1800 s)
   int   agitasiSpeed;    // 1..3 (SPD1/SPD2/SPD3)
-  int   siklus;          // jumlah siklus etching 1..6
+  int   siklus;          // jumlah siklus penuh 1..6 (dosing+etching+bilas)
   int   bilasSabun;      // jumlah bilas sabun 0..3
   int   bilasAir;        // jumlah bilas air 0..5
   int   bilasMl;         // volume tiap bilas (ml)
@@ -144,38 +144,40 @@ int kalibMotorScroll = 0;
 int kalibDCScroll = 0;        // scroll offset untuk halaman DC
 
 // ---- Kalibrasi pompa stepper (HCl/H2O2/Air) ----
-// Model v1.0.0: langkah = a * ml + b, dibangun dari titik (volume terukur,
-// langkah yang diperintahkan). Uji memakai jalur pompaJalanLangkah() yang sama
-// dengan dosing sehingga ramp ikut terhitung.
-// Cursor 0=START/STOP, 1=RPM, 2=Target ml, 3=Hasil ukur, 4=Offset,
-//        5=a (langkah/ml), 6=Uji hasil, 7=Reset titik
+// Alur kalibrasi 100 ml: target tetap 100 ml. START memakai model saat ini (atau base
+// nominal bila belum ada), lalu hasil ukur dimasukkan di baris "Hasil".
+// Koreksi: a = langkah_diperintahkan / hasil_ml, b = 0.
+// Cursor 0=START, 1=Priming, 2=RPM, 3=Target, 4=Hasil, 5=Koreksi,
+//        6=Run, 7=Reset
 int kalibStepperCursor = 0;
 int kalibStepperScroll = 0;
 int   kalibStepperRpm[3]        = { PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT, PUMP_RPM_DEFAULT };
 float kalibStepperMl[3]         = { 0.0f, 0.0f, 0.0f };   // ml/rotasi (diturunkan dari a)
 float kalibStepperA[3]          = { 0.0f, 0.0f, 0.0f };   // langkah per ml
 float kalibStepperB[3]          = { 0.0f, 0.0f, 0.0f };   // offset langkah
-int   kalibStepperTitikN[3]     = { 0, 0, 0 };            // jumlah titik uji
-float kalibStepperTitikMl[3][6];                          // volume terukur (ml)
-float kalibStepperTitikStep[3][6];                        // langkah yang diperintahkan
-int   kalibStepperStep          = 1;                     // langkah edit hasil: 1=0,1 5=0,5 10=1 ml
-int   kalibStepperTgtStep       = 5;                     // langkah edit target: 1/5/10 ml
-int   kalibStepperTargetMl[3]   = { 20, 20, 20 };        // target uji (ml)
-int   kalibStepperUkurMl10[3]   = { 0, 0, 0 };           // hasil ukur nyata (0,1 ml)
-int   kalibStepperOffsetX10[3]  = { 0, 0, 0 };           // offset terakhir (0,1 %)
+// Titik uji dipertahankan sebagai data legacy/persistensi. Alur 100 ml tidak
+// lagi menambah titik; model disimpan langsung di a/b.
+int   kalibStepperTitikN[3]     = { 0, 0, 0 };
+float kalibStepperTitikMl[3][6];
+float kalibStepperTitikStep[3][6];
+int   kalibStepperStep          = 10;                   // langkah edit hasil (0,1 ml): 1=0,1 10=1 50=5 ml
+int   kalibStepperUkurMl10[3]   = { 0, 0, 0 };          // hasil ukur nyata (0,1 ml)
+int   kalibStepperOffsetX10[3]  = { 0, 0, 0 };          // koreksi terakhir (0,1 %)
 bool  kalibStepperOffsetAda[3]  = { false, false, false };
-float kalibStepperCalUsed[3]    = { 0.0f, 0.0f, 0.0f };  // a efektif saat uji
-long  kalibStepperStepUsed[3]   = { 0, 0, 0 };           // langkah yang diperintahkan saat uji
-// Verifikasi hasil kalibrasi (baris "Uji hasil").
-bool  kalibStepperUjiMode[3]    = { false, false, false };
-bool  kalibStepperUjiAda[3]     = { false, false, false };
-bool  kalibStepperUjiLulus[3]   = { false, false, false };
-bool  kalibStepperKoreksiSiap[3]= { false, false, false };
+long  kalibStepperStepUsed[3]   = { 0, 0, 0 };          // langkah yang diperintahkan run terakhir
+int   kalibStepperHasilTerakhir[3] = { 0, 0, 0 };       // hasil ukur terakhir yang diterapkan (0,1 ml)
+long  kalibStepperStepTerakhir[3]  = { 0, 0, 0 };       // langkah run terakhir yang diterapkan
+int   kalibStepperRunKe[3]      = { 0, 0, 0 };          // run sesi ini (RAM, reset saat masuk halaman)
+bool  kalibStepperLulus[3]      = { false, false, false };// koreksi terakhir <= toleransi
+bool  kalibStepperKoreksiBesar[3] = { false, false, false };// menunggu ENTER kedua
+bool  kalibStepperPriming[3]    = { false, false, false };// pompa sedang priming
+bool  kalibStepperCekGelas[3]   = { false, false, false };// START berikutnya minta konfirmasi gelas kosong
+unsigned long kalibStepperPrimeMs[3] = { 0, 0, 0 };      // waktu mulai priming (millis)
 
 // ---- Kalibrasi pompa DC (sabun/limbah) ----
 // Model v1.0.0: ml = r * detik + c, dibangun dari titik (durasi, volume).
 // Cursor 0=START/STOP, 1=Duty, 2=Target ml, 3=Hasil ukur, 4=Offset,
-//        5=r (ml/detik), 6=Uji hasil, 7=Reset titik
+//        5=r/c (ml/detik, ml), 6=Run status, 7=Reset kalib
 int   kalibDCCursor       = 0;
 int   kalibDutyDC[2]      = { 80, 100 };   // duty pompa sabun & limbah (%)
 float kalibDcMlPerSec[2]  = { 0.0f, 0.0f }; // r (ml/detik)
@@ -183,19 +185,21 @@ float kalibDcC[2]         = { 0.0f, 0.0f }; // c (ml)
 int   kalibDcTitikN[2]    = { 0, 0 };
 float kalibDcTitikDetik[2][6];
 float kalibDcTitikMl[2][6];
-int   kalibDcStep         = 1;              // langkah edit hasil: 1/5/10 ml
+int   kalibDcStep         = 1;              // langkah edit hasil: 1 ml
 int   kalibDcTgtStep      = 5;              // langkah edit target: 1/5/10 ml
 int   kalibDcTargetMl[2]  = { 100, 100 };   // target uji (ml)
 int   kalibDcUkurMl[2]    = { 0, 0 };       // hasil ukur nyata (ml)
 int   kalibDcOffsetX10[2] = { 0, 0 };       // offset terakhir (0,1 %)
 bool  kalibDcOffsetAda[2] = { false, false };
 float kalibDcCalUsed[2]   = { 0.0f, 0.0f }; // r efektif saat uji
-unsigned long kalibDcDurasiMs = 0;          // durasi uji target ml yang sedang berjalan
-// Verifikasi hasil kalibrasi DC (baris "Uji hasil").
-bool  kalibDcUjiMode[2]     = { false, false };
-bool  kalibDcUjiAda[2]      = { false, false };
-bool  kalibDcUjiLulus[2]    = { false, false };
-bool  kalibDcKoreksiSiap[2] = { false, false };
+unsigned long kalibDcDurasiMs = 0;          // durasi perintah run yang sedang berjalan
+float kalibDcDetikAktual      = 0.0f;       // durasi perintah run terakhir (termasuk ramp)
+// Sesi kalibrasi baru: run 1 = pulse pendek, run 2+ = target ml.
+int   kalibDcRunKe[2]     = { 0, 0 };
+bool  kalibDcLulus[2]     = { false, false };
+bool  kalibDcPulseRun[2]  = { false, false };
+bool  kalibDcUjiAda[2]    = { false, false };  // hasil run terakhir sudah diterapkan
+int   kalibDcModelDuty[2] = { -1, -1 };        // duty saat model r dibuat
 
 // Status uji DC (dipakai dcmotor.h)
 enum KalibDcFase { KDC_IDLE, KDC_RAMPUP, KDC_UKUR, KDC_TURUN };

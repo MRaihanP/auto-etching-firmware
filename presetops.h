@@ -11,7 +11,8 @@ const char* namaField[JUMLAH_FIELD] = {
   "Bilas sabun", "Bilas air", "Bilas ml", "Bilas detik", "Konfirmasi"
 };
 // idx: 0 panjang, 1 lebar, 2 %HCl, 3 %H2O2, 4 %H2O (otomatis),
-//      5 volume total, 6 lama etching/siklus, 7 speed, 8 siklus,
+//      5 volume total, 6 lama etching/siklus, 7 speed,
+//      8 jumlah siklus penuh (dosing+etching+bilas),
 //      9 bilas sabun, 10 bilas air, 11 ml tiap bilas, 12 detik tiap bilas,
 //      13 konfirmasi tiap akhir siklus (0/1)
 

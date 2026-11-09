@@ -12,7 +12,7 @@ Rujukan lain: `SUMMARY.md` (fitur) · `LOG.md` (changelog per versi) · `PROGRES
 
 | | **Lineage SAH (aktif)** | **Lineage LAMA (batal)** |
 |---|---|---|
-| Versi | **v0.5.0 → v1.0.0** | v0.5.0 → v0.8.3 |
+| Versi | **v0.5.0 → v1.0.1** | v0.5.0 → v0.8.3 |
 | Berkas inti | `auto-etching-firmware.ino` + `dcmotor.h`, `buzzer.h`, `motor.h` | `oled_pcb_baruuu.ino` + `aktuator.h` |
 | Sumber | branch `main` + **git tag** | folder `backup/` (**tanpa tag**) |
 | Status | ✅ jalan, teruji fisik | ❌ **rusak & dibatalkan** (tidak pernah di-commit ke `main`) |
@@ -27,6 +27,7 @@ Rujukan lain: `SUMMARY.md` (fitur) · `LOG.md` (changelog per versi) · `PROGRES
 
 | Versi | Tanggal | Git tag | Isi utama |
 |---|---|---|---|
+| **v1.0.1** | 2026-11-09 | `v1.0.1` | **Siklus penuh berulang + evakuasi cairan** — satu siklus penuh = dosing air/H2O2/HCl + agitasi + drain + bilas sabun `bilasSabun`× + bilas air `bilasAir`×, diulang sebanyak `siklus` (bilas dihitung per siklus); kalibrasi DC baru: run pertama tiap sesi pulse pendek (sabun 5 s, limbah 3 s), run berikutnya target 100 ml, model dikoreksi langsung `r = hasil / detik perintah` (c = 0), LULUS butuh ≥3 run; drain memakai fallback 10 ml/detik + margin bila limbah belum dikalibrasi; cancel proses mematikan motor lain lalu langsung drain; E-stop/ERROR mengevakuasi cairan lewat pompa limbah dan menahan reset sampai evakuasi selesai; UI kalibrasi DC/konfirmasi siklus/overlay safety diperbarui |
 | **v1.0.0** | 2026-11-05 | `v1.0.0` | **Mesin standalone lengkap** — preset v2 dengan siklus/bilas/konfirmasi; state machine baru (dosing berurutan, agitasi, drain, bilas sabun/air) dengan timeout dan pelacak volume; precheck tangki + peringatan sisa; pemulihan setelah listrik padam (`runstate`) tanpa aksi otomatis; modul keselamatan `safety.h` (E-stop interrupt/latch, E01–E10, watchdog 15 s); kalibrasi model `langkah = a·ml + b` (stepper) dan `ml = r·detik + c` (DC) dengan titik uji + verifikasi; UI proses/pengaturan/tangki/info baru; dokumentasi di `DOKUMENTASI.md` |
 | **v0.6.6** | 2026-10-30 | `v0.6.6` | **Verifikasi hasil kalibrasi** — baris ke-7 **Uji hasil** pada halaman kalibrasi stepper & DC: ENTER mendosis ulang target ml memakai kalibrasi tersimpan (ramp sama seperti START), hasil ukur diisi di **Hasil**, lalu ENTER menilai **LULUS** (stepper ≤5%, DC ≤10%) atau **GAGAL**; saat LULUS kalibrasi tidak diubah; saat GAGAL, ENTER kedua di baris Hasil mengoreksi `cal = calLama × hasil / target` lalu meminta uji ulang; mengubah Target/Hasil membatalkan status lama; ENTER di Hasil tanpa run baru ditolak agar tidak terkoreksi dua kali; `FW_VERSI`→v0.6.6 |
 | **v0.6.5** | 2026-10-30 | `v0.6.5` | **Kalibrasi stepper hanya menghitung rotasi di RPM target** — pompa tetap diramp dari 0 (aman untuk pump head), tetapi posisi mulai dihitung setelah kecepatan aktual ≥98% RPM target; langkah target (`target ml / kalibrasi`) dihitung dari titik itu, lalu pompa diramp turun; ramp up/down tidak masuk perhitungan ml/rotasi; progres kalibrasi 0% dan label `RAMP...` selama ramp up; timeout 60 s → toast `Gagal capai RPM`; `FW_VERSI`→v0.6.5 |

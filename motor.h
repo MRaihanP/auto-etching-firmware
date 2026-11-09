@@ -539,6 +539,113 @@ unsigned long pompaPerkiraanMs(int idx, int ml) {
   return (unsigned long)(detik * 1000.0);
 }
 
+// ---- Kalibrasi stepper 100 ml (alur 100 ml) ----
+
+// Nilai dasar: pompa dianggap memindahkan PUMP_KALIB_NOMINAL_ML_PER_REV ml
+// per putaran sampai pengguna menyelesaikan run kalibrasi pertama.
+float pompaKalibrasiBaseA() {
+  return (float)PUMP_STEP_PER_REV / PUMP_KALIB_NOMINAL_ML_PER_REV;
+}
+
+// a efektif untuk run kalibrasi:
+//   1. model tersimpan (a > 0),
+//   2. turunan ml/rotasi lama,
+//   3. base nominal.
+float pompaKalibrasiAktifA(int idx) {
+  if (idx < 0 || idx >= 3) return 0.0f;
+  if (kalibStepperA[idx] > 0.0f) return kalibStepperA[idx];
+  if (kalibStepperMl[idx] > 0.0f)
+    return (float)PUMP_STEP_PER_REV / kalibStepperMl[idx];
+  return pompaKalibrasiBaseA();
+}
+
+// Jalankan satu run kalibrasi 100 ml memakai model saat ini (atau base).
+// Return: 0 = gagal, 1 = mulai, 2 = langkah terlalu panjang (model/prime
+// bermasalah). Pemanggil menampilkan pesan sesuai kode.
+int pompaKalibrasi100Mulai(int idx) {
+  if (idx < 0 || idx >= 3 || !pompaBisaGerak(idx)) return 0;
+  if (pompaAktif(idx)) return 0;
+
+  float a = pompaKalibrasiAktifA(idx);
+  float b = kalibStepperB[idx];
+  long langkah = (long)lround((double)a * KALIB_STEPPER_TARGET_ML + (double)b);
+  if (langkah <= 0) return 0;
+  if (langkah > KALIB_STEPPER_MAX_STEPS) {
+    dbg.print(F("[KALIB] idx="));
+    dbg.print(idx);
+    dbg.print(F(" langkah terlalu besar: "));
+    dbg.println(langkah);
+    return 2;
+  }
+
+  kalibStepperStepUsed[idx] = 0;   // jangan pakai sisa run sebelumnya
+  bool ok = pompaJalanLangkah(idx, langkah);
+  if (ok) {
+    kalibStepperStepUsed[idx] = langkah;
+    dbg.print(F("[KALIB] idx="));
+    dbg.print(idx);
+    dbg.print(F(" target="));
+    dbg.print(KALIB_STEPPER_TARGET_ML);
+    dbg.print(F(" ml a="));
+    dbg.print(a);
+    dbg.print(F(" b="));
+    dbg.print(b);
+    dbg.print(F(" langkah="));
+    dbg.print(langkah);
+    dbg.print(F(" est="));
+    dbg.print(pompaPerkiraanMs(idx, KALIB_STEPPER_TARGET_ML));
+    dbg.println(F(" ms"));
+    return 1;
+  }
+  return 0;
+}
+
+// Terapkan hasil ukur. S = langkah yang diperintahkan, V = hasil ml.
+// a_baru = S / V, b_baru = 0. Pemanggil wajib menyimpan model ke NVS.
+bool pompaKalibrasiTerapkan(int idx, float hasilMl) {
+  if (idx < 0 || idx >= 3) return false;
+  if (hasilMl < (float)KALIB_ML_MIN || hasilMl > (float)KALIB_ML_MAX) return false;
+  long s = kalibStepperStepUsed[idx];
+  if (s <= 0) return false;
+
+  float aBaru = (float)s / hasilMl;
+  if (aBaru <= 0.0f) return false;
+  // Tolak model yang akan meminta langkah di luar batas aman.
+  if ((double)aBaru * (double)KALIB_STEPPER_TARGET_ML >
+      (double)KALIB_STEPPER_MAX_STEPS) return false;
+  kalibStepperA[idx]  = aBaru;
+  kalibStepperB[idx]  = 0.0f;
+  kalibStepperMl[idx] = (float)PUMP_STEP_PER_REV / aBaru;
+
+  float errorPct   = ((float)hasilMl - (float)KALIB_STEPPER_TARGET_ML)
+                     * 100.0f / (float)KALIB_STEPPER_TARGET_ML;
+  float koreksiPct = ((float)KALIB_STEPPER_TARGET_ML / hasilMl - 1.0f) * 100.0f;
+  kalibStepperOffsetX10[idx]    = (int)lround(koreksiPct * 10.0f);
+  kalibStepperOffsetAda[idx]    = true;
+  kalibStepperRunKe[idx]++;
+  kalibStepperLulus[idx]        = fabsf(errorPct) <= KALIB_TOLERANSI_STEPPER_PCT;
+  kalibStepperKoreksiBesar[idx] = false;
+  kalibStepperHasilTerakhir[idx] = (int)lround(hasilMl * 10.0f);
+  kalibStepperStepTerakhir[idx]  = s;
+
+  dbg.print(F("[KALIB] idx="));
+  dbg.print(idx);
+  dbg.print(F(" hasil="));
+  dbg.print(hasilMl);
+  dbg.print(F(" ml error="));
+  dbg.print(errorPct);
+  dbg.print(F("% koreksi="));
+  dbg.print(koreksiPct);
+  dbg.print(F("% aBaru="));
+  dbg.print(aBaru);
+  dbg.print(F(" bBaru=0 run="));
+  dbg.print(kalibStepperRunKe[idx]);
+  dbg.print(F("/"));
+  dbg.print(KALIB_STEPPER_RUN_MIN);
+  dbg.println(kalibStepperLulus[idx] ? F(" LULUS") : F(" ULANGI"));
+  return true;
+}
+
 // Panggil tiap loop(). Tidak membangkitkan pulsa; hanya memantau status.
 void motorUpdate() {
   unsigned long now = millis();

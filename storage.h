@@ -342,6 +342,9 @@ void muatPompa() {
       kalibDcTitikDetik[i][j] = valid ? d.dcTitikDetik[i][j] : 0.0f;
       kalibDcTitikMl[i][j]    = valid ? d.dcTitikMl[i][j] : 0.0f;
     }
+    // Model disimpan bersama duty. Setelah boot, anggap model valid untuk
+    // duty tersimpan; perubahan duty lewat UI akan menghapus model.
+    kalibDcModelDuty[i] = (kalibDcMlPerSec[i] > 0.0f) ? kalibDutyDC[i] : -1;
   }
 
   dbg.println(valid ? F("[STORE] Kalibrasi motor dimuat") : F("[STORE] Kalibrasi motor belum ada (default)"));

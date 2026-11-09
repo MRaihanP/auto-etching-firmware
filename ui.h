@@ -256,7 +256,7 @@ void gambarPresetDetail() {
   }
   y += dy;
   if (terlihat(y, dy)) {
-    oled.setCursor(2, y);  oled.print(F("Bilas"));
+    oled.setCursor(2, y);  oled.print(F("Bilas/siklus"));
     sprintf(buf, "S%d A%d %dml", p.bilasSabun, p.bilasAir, p.bilasMl);
     teksKanan(buf, xKanan, y);
   }
@@ -302,9 +302,9 @@ void gambarKonfirmasiSiklus() {
   teksTengah(buf, 2, 1);
   teksTengah("Trace sudah OK?", 12, 1);
   oled.setCursor(2, 26);
-  oled.print(konfirmasiSel == 0 ? "> Ulangi siklus" : "  Ulangi siklus");
+  oled.print(konfirmasiSel == 0 ? "> Siklus lagi" : "  Siklus lagi");
   oled.setCursor(2, 36);
-  oled.print(konfirmasiSel == 1 ? "> Selesai & bilas" : "  Selesai & bilas");
+  oled.print(konfirmasiSel == 1 ? "> Selesai" : "  Selesai");
   teksTengah("ATAS/BAWAH pilih, ENTER", 46, 1);
 }
 
@@ -535,7 +535,7 @@ void gambarKalibStepper() {
   if (kalibStepperScroll > maxScroll) kalibStepperScroll = maxScroll;
 
   int baseY = HEADER_H + 4 - kalibStepperScroll;
-  char buf[20];
+  char buf[24];
   oled.setTextSize(1);
 
   {
@@ -549,10 +549,15 @@ void gambarKalibStepper() {
         oled.drawRoundRect(20, y - 1, SCREEN_WIDTH - 40, 12, 4, WHITE);
         oled.setTextColor(WHITE);
       }
-      if (pompaAktif(idx)) {
+      if (kalibStepperPriming[idx] && pompaAktif(idx)) {
+        unsigned long detik = (millis() - kalibStepperPrimeMs[idx]) / 1000UL;
+        sprintf(buf, "PRIME %lus", detik);
+      } else if (pompaAktif(idx)) {
         sprintf(buf, "STOP %d%%", pompaProgres(idx));
+      } else if (kalibStepperCekGelas[idx]) {
+        strcpy(buf, "Gelas kosong?");
       } else {
-        strcpy(buf, "START");
+        strcpy(buf, "START 100 ml");
       }
       teksTengah(buf, y + 2, 1);
     }
@@ -570,38 +575,46 @@ void gambarKalibStepper() {
 
     switch (cur) {
       case 1:
+        oled.print(F("Priming"));
+        strcpy(buf, (kalibStepperPriming[idx] && pompaAktif(idx)) ? "STOP" : "ENTER");
+        break;
+      case 2:
         oled.print(F("RPM"));
         sprintf(buf, "%d", rpmPompaValid(kalibStepperRpm[idx]));
         break;
-      case 2:
-        sprintf(buf, "Target x%d", kalibStepperTgtStep);
-        oled.print(buf);
-        sprintf(buf, "%d ml", kalibStepperTargetMl[idx]);
-        break;
       case 3:
-        oled.print(F("Hasil"));
-        if (kalibStepperUkurMl10[idx] > 0) sprintf(buf, "%.1f ml", kalibStepperUkurMl10[idx] / 10.0f);
-        else strcpy(buf, "--");
+        oled.print(F("Target"));
+        sprintf(buf, "%d ml", KALIB_STEPPER_TARGET_ML);
         break;
       case 4:
-        oled.print(F("Offset"));
-        if (kalibStepperOffsetAda[idx]) sprintf(buf, "%+.1f%%", kalibStepperOffsetX10[idx] / 10.0f);
-        else strcpy(buf, "--");
+        if (kalibStepperStep == 1)       oled.print(F("Hasil x0.1"));
+        else if (kalibStepperStep == 50) oled.print(F("Hasil x5"));
+        else                             oled.print(F("Hasil x1"));
+        if (kalibStepperUkurMl10[idx] > 0)
+          sprintf(buf, "%.1f ml", kalibStepperUkurMl10[idx] / 10.0f);
+        else
+          strcpy(buf, "--");
         break;
       case 5:
-        oled.print(F("a/b"));
-        if (kalibStepperA[idx] > 0.0f) sprintf(buf, "%.1f/%.1f", kalibStepperA[idx], kalibStepperB[idx]);
-        else strcpy(buf, "--");
+        oled.print(F("Koreksi"));
+        if (kalibStepperOffsetAda[idx])
+          sprintf(buf, "%+.1f%%", kalibStepperOffsetX10[idx] / 10.0f);
+        else
+          strcpy(buf, "--");
         break;
-      case 6:
-        oled.print(F("Uji hasil"));
-        if (kalibStepperUjiMode[idx]) strcpy(buf, pompaAktif(idx) ? "RUN" : "ISI HASIL");
-        else if (kalibStepperUjiAda[idx]) strcpy(buf, kalibStepperUjiLulus[idx] ? "LULUS" : "GAGAL");
-        else strcpy(buf, "ENTER");
+      case 6: {
+        oled.print(F("Run"));
+        int n = kalibStepperRunKe[idx];
+        if (n >= KALIB_STEPPER_RUN_MIN)
+          sprintf(buf, "%d/%d %s", KALIB_STEPPER_RUN_MIN, KALIB_STEPPER_RUN_MIN,
+                  kalibStepperLulus[idx] ? "LULUS" : "ULANGI");
+        else
+          sprintf(buf, "%d/%d", n, KALIB_STEPPER_RUN_MIN);
         break;
+      }
       case 7:
-        oled.print(F("Reset titik"));
-        sprintf(buf, "%d", kalibStepperTitikN[idx]);
+        oled.print(F("Reset"));
+        strcpy(buf, "ENTER");
         break;
     }
     teksKanan(buf, SCREEN_WIDTH - 2, y);
@@ -732,6 +745,8 @@ void gambarKalibDC() {
         int sisa = kalibDcSisaDetik();
         if (sisa > 0) sprintf(buf, "STOP %ds", sisa);
         else strcpy(buf, "STOP");
+      } else if (kalibDcRunKe[idx] == 0 || kalibDcMlPerSec[idx] <= 0.0f) {
+        strcpy(buf, "START pulse");
       } else {
         strcpy(buf, "START");
       }
@@ -776,14 +791,18 @@ void gambarKalibDC() {
         else strcpy(buf, "--");
         break;
       case 6:
-        oled.print(F("Uji hasil"));
-        if (kalibDcUjiMode[idx]) strcpy(buf, kalibDcJalan() ? "RUN" : "ISI HASIL");
-        else if (kalibDcUjiAda[idx]) strcpy(buf, kalibDcUjiLulus[idx] ? "LULUS" : "GAGAL");
-        else strcpy(buf, "ENTER");
+        oled.print(F("Run"));
+        if (kalibDcLulus[idx]) {
+          sprintf(buf, "%d/%d LULUS", kalibDcRunKe[idx], KALIB_DC_RUN_MIN);
+        } else if (kalibDcRunKe[idx] > 0) {
+          sprintf(buf, "%d/%d", kalibDcRunKe[idx], KALIB_DC_RUN_MIN);
+        } else {
+          strcpy(buf, "--");
+        }
         break;
       case 7:
-        oled.print(F("Reset titik"));
-        sprintf(buf, "%d", kalibDcTitikN[idx]);
+        oled.print(F("Reset kalib"));
+        strcpy(buf, "ENTER");
         break;
     }
     teksKanan(buf, SCREEN_WIDTH - 2, y);
@@ -1108,21 +1127,35 @@ void gambarSafety() {
   oled.setTextColor(WHITE);
   oled.setTextSize(1);
 
+  char buf[24];
   if (safetyState == SAF_ESTOP) {
     teksTengah("!! E-STOP !!", 4, 1);
-    teksTengah("Semua aktuator padam", 16, 1);
-    if (digitalRead(PIN_ESTOP) == LOW) {
-      teksTengah("Lepas tombol darurat", 30, 1);
+    if (evakuasiAktif) {
+      teksTengah("Pompa limbah ON", 15, 1);
+      sprintf(buf, "Drain %ds", evakuasiSisaDetik());
+      teksTengah(buf, 25, 1);
     } else {
-      teksTengah("Tekan ENTER untuk reset", 30, 1);
+      teksTengah("Semua aktuator padam", 16, 1);
+    }
+    if (digitalRead(PIN_ESTOP) == LOW) {
+      teksTengah("Lepas tombol darurat", 36, 1);
+    } else if (evakuasiAktif) {
+      teksTengah("Tunggu drain selesai", 36, 1);
+    } else {
+      teksTengah("Tekan ENTER untuk reset", 36, 1);
     }
   } else {
     const SafetyFaultInfo& f = safetyInfo(safetyKode);
-    char buf[24];
     sprintf(buf, "!! %s !!", f.nama);
     teksTengah(buf, 4, 1);
-    teksTengah(f.pesan, 18, 1);
-    teksTengah("ENTER : lanjut", 34, 1);
+    teksTengah(f.pesan, 16, 1);
+    if (evakuasiAktif) {
+      sprintf(buf, "Drain limbah %ds", evakuasiSisaDetik());
+      teksTengah(buf, 28, 1);
+      teksTengah("Tunggu drain selesai", 40, 1);
+    } else {
+      teksTengah("ENTER : lanjut", 34, 1);
+    }
   }
 }
 

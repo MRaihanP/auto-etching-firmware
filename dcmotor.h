@@ -216,15 +216,26 @@ unsigned long dcKalibrasiMsModel(int idx, int ml) {
 }
 
 // Durasi (ms) untuk memindahkan `ml` pada pompa DC idx (0=sabun, 1=limbah).
-// 0 = pompa belum dikalibrasi.
+// 0 = indeks/ml tidak valid. Bila pompa belum dikalibrasi, dipakai laju
+// nominal (fallback) supaya proses tidak berhenti total.
 unsigned long dcDosisMs(int idx, int ml) {
-  return dcDurasiDariMl(idx, ml, DC_MARGIN_PCT);
+  if (idx < 0 || idx > 1 || ml <= 0) return 0;
+  unsigned long ms = dcDurasiDariMl(idx, ml, DC_MARGIN_PCT);
+  if (ms == 0) ms = dcDosisMsRate(ml, DC_KALIB_NOMINAL_ML_PER_SEC);
+  return ms;
 }
 
 // Durasi drain: model limbah + margin global + tambahan tetap.
+// Bila model limbah belum ada, pakai laju fallback yang lebih lambat dari
+// laju nyata (aman: lebih baik sedikit lama daripada wadah belum kosong).
 unsigned long dcDrainMs(int ml) {
+  if (ml <= 0) return 0;
   unsigned long ms = dcDurasiDariMl(1, ml, pengaturan.drainMarginPct);
-  if (ms == 0) return 0;
+  if (ms == 0) {
+    float detik = (float)ml / DC_DRAIN_FALLBACK_ML_PER_SEC *
+                  (1.0f + pengaturan.drainMarginPct / 100.0f);
+    ms = (unsigned long)(detik * 1000.0f);
+  }
   return ms + DRAIN_TAMBAHAN_MS;
 }
 
@@ -248,20 +259,59 @@ void dcLanjutSemua() {
 }
 
 // ================= UJI KALIBRASI DC (target ml) =================
-// Alur: RAMPUP (tunggu duty target) -> UKUR (durasi = ml / laju, tanpa margin)
-// -> TURUN (tunggu diam). Volume diukur SETELAH pompa benar-benar berhenti,
-// jadi user mengukur hasil nyata tanpa menunggu motor.
-// Start/stop memakai dcSetPct()/dcStop() yang sama dengan Test Motor (ramp),
-// bukan lompatan duty.
+// Run PERTAMA sebuah sesi memakai pulse pendek (durasi tetap, tanpa model).
+// Run berikutnya memakai target ml dari model. Timer dihitung sejak perintah
+// ON, jadi hasil ukur mencakup ramp-up/down - sama seperti dosing proses.
+// Model diperbarui dari hasil ukur terakhir: r = ml / detik perintah, c = 0.
+// Dengan begitu satu koreksi langsung mendekati laju nyata dan bisa
+// menyesuaikan diri bila pompa sudah lama dipakai.
+
+void kalibDcResetModel(int idx) {
+  if (idx < 0 || idx > 1) return;
+  kalibDcTitikN[idx]     = 0;
+  kalibDcMlPerSec[idx]   = 0.0f;
+  kalibDcC[idx]          = 0.0f;
+  kalibDcModelDuty[idx]  = -1;
+  kalibDcOffsetX10[idx]  = 0;
+  kalibDcOffsetAda[idx]  = false;
+  kalibDcLulus[idx]      = false;
+  kalibDcUjiAda[idx]     = false;
+}
+
+// Reset penanda sesi (run ke-1 = pulse lagi) tanpa menghapus model.
+void kalibDcResetSesi(int idx) {
+  if (idx < 0 || idx > 1) return;
+  kalibDcRunKe[idx]      = 0;
+  kalibDcLulus[idx]      = false;
+  kalibDcUjiAda[idx]     = false;
+  kalibDcPulseRun[idx]   = false;
+  kalibDcUkurMl[idx]     = 0;
+  kalibDcOffsetAda[idx]  = false;
+  kalibDcDetikAktual     = 0.0f;
+  kalibDcDurasiMs        = 0;
+}
+
+unsigned long kalibDcPulseMs(int idx) {
+  return (idx == 0) ? DC_KALIB_PULSE_MS_SABUN : DC_KALIB_PULSE_MS_LIMBAH;
+}
+
 void kalibDcMulai(int idx) {
   if (idx < 0 || idx > 1) return;
-  kalibDcIdx = idx;
+  kalibDcIdx      = idx;
+  kalibDcT0       = millis();
+  kalibDcDetikAktual = 0.0f;
   dcSetPct(idx + 1, kalibDutyDC[idx]);
-  kalibDcFase = KDC_RAMPUP;
+  kalibDcFase = KDC_UKUR;   // timer sudah berjalan, termasuk ramp-up
 }
 
 void kalibDcStop() {
-  if (kalibDcIdx >= 0) dcStop(kalibDcIdx + 1);
+  if (kalibDcIdx < 0) { kalibDcFase = KDC_IDLE; return; }
+  // Durasi perintah = dari ON sampai perintah OFF. Ini yang dipakai
+  // sebagai x pada model, bukan durasi setelah duty target tercapai.
+  if (kalibDcFase == KDC_UKUR) {
+    kalibDcDetikAktual = (millis() - kalibDcT0) / 1000.0f;
+  }
+  dcStop(kalibDcIdx + 1);
   kalibDcFase = KDC_TURUN;
 }
 
@@ -286,8 +336,7 @@ void kalibDcUpdate() {
       break;
     case KDC_UKUR:
       if (millis() - kalibDcT0 >= kalibDcDurasiMs) {
-        dcStop(kalibDcIdx + 1);
-        kalibDcFase = KDC_TURUN;
+        kalibDcStop();   // mencatat durasi perintah & memulai ramp turun
       }
       break;
     case KDC_TURUN:

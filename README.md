@@ -9,25 +9,25 @@ dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
 > Lineage lama (`aktuator.h`, v0.5.0–v0.8.3) **rusak & dibatalkan**, snapshotnya
 > ada di `backup/`. Penjelasan lengkap di bagian atas [`LOG.md`](./LOG.md).
 >
-> **v1.0.0:** prosedur kalibrasi, daftar error E01–E10, dan parameter default
+> **v1.0.1:** prosedur kalibrasi, daftar error E01–E10, dan parameter default
 > ada di [`DOKUMENTASI.md`](./DOKUMENTASI.md).
 
 ## Fitur Utama
 
 - **Menu OLED 6 tombol** — preset, konfigurasi, level cairan, kalibrasi, pengaturan, tangki, info
 - **Preset CRUD (maks 10)** — v2 dengan siklus/bilas/konfirmasi; NVS ber-versi + CRC32, auto-reject bila korup
-- **Proses etching non-blocking** — precheck → dosing berurutan → agitasi per siklus → drain → bilas sabun/air → selesai
+- **Proses etching non-blocking** — precheck → siklus penuh (dosing berurutan → agitasi → drain → bilas sabun/air) diulang sesuai `siklus` → selesai
 - **Dosing 3 pompa peristaltik satu per satu** (DRV8825 1/16 = 3200 langkah/putaran, **400–700 rpm**, ml → langkah, non-blocking)
 - **Kecepatan pompa berbasis RPM** — default 500 rpm, dapat diubah 400/500/600/700 per pompa
-- **Kalibrasi pompa model** — titik uji `(langkah, ml)` → regresi **`langkah = a·ml + b`**; verifikasi LULUS (≤5%) / GAGAL
-- **Kalibrasi pompa DC model** — titik uji `(detik, ml)` → **`ml = r·detik + c`**; margin dosing 10%, drain 25%
+- **Kalibrasi pompa stepper** — target tetap 100 ml: priming 10–15 dtk, START memakai model saat ini (atau base 6400 langkah/ml), konfirmasi gelas kosong, hasil ukur dikoreksi `a = langkah/hasil`, minimal 3 run dengan status LULUS (≤5%)/ULANGI
+- **Kalibrasi pompa DC 2 tahap** — run pertama tiap sesi **pulse pendek** (sabun 5 s / limbah 3 s), lalu target **100 ml**; model dikoreksi langsung `r = hasil / detik` (c = 0), LULUS setelah ≥3 run dengan error ≤10%; margin dosing 10%, drain 25% (fallback 10 ml/detik bila limbah belum dikalibrasi)
 - **Agitasi 3 level** — SPD1/SPD2/SPD3 dalam %, tanpa kalibrasi ml
 - **3 aktuator DC via TB6612FNG PWM** — motor agitasi, pompa air sabun, pompa limbah
 - **5 sensor level non-contact** (strip nikel + `touchRead`, moving average, histeresis + FAULT)
 - **Sensor suhu DS18B20 ×3** pada satu bus 1-Wire, konversi non-blocking
 - **Sensor udara MQ-135** dengan divider analog & konversi ppm
 - **Kalibrasi** — model stepper/DC, agitasi (SPD1–3), sensor level 0%/100%, suhu (offset), udara (acuan)
-- **Keselamatan** — E-stop GPIO 8 (interrupt + latch), tabel error E01–E10, watchdog 15 s, blokir aktuator saat fault
+- **Keselamatan** — E-stop GPIO 8 (interrupt + latch), tabel error E01–E10, watchdog 15 s, blokir aktuator saat fault, **evakuasi cairan lewat pompa limbah** saat E-stop/ERROR dan cancel proses
 - **Pelacak tangki & pemulihan** — sisa HCl/H₂O₂/H₂O/sabun/limbah, precheck kebutuhan penuh, `runstate` untuk drain & bilas setelah listrik padam
 - **Buzzer non-blocking** — nada boot, klik, mulai, batal, selesai, peringatan, error
 - **Exhaust fan** disambung langsung ke 12V, menyala terus (tidak dikendalikan firmware)
@@ -60,6 +60,7 @@ Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md
 
 | Versi | Tanggal | Git tag | Ringkasan |
 |---|---|---|---|
+| **v1.0.1** | 2026-11-09 | `v1.0.1` | **Siklus berulang + evakuasi cairan** — satu siklus penuh = dosing + etching + drain + bilas sabun/air, diulang sesuai `siklus` (bilas dihitung per siklus); kalibrasi DC baru memakai pulse pendek pada run pertama lalu target 100 ml dengan koreksi langsung `r = hasil / detik`; drain punya fallback 10 ml/detik + margin; cancel proses langsung menyalakan pompa limbah, E-stop/ERROR mengevakuasi cairan dan menahan reset sampai selesai |
 | **v1.0.0** | 2026-11-04 | `v1.0.0` | **Mesin standalone lengkap** — preset v2 (siklus, konfirmasi, bilas sabun/air), mesin proses dengan dosing berurutan + timeout, pelacak volume tangki & precheck, pemulihan setelah listrik padam (`runstate`), modul keselamatan E01–E10 + watchdog, kalibrasi model `langkah = a·ml + b` dan `ml = r·detik + c` dengan titik uji, UI proses/pengaturan/tangki/info baru, tahan BACK 1 detik; IoT/MQTT dijadwalkan v1.1.0 |
 | **v0.6.6** | 2026-10-30 | `v0.6.6` | **Verifikasi hasil kalibrasi di layar** — halaman kalibrasi stepper & DC menjadi 7 baris dengan baris **Uji hasil**: ENTER menjalankan dosis ulang memakai kalibrasi tersimpan (ramp sama seperti START), pengguna mengisi **Hasil**, lalu ENTER menilai **LULUS** (stepper ≤5%, DC ≤10%) atau **GAGAL**; kalibrasi tidak diubah saat LULUS; bila GAGAL, ENTER kedua di baris Hasil mengoreksi `cal = calLama × hasil/target` lalu minta uji ulang; mengubah Target/Hasil membatalkan status lama; `FW_VERSI`→v0.6.6 |
 | **v0.6.5** | 2026-10-30 | `v0.6.5` | **Kalibrasi stepper menghitung rotasi hanya saat RPM target** — ramp up/down tetap berjalan untuk keamanan pump head tetapi tidak dihitung; posisi awal dicatat saat kecepatan aktual ≥98% target, lalu langkah target dihitung dari titik itu dan dihentikan dengan ramp turun; progres 0% + label `RAMP...` selama ramp; timeout 60 s → `Gagal capai RPM`; `FW_VERSI`→v0.6.5 |
@@ -88,7 +89,7 @@ git checkout main                        # kembali ke versi terbaru
 
 | Dokumen | Isi |
 |---|---|
-| [`DOKUMENTASI.md`](./DOKUMENTASI.md) | **v1.0.0** — cara pakai, kalibrasi, daftar error E01–E10, parameter default |
+| [`DOKUMENTASI.md`](./DOKUMENTASI.md) | **v1.0.1** — cara pakai, kalibrasi, daftar error E01–E10, parameter default |
 | [`SUMMARY.md`](./SUMMARY.md) | Ringkasan firmware, fitur, pin map |
 | [`PROCESS.md`](./PROCESS.md) | Rencana detail 5 modul proses (UI, Dosing, Etching, Draining & Rinsing, Emergency Stop) + cara kerja tiap fase + tabel GPIO |
 | [`PROGRESS.md`](./PROGRESS.md) | Checklist status implementasi per fitur |
