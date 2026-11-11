@@ -5,9 +5,9 @@ layar OLED 128x64, 6 tombol melalui PCF8574, tiga pompa peristaltik
 DRV8825, tiga motor DC TB6612FNG, lima sensor level non-contact, tiga
 sensor suhu DS18B20, sensor udara MQ-135, dan E-stop.
 
-Versi aktif: **v1.2.0**
+Versi aktif: **v1.3.0**
 
-Build terakhir: **1.245.906 byte flash (63% dari 1.966.080)**, RAM global
+Build terakhir: **1.246.234 byte flash (63% dari 1.966.080)**, RAM global
 **78.252 byte (23%)**.
 
 ## Fitur
@@ -30,8 +30,10 @@ Build terakhir: **1.245.906 byte flash (63% dari 1.966.080)**, RAM global
 - **IoT** - WiFi, MQTT TLS 8883, NTP, LWT, remote command/config, event log,
   dan halaman **Status IoT** di OLED.
 - **Dashboard self-hosted** - konfigurasi/pilih preset, konfirmasi PCB,
-  clear E-stop terkondisi, hasil kalibrasi, dan panel kiri collapsible.
-- **OTA HTTP** - `POST /update` port 3232, hanya saat IDLE dan safety AMAN.
+  clear E-stop terkondisi, hasil kalibrasi, panel kiri collapsible, dan OTA
+  upload `.bin` dari Settings.
+- **OTA HTTP** - `POST /update` port 3232, hanya saat IDLE dan safety AMAN;
+  file dapat di-drop/dipilih dari dashboard (server meneruskan ke alat).
 - **Non-blocking** - proses, sensor, motor, buzzer, dan UI berbasis `millis()`.
 
 ## Menu Utama
@@ -72,24 +74,25 @@ Tombol: **ATAS/BAWAH** navigasi, **KIRI/KANAN** ubah nilai,
 ```text
 auto-etching-firmware/
 ├── auto-etching-firmware.ino   # setup/loop, menu, handler tombol
-├── config.h                    # pin, konstanta, FW_VERSI
-├── data.h                      # struct, enum, state global
-├── dbg.h                       # log Serial
-├── input.h                     # PCF8574 + debounce
-├── presetops.h                 # CRUD preset, model waktu, validasi
-├── sensor.h                    # level, suhu, MQ-135
-├── storage.h                   # NVS, checksum, migrasi
-├── motor.h                     # stepper FastAccelStepper
-├── dcmotor.h                   # TB6612FNG, kalibrasi DC
-├── buzzer.h                    # tone non-blocking
-├── safety.h                    # E-stop, E01-E10, safety context
-├── process.h                   # state machine proses
-├── ui.h                        # render OLED semua halaman
-├── api.h                       # command API, snapshot, event log
-├── net.h                       # WiFi/MQTT/NTP/topik/command queue
-├── net_ca.h                    # CA ISRG Root X2
-├── ota.h                       # OTA HTTP
-├── fontmini.h                  # font OLED
+├── src/
+│   ├── config.h                # pin, konstanta, FW_VERSI
+│   ├── data.h                  # struct, enum, state global
+│   ├── dbg.h                   # log Serial
+│   ├── input.h                 # PCF8574 + debounce
+│   ├── presetops.h             # CRUD preset, model waktu, validasi
+│   ├── sensor.h                # level, suhu, MQ-135
+│   ├── storage.h               # NVS, checksum, migrasi
+│   ├── motor.h                 # stepper FastAccelStepper
+│   ├── dcmotor.h               # TB6612FNG, kalibrasi DC
+│   ├── buzzer.h                # tone non-blocking
+│   ├── safety.h                # E-stop, E01-E10, safety context
+│   ├── process.h               # state machine proses
+│   ├── ui.h                    # render OLED semua halaman
+│   ├── api.h                   # command API, snapshot, event log
+│   ├── net.h                   # WiFi/MQTT/NTP/topik/command queue
+│   ├── net_ca.h                # CA ISRG Root X2
+│   ├── ota.h                   # OTA HTTP
+│   └── fontmini.h              # font OLED
 ├── partitions.csv              # layout 4 MB min_spiffs (dual app)
 ├── secrets.example.h           # template kredensial (placeholder)
 ├── secrets.h                   # kredensial lokal, di-ignore Git

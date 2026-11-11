@@ -1,14 +1,15 @@
 # RELEASES - Registry Versi dan Rollback
 
 Registry versi repo `auto-etching-firmware`. Rilis yang disiapkan untuk
-push terbaru: **v1.2.0**. Tag lama yang sudah ada di Git: `v1.0.1`,
-`v1.0.0`, dan tag v0.x.
+push terbaru: **v1.3.0**. Tag lama yang sudah ada di Git: `v1.2.0`,
+`v1.0.1`, `v1.0.0`, dan tag v0.x.
 
 ## 1. Daftar Versi
 
 | Versi | Tanggal | Tag | Ringkasan |
 |---|---|---|---|
-| **v1.2.0** | 2026-11-11 | `v1.2.0` (dibuat saat push) | Preset v3, PRECHECK seluruh proses, drain berbasis volume, opsi jeda/pemulihan, error spesifik, IoT MQTT TLS, OTA HTTP, menu Status IoT, diagnosa WiFi, dashboard web self-hosted `webapp/` (preset, pilih preset, konfirmasi PCB, clear E-stop terkondisi, hasil kalibrasi, panel collapsible) |
+| **v1.3.0** | 2026-11-11 | `v1.3.0` (rilis ini) | OTA upload `.bin` dari Settings, status `ip`/`build`/`rssi`, versi firmware otomatis setelah OTA, halaman Preset & Kalibrasi lengkap, Settings info/versi/repo, panel kiri hover, nama Auto Etching V1, header firmware dipindah ke `src/` |
+| **v1.2.0** | 2026-11-11 | `v1.2.0` | Preset v3, PRECHECK seluruh proses, drain berbasis volume, opsi jeda/pemulihan, error spesifik, IoT MQTT TLS, OTA HTTP, menu Status IoT, diagnosa WiFi, dashboard web self-hosted `webapp/` |
 | v1.1.0 | 2026-11-10 | - | Rasio kimia ml/persen, waktu etching otomatis dari tembaga, kapasitas jerigen, tebal Cu dalam oz |
 | v1.0.1 | 2026-11-09 | `v1.0.1` | Siklus penuh berulang, kalibrasi DC pulse, evakuasi cairan saat cancel/E-stop |
 | v1.0.0 | 2026-11-05 | `v1.0.0` | Mesin standalone lengkap: siklus, error E01-E10, watchdog, pemulihan, kalibrasi model |
@@ -28,7 +29,7 @@ push terbaru: **v1.2.0**. Tag lama yang sudah ada di Git: `v1.0.1`,
 Detail perubahan: [`LOG.md`](./LOG.md). Versi lama tidak disimpan sebagai
 folder salinan; gunakan Git tag.
 
-## 2. Build Rilis v1.2.0
+## 2. Build Rilis v1.3.0
 
 ```bash
 ~/DevBox/bin/arduino-cli compile \
@@ -40,7 +41,7 @@ folder salinan; gunakan Git tag.
 Hasil build:
 
 ```text
-Flash : 1.245.906 byte (63% dari 1.966.080)
+Flash : 1.246.234 byte (63% dari 1.966.080)
 RAM   : 78.252 byte (23%)
 ```
 
@@ -86,26 +87,26 @@ di-commit. `git checkout` lebih aman.
 Jalankan setelah build dan pengujian selesai:
 
 ```bash
-# 1. Pastikan versi di config.h dan dokumentasi sudah v1.2.0
-grep FW_VERSI config.h
+# 1. Pastikan versi di src/config.h dan dokumentasi sudah v1.3.0
+grep FW_VERSI src/config.h
 
 # 2. Commit seluruh perubahan
 git add -A
-git commit -m "v1.2.0: preset v3, IoT MQTT, OTA, status IoT"
+git commit -m "v1.3.0: OTA dashboard, kalibrasi lengkap, src headers"
 
 # 3. Buat annotated tag
-git tag -a v1.2.0 -m "v1.2.0: preset v3, IoT MQTT, OTA, status IoT"
+git tag -a v1.3.0 -m "v1.3.0: OTA dashboard, kalibrasi lengkap, src headers"
 
 # 4. Push branch dan tag
 git push origin main
-git push origin v1.2.0
+git push origin v1.3.0
 ```
 
 Cek hasil:
 
 ```bash
 git describe --tags --always
-git show v1.2.0 --stat
+git show v1.3.0 --stat
 ```
 
 ## 5. Checklist Rilis

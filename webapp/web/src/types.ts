@@ -62,6 +62,9 @@ export interface Dosing {
 
 export interface Status {
   ver?: string;
+  build?: string;
+  ip?: string;
+  rssi?: number;
   uptime?: number;
   epoch?: number;
   reset?: string;

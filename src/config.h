@@ -276,4 +276,4 @@
 #define LOG_LEVEL 2
 #endif
 
-#define FW_VERSI  "v1.2.0"
+#define FW_VERSI  "v1.3.0"

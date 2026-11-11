@@ -8,24 +8,25 @@ Pull Request; `main` harus selalu dapat di-compile.
 ```text
 auto-etching-firmware/
 ├── auto-etching-firmware.ino
-├── config.h
-├── data.h
-├── dbg.h
-├── input.h
-├── presetops.h
-├── sensor.h
-├── storage.h
-├── motor.h
-├── dcmotor.h
-├── buzzer.h
-├── safety.h
-├── process.h
-├── ui.h
-├── api.h
-├── net.h
-├── net_ca.h
-├── ota.h
-├── fontmini.h
+├── src/
+│   ├── config.h
+│   ├── data.h
+│   ├── dbg.h
+│   ├── input.h
+│   ├── presetops.h
+│   ├── sensor.h
+│   ├── storage.h
+│   ├── motor.h
+│   ├── dcmotor.h
+│   ├── buzzer.h
+│   ├── safety.h
+│   ├── process.h
+│   ├── ui.h
+│   ├── api.h
+│   ├── net.h
+│   ├── net_ca.h
+│   ├── ota.h
+│   └── fontmini.h
 ├── partitions.csv
 ├── secrets.example.h
 ├── secrets.h              # lokal, di-ignore Git
@@ -93,7 +94,7 @@ Aturan:
 
 Prosedur lengkap ada di [`RELEASES.md`](./RELEASES.md). Ringkasnya:
 
-1. Bump `FW_VERSI` di `config.h`.
+1. Bump `FW_VERSI` di `src/config.h`.
 2. Update `LOG.md`, `RELEASES.md`, dan `README.md`.
 3. Compile dan uji minimal (boot, menu, proses air, E-stop, WiFi/MQTT, OTA).
 4. Commit.

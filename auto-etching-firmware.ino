@@ -79,22 +79,22 @@
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 
-#include "dbg.h"
-#include "config.h"
-#include "input.h"
-#include "data.h"
-#include "presetops.h"
-#include "sensor.h"
-#include "motor.h"
-#include "dcmotor.h"
-#include "storage.h"
-#include "buzzer.h"
-#include "safety.h"
-#include "process.h"
-#include "ui.h"
-#include "api.h"
-#include "net.h"
-#include "ota.h"
+#include "src/dbg.h"
+#include "src/config.h"
+#include "src/input.h"
+#include "src/data.h"
+#include "src/presetops.h"
+#include "src/sensor.h"
+#include "src/motor.h"
+#include "src/dcmotor.h"
+#include "src/storage.h"
+#include "src/buzzer.h"
+#include "src/safety.h"
+#include "src/process.h"
+#include "src/ui.h"
+#include "src/api.h"
+#include "src/net.h"
+#include "src/ota.h"
 
 unsigned long waktuRenderTerakhir = 0;
 

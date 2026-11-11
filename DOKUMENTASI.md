@@ -1,4 +1,4 @@
-# Dokumentasi Firmware v1.2.0
+# Dokumentasi Firmware v1.3.0
 
 Manual ini menjelaskan hardware, build, menu, preset, alur proses, kalibrasi,
 error, penyimpanan NVS, IoT, dan checklist pengujian. Untuk protokol
@@ -34,7 +34,7 @@ non-contact, 3 DS18B20, MQ-135, buzzer, dan E-stop.
 | Exhaust fan | - | langsung 12 V, selalu menyala |
 
 Catatan panel: firmware memakai `UI_Y_OFFSET = 15` karena baris atas OLED
-rusak. Jika panel normal, ubah ke `0` di `config.h`.
+rusak. Jika panel normal, ubah ke `0` di `src/config.h`.
 
 ## 2. Build dan Flash
 
@@ -323,10 +323,14 @@ dikembalikan ke default dengan log Serial.
 - Broker: `mqtt.loggerindonesia.com:8883`, TLS, CA ISRG Root X2.
 - Topik: `pelarut/<deviceId>/{online,status,telemetry,event,ack,cmd}`.
 - Remote command hanya supervisory; `start` berhenti di `WAIT_PCB`.
-- `clear` E-stop/error ditolak dari MQTT.
+- `clear` E-stop dari MQTT hanya setelah tombol fisik HIGH dan evakuasi selesai;
+  error non-E-stop tetap lokal.
 - Event log 32 entri; epoch dari NTP; replay 5 event setelah reconnect.
 - OTA HTTP: `POST http://<IP>:3232/update`, header
   `X-OTA-Password: <OTA_PASSWORD>`, hanya saat IDLE dan safety AMAN.
+- Dashboard: **Settings → OTA Firmware**, drag/drop/pilih `.bin`. Server
+  dashboard meneruskan file; password tetap di server. Versi/build firmware
+  di Settings diperbarui otomatis setelah reboot.
 
 Detail payload dan contoh `mosquitto_pub/sub`: [`IOT-API.md`](./IOT-API.md).
 Langkah pengujian: [`PANDUAN-TEST-IOT.md`](./PANDUAN-TEST-IOT.md).
@@ -343,7 +347,7 @@ diminimize (default expand).
 
 Dengan air, bukan larutan asli:
 
-- [ ] Boot normal, versi v1.2.0, tidak reset berulang.
+- [ ] Boot normal, versi v1.3.0, tidak reset berulang.
 - [ ] Semua menu terbuka; preset edit bertahan setelah restart.
 - [ ] Kalibrasi stepper/DC lulus minimal 3 run.
 - [ ] Test Motor: semua motor start/stop dengan ramp.

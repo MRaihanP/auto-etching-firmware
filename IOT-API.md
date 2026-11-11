@@ -1,6 +1,6 @@
 # IOT-API — Fondasi Command, Status, dan Event
 
-Dokumen ini menjelaskan command API firmware v1.2.0. Transport yang tersedia:
+Dokumen ini menjelaskan command API firmware v1.3.0. Transport yang tersedia:
 **Serial non-blocking** (115200 baud, satu perintah per baris) dan
 **MQTT** (`net.h`, TLS 8883). Keduanya memakai dispatcher yang sama dan
 mengirim `StatusSnapshot`; tidak boleh mengakses aktuator langsung.
@@ -63,7 +63,7 @@ tank 0 900
 {
   "ok": true,
   "cmd": "status",
-  "ver": "v1.2.0",
+  "ver": "v1.3.0",
   "uptime": 123456,
   "reset": "PWRON",
   "fase": 3,
@@ -327,6 +327,11 @@ Aturan:
   `404` path salah.
 - Partisi dual-app: `partitions.csv` (4 MB `min_spiffs`, app0/app1 ±1,9 MB)
   atau `PartitionScheme=min_spiffs`.
+- Dari dashboard: buka **Settings → OTA Firmware**, drag/drop atau pilih file
+  `.bin`. Browser mengirim file ke server dashboard; server meneruskannya ke
+  `http://<IP_ALAT>:3232/update` dengan password OTA server-side. Hanya admin,
+  hanya saat alat online/IDLE/safety AMAN. Setelah reboot, versi firmware di
+  Settings berubah otomatis dari status MQTT baru.
 - Panduan langkah lengkap: `PANDUAN-TEST-IOT.md`.
 
 ## Yang belum diimplementasikan (langkah IoT final)

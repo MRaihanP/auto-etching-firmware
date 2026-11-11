@@ -3,6 +3,23 @@
 Format: `[tanggal] vX.Y.Z - ringkasan`. Rilis terbaru berada di atas.
 Registry versi, rollback, dan prosedur tag ada di [`RELEASES.md`](./RELEASES.md).
 
+## [2026-11-11] v1.3.0 - OTA dari dashboard, kalibrasi lengkap, dan struktur src
+
+- **OTA dari webapp**: Settings -> OTA Firmware menerima file `.bin` hasil
+  compile Arduino (drag/drop atau pick). Browser mengirim ke server; server
+  meneruskan ke `http://<IP_ALAT>:3232/update` dengan password OTA server-side.
+- Hanya admin, alat online, IDLE, dan safety AMAN. IP dibatasi ke LAN privat.
+- Status firmware menambah `ip`, `build`, dan `rssi`; versi/build di Settings
+  otomatis berubah setelah alat reboot dan status MQTT baru diterima.
+- Settings menampilkan versi dashboard/firmware, build, tanggal rilis, IP,
+  repo GitHub, role, broker, dan info koneksi.
+- Halaman **Preset & Kalibrasi**: editor preset 19 field, hasil kalibrasi
+  stepper/DC/agitasi/level/suhu/MQ-135 + tanggal terakhir, lalu isi tangki.
+- Panel kiri hover expand/collapse; default expand.
+- Nama alat **Auto Etching V1** pada header, login, dan PWA.
+- Header firmware dipindah ke `src/`; `.ino` mengarah ke `src/*.h`.
+- Build firmware naik ke v1.3.0; dashboard v1.3.0.
+
 ## [2026-11-11] v1.2.0 - Preset v3, proses terukur, IoT, OTA, dan Status IoT
 
 ### Proses dan preset
@@ -91,14 +108,18 @@ Registry versi, rollback, dan prosedur tag ada di [`RELEASES.md`](./RELEASES.md)
   selesai; error non-E-stop tetap lokal.
 - Halaman **Preset & Kalibrasi**: editor preset, hasil kalibrasi stepper/DC/
   agitasi/level/suhu/MQ-135 + epoch terakhir (`kalts`), lalu isi tangki.
-- Settings menampilkan versi dashboard/firmware, tanggal rilis, repo GitHub,
-  dan info koneksi. Header alat memakai nama **Auto Etching V1**.
+- Settings menampilkan versi dashboard/firmware, build, tanggal rilis, IP,
+  repo GitHub, dan info koneksi. Header alat memakai **Auto Etching V1**.
+- OTA dari dashboard: drop/pick `.bin` di Settings; server meneruskan ke alat.
+  Status firmware menambah `ip`, `build`, dan `rssi` agar versi OTA terbaru
+  tampil otomatis.
+- Header firmware dipindah ke `src/`; `.ino` mengarah ke `src/*.h`.
 - Status stale/offline mematikan kontrol; panel kiri bisa minimize.
 - UI desktop/mobile/PWA; config tank/setting IDLE-only.
 
 ### Build dan partisi
 
-- Firmware: **1.245.906 byte** (94% partisi default 1,25 MB; 63% dari
+- Firmware: **1.246.234 byte** (94% partisi default 1,25 MB; 63% dari
   1,9 MB `min_spiffs`), RAM **78.252 byte (23%)**.
 - `partitions.csv`: 4 MB `min_spiffs`, app0/app1 sekitar 1,9 MB.
 - Flash USB pertama wajib setelah perubahan tabel partisi; update

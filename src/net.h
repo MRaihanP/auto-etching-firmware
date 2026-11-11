@@ -15,8 +15,8 @@
 
 // Kredensial lokal. secrets.h di-ignore Git; clone baru memakai placeholder
 // dari secrets.example.h sampai file tersebut disalin.
-#if __has_include("secrets.h")
-#include "secrets.h"
+#if __has_include("../secrets.h")
+#include "../secrets.h"
 #endif
 #ifndef SECRET_WIFI_SSID
 #define SECRET_WIFI_SSID  "PCB Expres V3"

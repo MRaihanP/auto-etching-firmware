@@ -46,7 +46,7 @@ Catatan:
 Buka Serial Monitor **115200**. Yang diharapkan:
 
 ```text
-[BOOT] Menu_OLED_6Button v1.2.0
+[BOOT] Menu_OLED_6Button v1.3.0
 [NET] Config belum ada -> default
 [NET] Konfigurasi MQTT ke mqtt.loggerindonesia.com:8883
 [NET] Sinkron NTP...
@@ -230,6 +230,26 @@ Target:
 - Event penting: E-stop, fault, start/selesai/batal, drain, config, OTA.
 
 ## 8. Test OTA
+
+### 8a. OTA dari dashboard (Settings)
+
+1. Build firmware menjadi file `.bin`.
+2. Buka **Settings → OTA Firmware** sebagai admin.
+3. Drag/drop file `.bin` atau klik **Pilih file .bin**.
+4. Klik **Upload OTA**.
+5. Server mengirim file ke `http://<IP_ALAT>:3232/update`; browser tidak
+   memegang password OTA.
+6. Setelah alat reboot, versi/build di Settings berubah otomatis dari status
+   MQTT baru.
+
+Syarat dashboard OTA:
+- alat online, IDLE, safety AMAN;
+- status alat sudah melaporkan `ip` (firmware baru);
+- server dashboard dan alat berada di jaringan yang bisa saling menjangkau
+  port 3232;
+- `OTA_PASS` di `webapp/server/.env` sama dengan password OTA firmware.
+
+### 8b. OTA via curl (diagnostik)
 
 Syarat:
 - Alat **IDLE**, safety AMAN, tidak ada proses/evakuasi.

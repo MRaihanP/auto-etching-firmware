@@ -99,6 +99,35 @@ export async function fetchAudit(): Promise<unknown[]> {
   return result.audit;
 }
 
+export async function uploadOta(file: File): Promise<{ bytes: number; message: string; ip: string }> {
+  const headers = new Headers({
+    'Content-Type': 'application/octet-stream',
+    'X-OTA-Filename': file.name,
+  });
+  if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+  const response = await fetch('/api/ota', {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: file,
+  });
+  const text = await response.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = { error: text };
+  }
+  if (!response.ok) {
+    const message =
+      body && typeof body === 'object' && 'error' in body
+        ? String((body as { error: unknown }).error)
+        : `HTTP ${response.status}`;
+    throw new ApiError(response.status, message);
+  }
+  return body as { bytes: number; message: string; ip: string };
+}
+
 export function connectWs(
   onMessage: (message: WsMessage) => void,
   onState?: (state: 'connecting' | 'open' | 'closed') => void,

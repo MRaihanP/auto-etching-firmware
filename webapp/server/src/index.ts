@@ -57,6 +57,11 @@ await app.register(fastifyStatic, {
   prefix: '/',
   wildcard: false,
 });
+app.addContentTypeParser(
+  'application/octet-stream',
+  { parseAs: 'buffer', bodyLimit: config.otaMaxBytes },
+  (_request, body, done) => done(null, body),
+);
 
 const loginSchema = z.object({
   username: z.string().min(1).max(64),
@@ -90,6 +95,21 @@ const settingNames = new Set([
   'kapSabunMl',
   'kapLimbahMl',
 ]);
+
+function isPrivateIPv4(value: string): boolean {
+  const parts = value.split('.').map(Number);
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
+    return false;
+  }
+  return (
+    parts[0] === 10 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168)
+  );
+}
 
 function isIdleSafe(status: Record<string, unknown> | null): boolean {
   if (!status) return false;
@@ -295,6 +315,73 @@ app.post(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'config gagal';
       audit(req.user!, 'config', body, message, clientIp(req));
+      return reply.code(502).send({ ok: false, error: message });
+    }
+  },
+);
+
+app.post(
+  '/api/ota',
+  { preHandler: [requireAuth(['admin']), requireCsrf] },
+  async (req, reply) => {
+    const file = req.body;
+    if (!Buffer.isBuffer(file) || file.length === 0) {
+      return reply.code(400).send({ ok: false, error: 'file firmware kosong' });
+    }
+    if (!config.otaPass) {
+      return reply.code(503).send({ ok: false, error: 'OTA_PASS belum diatur di server' });
+    }
+
+    const snapshot = bridge.snapshot();
+    const status = snapshot.status;
+    if (snapshot.stale) {
+      return reply.code(409).send({ ok: false, error: 'alat stale/offline' });
+    }
+    if (
+      status?.jalan === true ||
+      status?.jeda === true ||
+      status?.tunggu_pcb === true ||
+      status?.pemulihan === true
+    ) {
+      return reply.code(409).send({ ok: false, error: 'OTA hanya saat IDLE' });
+    }
+    const safety = status?.safety as { state?: number } | undefined;
+    if ((safety?.state ?? 0) !== 0) {
+      return reply.code(409).send({ ok: false, error: 'safety tidak AMAN' });
+    }
+    const ip = String(status?.ip ?? '');
+    if (!isPrivateIPv4(ip)) {
+      return reply.code(409).send({
+        ok: false,
+        error: 'IP alat tidak tersedia/ bukan LAN privat; firmware baru perlu melaporkan ip',
+      });
+    }
+
+    const filename = String(req.headers['x-ota-filename'] ?? 'firmware.bin').slice(0, 96);
+    const url = `http://${ip}:${config.otaPort}/update`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-OTA-Password': config.otaPass,
+        },
+        body: new Uint8Array(file),
+        signal: AbortSignal.timeout(config.otaTimeoutMs),
+      });
+      const message = (await response.text()).slice(0, 512);
+      if (!response.ok) {
+        audit(req.user!, 'ota', { filename, ip, bytes: file.length }, message, clientIp(req));
+        return reply.code(502).send({
+          ok: false,
+          error: message || `OTA HTTP ${response.status}`,
+        });
+      }
+      audit(req.user!, 'ota', { filename, ip, bytes: file.length }, message, clientIp(req));
+      return reply.send({ ok: true, bytes: file.length, message, ip });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'OTA gagal';
+      audit(req.user!, 'ota', { filename, ip, bytes: file.length }, message, clientIp(req));
       return reply.code(502).send({ ok: false, error: message });
     }
   },
