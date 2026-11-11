@@ -1,0 +1,15 @@
+{
+  "name": "etching-webapp",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"pnpm --dir server dev\" \"pnpm --dir web dev\"",
+    "build": "pnpm --dir web build && pnpm --dir server build",
+    "start": "pnpm --dir server start",
+    "seed": "pnpm --dir server seed",
+    "check": "pnpm --dir server check && pnpm --dir web check"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

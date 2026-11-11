@@ -230,12 +230,14 @@ unsigned long dcDosisMs(int idx, int ml) {
 // laju nyata (aman: lebih baik sedikit lama daripada wadah belum kosong).
 unsigned long dcDrainMs(int ml) {
   if (ml <= 0) return 0;
-  unsigned long ms = dcDurasiDariMl(1, ml, pengaturan.drainMarginPct);
-  if (ms == 0) {
-    float detik = (float)ml / DC_DRAIN_FALLBACK_ML_PER_SEC *
-                  (1.0f + pengaturan.drainMarginPct / 100.0f);
-    ms = (unsigned long)(detik * 1000.0f);
-  }
+  float r = dcRate(1);
+  if (r <= 0.0f) r = DC_DRAIN_FALLBACK_ML_PER_SEC;
+  // Jangan biarkan model yang terlalu rendah membuat drain berjam-jam.
+  if (r < DC_DRAIN_MIN_ML_PER_SEC) r = DC_DRAIN_MIN_ML_PER_SEC;
+
+  float detik = (float)ml / r *
+                (1.0f + pengaturan.drainMarginPct / 100.0f);
+  unsigned long ms = (unsigned long)(detik * 1000.0f);
   return ms + DRAIN_TAMBAHAN_MS;
 }
 
@@ -289,6 +291,42 @@ void kalibDcResetSesi(int idx) {
   kalibDcOffsetAda[idx]  = false;
   kalibDcDetikAktual     = 0.0f;
   kalibDcDurasiMs        = 0;
+}
+
+// Tambah satu run kalibrasi (durasi perintah, volume terukur).
+// Laju tiap run = ml / detik; model = RATA-RATA laju semua run dalam set
+// (maks KALIB_DC_RUN_MIN). Run berikutnya setelah set penuh memulai set baru.
+// c selalu 0, sehingga 1 ml butuh 1000 / r milidetik.
+bool kalibDcTambahRun(int idx, float detik, float ml) {
+  if (idx < 0 || idx > 1 || detik <= 0.0f || ml <= 0.0f) return false;
+  float r = ml / detik;
+  if (r < KALIB_DC_R_MIN || r > KALIB_DC_R_MAX) return false;
+  int n = kalibDcTitikN[idx];
+  if (n < 0 || n >= KALIB_DC_RUN_MIN) n = 0;
+  kalibDcTitikDetik[idx][n] = detik;
+  kalibDcTitikMl[idx][n]    = ml;
+  n++;
+  kalibDcTitikN[idx] = n;
+  double sum = 0.0;
+  for (int i = 0; i < n; i++)
+    sum += (double)kalibDcTitikMl[idx][i] / (double)kalibDcTitikDetik[idx][i];
+  kalibDcMlPerSec[idx]  = (float)(sum / n);
+  kalibDcC[idx]         = 0.0f;
+  kalibDcModelDuty[idx] = kalibDutyDC[idx];
+  return true;
+}
+
+// Laju run terakhir (ml/detik); 0 bila belum ada.
+float kalibDcLajuTerakhir(int idx) {
+  if (idx < 0 || idx > 1) return 0.0f;
+  int n = kalibDcTitikN[idx];
+  if (n <= 0 || n > 6 || kalibDcTitikDetik[idx][n - 1] <= 0.0f) return 0.0f;
+  return kalibDcTitikMl[idx][n - 1] / kalibDcTitikDetik[idx][n - 1];
+}
+
+// Durasi run kalibrasi tetap per pompa (0 = sabun, 1 = limbah).
+unsigned long kalibDcDurasiRun(int idx) {
+  return (idx == 1) ? KALIB_DC_DURASI_MS_LIMBAH : KALIB_DC_DURASI_MS_SABUN;
 }
 
 unsigned long kalibDcPulseMs(int idx) {

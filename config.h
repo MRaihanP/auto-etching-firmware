@@ -49,6 +49,14 @@
 #define VOL_MIN     50
 #define VOL_MAX     1000
 
+// Kapasitas jerigen sumber (ml). Dipakai PRECHECK karena pelacak volume
+// tangki tidak aktif: kebutuhan satu proses penuh tidak boleh melebihi isi
+// jerigen, sebab pengisian ulang di tengah proses tidak mungkin.
+#define KAPASITAS_HCL_ML    1000
+#define KAPASITAS_H2O2_ML   1000
+#define KAPASITAS_H2O_ML    1000
+#define KAPASITAS_SABUN_ML   600
+
 // Sensor level cairan (GPIO langsung, ganti MPR121)
 #define JUMLAH_SENSOR       5      // HCl, H2O2, H2O, air sabun, air limbah
 #define PIN_LEVEL_HCL       11
@@ -77,6 +85,15 @@
 // Histeresis mencegah status berkedip saat permukaan cairan bergelombang.
 #define LEVEL_ON_PCT        55     // >= ini dianggap BASAH
 #define LEVEL_OFF_PCT       45     // <= ini dianggap KERING
+// Ambang "penuh" khusus tangki limbah. Lebih tinggi dari LEVEL_ON_PCT dan
+// harus bertahan LIMBAH_PENUH_MS supaya percikan/foam saat drain tidak
+// memicu E06. Histeresis turun ke LIMBAH_PENUH_OFF_PCT agar bacaan yang
+// berkedip di sekitar ambang tidak mereset timer.
+#define LIMBAH_PENUH_PCT     85
+#define LIMBAH_PENUH_OFF_PCT 75
+#define LIMBAH_PENUH_MS      3000UL
+// Abaikan sensor limbah selama awal pompa drain (lonjakan/percikan).
+#define LIMBAH_DRAIN_GRACE_MS 2000UL
 #define LEVEL_STABIL_MS     5000   // status harus stabil selama ini sebelum baseline diadaptasi
 #define LEVEL_RAW_MIN       1000L  // di luar rentang ini -> sensor FAULT
 #define LEVEL_RAW_MAX       900000L
@@ -93,7 +110,7 @@
 
 // ===== POMPA PERISTALTIK STEPPER (DRV8825 1/16) =====
 // Motor 200 langkah/putaran x microstep 1/16 = 3200 langkah/putaran.
-// Disamakan dengan sketch test/test-motor (STEPS_PER_REV = 3200). Versi lama
+// Sama dengan sketch uji motor (STEPS_PER_REV = 3200). Versi lama
 // memakai 6400 (1/32) sehingga pompa berputar 2x lebih cepat dari RPM yang
 // ditampilkan. Hasil uji langsung: pompa baru mengalirkan cairan pada ~400 rpm,
 // batas aman maksimum 700 rpm. RPM hanya diubah kelipatan 100.
@@ -160,9 +177,19 @@
 // Jalankan target kalibrasi maksimal selama ini; lebih dari ini berarti model
 // atau target salah dan run dibatalkan.
 #define KALIB_DC_MAKS_MS          120000UL
+// v1.0.2: kalibrasi pompa DC = run TETAP 100 detik tanpa target ml. Setelah
+// selesai, user mengisi hasil ukur (ml). Laju = ml / detik, diulang
+// KALIB_DC_RUN_MIN kali lalu dirata-rata.
+#define KALIB_DC_DURASI_MS_SABUN  100000UL   // 100 detik
+#define KALIB_DC_DURASI_MS_LIMBAH  20000UL   // 20 detik (debit besar)
+#define KALIB_DC_ML_MAX           9999
 // Fallback drain bila pompa limbah belum dikalibrasi. Sengaja lebih lambat
 // dari laju nyata agar wadah tetap tersedot (bukan berhenti terlalu cepat).
-#define DC_DRAIN_FALLBACK_ML_PER_SEC 10.0f
+#define DC_DRAIN_FALLBACK_ML_PER_SEC 8.0f
+// Laju minimum yang dipakai untuk menghitung durasi drain. Model kalibrasi
+// yang terlalu rendah (mis. karena salah ukur) membuat drain sangat lama;
+// nilai ini mencegah durasi absurd tanpa mengubah model dosing.
+#define DC_DRAIN_MIN_ML_PER_SEC 3.0f
 // Margin pompa DC: dosing berbasis waktu diberi kelebihan 10% karena laju DC
 // kurang presisi (selang, tegangan, viskositas) dan cenderung kurang, bukan
 // berlebih. Dipakai oleh dcDosisMs().
@@ -204,12 +231,32 @@
 #define TEMP_PERINGATAN_C   45.0f  // di atas ini: peringatan (buzzer + layar)
 #define TEMP_BAHAYA_C       60.0f  // di atas ini: ERROR E02
 #define DRAIN_MARGIN_PCT    25     // margin waktu drain (%)
-#define DRAIN_TAMBAHAN_MS   3000UL // tambahan tetap di akhir drain
+// Purge setelah volume utama habis: memastikan sisa di selang/nampan ikut
+// tersedot. Durasi utama tetap dihitung dari volume, bukan angka tetap.
+#define DRAIN_TAMBAHAN_MS   5000UL
+// Estimasi cairan yang tidak tercatat ledger (menempel di nampan/selang).
+// Ditambahkan ke target drain dan dihitung sebagai isi limbah.
+#define DRAIN_RESIDU_ML     50
+// Peringatan/stop limbah: 85% = waspada, 95% selama 5 s = kritis (stop).
+#define LIMBAH_KRITIS_PCT     95
+#define LIMBAH_KRITIS_OFF_PCT 90
+#define LIMBAH_KRITIS_MS      5000UL
 #define PROSES_TIMEOUT_MARGIN_MS 10000UL
 #define PROSES_POLL_MS      20UL
 #define TANGKI_MAKS_ML      5000
 #define TANK_PERINGATAN_ML  100    // sisa tangki sumber / ruang limbah minimum
 #define WDT_TIMEOUT_S       15
+
+// ===== MODEL WAKTU ETCHING OTOMATIS =====
+// Laju etching nominal hasil uji (um/menit). Dipakai sebagai nilai awal;
+// setiap mesin sebaiknya dikalibrasi lewat preset.
+#define ETCH_LAJU_DEFAULT_X10   30      // 3,0 um/menit
+// Faktor keamanan waktu: waktu teori x 150% agar copper tebal / larutan
+// yang mulai jenuh tidak berhenti sebelum tembaga habis.
+#define ETCH_FAKTOR_AMAN_PCT    150
+// Batas muat tembaga larutan etchant (gram Cu per liter). Di atas nilai ini
+// larutan tidak lagi mampu melarutkan tembaga secara wajar.
+#define KAPASITAS_CU_G_PER_L    120.0f
 #define BACK_TAHAN_MS       1000UL // tahan BACK -> kembali ke menu utama
 
 // Skala waktu untuk uji alur cepat (air saja). Aktifkan lewat
@@ -229,4 +276,4 @@
 #define LOG_LEVEL 2
 #endif
 
-#define FW_VERSI  "v1.0.1"
+#define FW_VERSI  "v1.2.0"

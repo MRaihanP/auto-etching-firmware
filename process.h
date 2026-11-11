@@ -39,6 +39,8 @@ bool prosesTungguPcb = false;
 bool prosesKonfirmasi = false;     // layar "trace sudah OK?"
 int  konfirmasiSel = 0;            // 0 = ulangi siklus, 1 = selesai & bilas
 bool prosesPeringatanSuhu = false;
+bool prosesPeringatanLevel = false;   // sumber kering saat proses (warning saja)
+bool prosesPeringatanLimbah = false;  // limbah mendekati penuh (warning saja)
 bool pemulihanAktif = false;
 bool pemulihanTersedia = false;
 int  pemulihanTahap = 0;
@@ -80,10 +82,80 @@ void tankKurangi(int idx, int ml) {
   if (*t < 0) *t = 0;
 }
 
+// Limbah bertambah setiap drain. Nilai dibatasi kapasitas agar tidak
+// melebihi angka yang bisa ditampilkan/dipakai precheck.
 void tankTambahLimbah(int ml) {
   if (ml <= 0) return;
   tankLimbahMl += ml;
-  if (tankLimbahMl > TANGKI_MAKS_ML) tankLimbahMl = TANGKI_MAKS_ML;
+  long kap = (long)pengaturan.kapLimbahMl;
+  if (tankLimbahMl > kap) tankLimbahMl = kap;
+}
+
+// Durasi drain dari volume ledger + estimasi residu. Durasi utama mengikuti
+// volume; purge tetap ditambahkan oleh dcDrainMs().
+unsigned long drainMsVolume(int ml) {
+  if (ml <= 0) return 0;
+  return dcDrainMs(ml + DRAIN_RESIDU_ML);
+}
+
+const char* namaSumberLevel(int i);
+
+// Estimasi volume dari sensor level. Sensor hanya titik, jadi ini perkiraan
+// untuk bootstrap/migrasi ketika ledger belum diisi atau masih 0.
+bool estimasiTankDariSensor(int idx, long* hasil) {
+  if (idx < 0 || idx > 4 || hasil == nullptr) return false;
+  if (levelFault(idx)) return false;
+  // Hanya percaya persen bila sensor sudah dikalibrasi user.
+  if (!sensorKalibSimpan[idx]) return false;
+  // Pakai persen langsung; status basah bisa tertinggal debounce saat boot.
+  int pct = sensorPersen[idx];
+  if (pct < LEVEL_ON_PCT) return false;
+  long kap = (long)kapasitasTank(idx);
+  if (kap <= 0) return false;
+  long est = kap * (long)pct / 100L;
+  if (est < TANK_PERINGATAN_ML) est = TANK_PERINGATAN_ML;
+  if (est > kap) est = kap;
+  *hasil = est;
+  return true;
+}
+
+// Isi ledger yang masih 0 dari sensor. Contoh: setelah upgrade firmware,
+// tangki HCl fisik berisi 90% tetapi tankHclMl masih 0 karena data lama
+// tidak pernah mencatat volume.
+void sinkronTankDariSensor() {
+  long* t[5] = { &tankHclMl, &tankH2o2Ml, &tankH2oMl,
+                 &tankSabunMl, &tankLimbahMl };
+  bool ada = false;
+  for (int i = 0; i < 5; i++) {
+    if (*t[i] > 0) continue;
+    long est = 0;
+    if (!estimasiTankDariSensor(i, &est)) continue;
+    *t[i] = est;
+    ada = true;
+    dbg.print(F("[TANK] Sinkron "));
+    dbg.print(namaSumberLevel(i));
+    dbg.print(F(" = "));
+    dbg.print(est);
+    dbg.print(F(" ml (sensor "));
+    dbg.print(sensorPersen[i]);
+    dbg.println(F("%)"));
+  }
+  if (ada) {
+    tankDataAda = true;
+    simpanTank();
+    eventCatat(106, "TANK SYNC");
+  }
+}
+
+// Peringatan pasca-precheck: sumber kering/limbah hampir penuh hanya
+// menandai UI, tidak menghentikan proses.
+void setPeringatanLevel(int idx, bool kering) {
+  if (kering && !prosesPeringatanLevel) {
+    prosesPeringatanLevel = true;
+    buzzerWarn();
+    dbg.print(F("[PROSES] Peringatan level sumber "));
+    dbg.println(idx);
+  }
 }
 
 int prosesVolumeKebutuhan() {
@@ -100,7 +172,7 @@ bool prosesTangkiMenipis() {
   if (tankH2o2Ml  > 0 && tankH2o2Ml  < TANK_PERINGATAN_ML) return true;
   if (tankH2oMl   > 0 && tankH2oMl   < TANK_PERINGATAN_ML) return true;
   if (tankSabunMl > 0 && tankSabunMl < TANK_PERINGATAN_ML) return true;
-  if (tankLimbahMl > TANGKI_MAKS_ML - TANK_PERINGATAN_ML) return true;
+  if (tankLimbahMl > (long)pengaturan.kapLimbahMl - TANK_PERINGATAN_ML) return true;
   return false;
 }
 
@@ -123,18 +195,18 @@ int estimasiTotalDetikPreset(const Preset &p) {
     ms += pompaPerkiraanMs(2, p.mlH2O);
     ms += pompaPerkiraanMs(1, p.mlH2O2);
     ms += pompaPerkiraanMs(0, p.mlHCl);
-    ms += (unsigned long)SKALA_UJI_CEPAT(p.agitasiDetik) * 1000UL;
-    ms += dcDrainMs(volumeTotal(p));
+    ms += (unsigned long)SKALA_UJI_CEPAT(agitasiDetikEfektif(p)) * 1000UL;
+    ms += drainMsVolume(volumeTotal(p));
     // Bilas sabun + air PER SIKLUS
     for (int i = 0; i < p.bilasSabun; i++) {
       ms += dcDosisMs(0, p.bilasMl);
       ms += (unsigned long)SKALA_UJI_CEPAT(p.bilasDetik) * 1000UL;
-      ms += dcDrainMs(p.bilasMl);
+      ms += drainMsVolume(p.bilasMl);
     }
     for (int i = 0; i < p.bilasAir; i++) {
       ms += pompaPerkiraanMs(2, p.bilasMl);
       ms += (unsigned long)SKALA_UJI_CEPAT(p.bilasDetik) * 1000UL;
-      ms += dcDrainMs(p.bilasMl);
+      ms += drainMsVolume(p.bilasMl);
     }
   }
   return (int)(ms / 1000UL);
@@ -147,10 +219,118 @@ int prosesTotalDetik() {
 bool prosesSelesai() { return prosesFase == FASE_SELESAI; }
 bool prosesDrainBatalAktif() { return prosesJalan && prosesFase == FASE_DRAIN_BATAL; }
 
+// ---------- info dosing untuk layar proses ----------
+// true bila sedang mengisi cairan. `nama` = bahan, `targetMl` = target,
+// `sudahMl` = perkiraan ml yang sudah dituangkan.
+// Stepper memakai posisi nyata (pompaProgres); pompa sabun DC memakai
+// rasio waktu terpakai terhadap durasi perintah.
+bool prosesInfoDosing(const char** nama, int* targetMl, int* sudahMl) {
+  Preset &p = daftarPreset[presetTerpilih];
+  const char* nm = nullptr;
+  int target = 0;
+  bool berbasisWaktu = false;
+
+  if (prosesFase == FASE_ETCH) {
+    if (prosesLangkah == L_DOSE_AIR)       { nm = "AIR";  target = p.mlH2O; }
+    else if (prosesLangkah == L_DOSE_H2O2) { nm = "H2O2"; target = p.mlH2O2; }
+    else if (prosesLangkah == L_DOSE_HCL)  { nm = "HCl";  target = p.mlHCl; }
+  } else if ((prosesFase == FASE_BILAS_AIR ||
+              prosesFase == FASE_PEMULIHAN) && prosesLangkah == L_ISI) {
+    nm = "AIR"; target = p.bilasMl;
+  } else if (prosesFase == FASE_BILAS_SABUN && prosesLangkah == L_ISI) {
+    nm = "SABUN"; target = p.bilasMl;
+    berbasisWaktu = true;
+  }
+
+  if (nm == nullptr || target <= 0) return false;
+
+  int sudah = 0;
+  if (berbasisWaktu) {
+    if (langkahDurasiMs > 0) {
+      unsigned long now = prosesJeda ? jedaMulaiMs : millis();
+      unsigned long lewat = now - langkahMulaiMs;
+      if (lewat > langkahDurasiMs) lewat = langkahDurasiMs;
+      sudah = (int)((long)target * (long)lewat / (long)langkahDurasiMs);
+    }
+  } else {
+    int idx = (prosesLangkah == L_DOSE_HCL) ? 0 :
+              (prosesLangkah == L_DOSE_H2O2) ? 1 : 2;
+    sudah = (int)((long)target * pompaProgres(idx) / 100);
+  }
+
+  *nama = nm;
+  *targetMl = target;
+  *sudahMl = sudah;
+  return true;
+}
+
 // ---------- simpan status pemulihan ----------
 void simpanRunstateSekarang() {
   simpanRunstate((int)prosesFase, (int)prosesLangkah,
                  prosesSiklus, volumeWadah, presetTerpilih);
+}
+
+// Catat volume tepat setelah cairan masuk, bukan hanya saat transisi langkah.
+void tambahVolumeWadah(int ml) {
+  if (ml <= 0) return;
+  volumeWadah += ml;
+  simpanRunstateSekarang();
+}
+
+void kosongkanVolumeWadah() {
+  volumeWadah = 0;
+  simpanRunstateSekarang();
+}
+
+// Saat cancel/E-stop di tengah dosing, kurangi volume target yang belum
+// benar-benar dipompa. Dengan begitu drain memakai volume nyata di nampan.
+void sesuaikanVolumeDosisAktual() {
+  const char* nama = nullptr;
+  int target = 0, sudah = 0;
+  if (!prosesInfoDosing(&nama, &target, &sudah)) return;
+  int sisa = target - sudah;
+  if (sisa <= 0) return;
+  if (sisa > volumeWadah) sisa = volumeWadah;
+  volumeWadah -= sisa;
+  simpanRunstateSekarang();
+  dbg.print(F("[PROSES] Koreksi dosis "));
+  dbg.print(nama);
+  dbg.print(F(": -"));
+  dbg.print(sisa);
+  dbg.print(F(" ml, nampan "));
+  dbg.print(volumeWadah);
+  dbg.println(F(" ml"));
+}
+
+// Sisa cairan saat drain sedang berjalan, dihitung dari waktu yang sudah
+// berjalan dibanding durasi drain. Dipakai bila cancel/E-stop di tengah drain
+// agar drain berikutnya tidak mengulang volume penuh.
+int sisaVolumeDrainAktual() {
+  if (prosesLangkah != L_DRAIN || volumeWadah <= 0 || langkahDurasiMs == 0)
+    return volumeWadah;
+  unsigned long now = prosesJeda ? jedaMulaiMs : millis();
+  unsigned long lewat = now - langkahMulaiMs;
+  if (lewat >= langkahDurasiMs) return 0;
+  long sisa = (long)volumeWadah -
+              ((long)volumeWadah * (long)lewat / (long)langkahDurasiMs);
+  return (int)constrain(sisa, 0L, (long)volumeWadah);
+}
+
+// Cancel/E-stop: sesuaikan volume dengan progres dosis atau drain yang aktif.
+void sesuaikanVolumeAktual() {
+  if (prosesLangkah == L_DRAIN) {
+    int sisa = sisaVolumeDrainAktual();
+    int terpakai = volumeWadah - sisa;
+    if (terpakai > 0) tankTambahLimbah(terpakai);
+    volumeWadah = sisa;
+    if (tankDataAda) simpanTank();
+    simpanRunstateSekarang();
+    dbg.print(F("[PROSES] Koreksi drain, sisa "));
+    dbg.print(volumeWadah);
+    dbg.println(F(" ml"));
+  } else {
+    sesuaikanVolumeDosisAktual();
+  }
 }
 
 // ---------- transisi langkah ----------
@@ -183,7 +363,10 @@ void cekSuhuProses() {
   float t = sensorSuhuTertinggi();
   if (t <= -100.0f) return;
   if (t >= pengaturan.tempBahayaX10 / 10.0f) {
-    safetyRaise(2);
+    char d[48];
+    snprintf(d, sizeof(d), "Suhu %.1f C > %.1f C", t,
+             pengaturan.tempBahayaX10 / 10.0f);
+    safetyRaiseKonteks(2, d, "Dinginkan / cek sensor");
     return;
   }
   if (t >= pengaturan.tempPeringatanX10 / 10.0f) {
@@ -201,66 +384,185 @@ void cekSuhuProses() {
 }
 
 // ---------- precheck ----------
-// Pemeriksaan sensor saat proses berjalan. Fault harus menang atas "kering"
-// agar sensor rusak tidak disalahartikan sebagai tangki kosong.
+const char* namaSumberLevel(int i) {
+  static const char* nama[5] = { "HCl", "H2O2", "H2O", "SABUN", "LIMBAH" };
+  return (i >= 0 && i < 5) ? nama[i] : "?";
+}
+
+// Pemeriksaan sensor saat proses berjalan. Setelah PRECHECK lulus, level
+// kering/hampir penuh hanya menjadi peringatan; fault sensor tetap E03.
 bool cekLevelSumber(int i) {
-  if (levelFault(i)) { safetyRaise(3); return false; }
-  if (levelKering(i)) { safetyRaise(5); return false; }
+  if (levelFault(i)) {
+    char d[48];
+    snprintf(d, sizeof(d), "Sensor %s FAULT (raw %d)",
+             namaSumberLevel(i), sensorRaw[i]);
+    safetyRaiseKonteks(3, d, "Cek wiring/kalibrasi sensor");
+    return false;
+  }
+  if (levelKering(i)) setPeringatanLevel(i, true);
   return true;
 }
 
 bool cekLevelLimbah() {
-  if (levelFault(4)) { safetyRaise(3); return false; }
-  if (levelBasah(4)) { safetyRaise(6); return false; }
+  if (levelFault(4)) {
+    char d[48];
+    snprintf(d, sizeof(d), "Sensor LIMBAH FAULT (raw %d)", sensorRaw[4]);
+    safetyRaiseKonteks(3, d, "Cek wiring/kalibrasi sensor");
+    return false;
+  }
+  // Saat pompa drain baru menyala, cairan bisa memercik ke strip sensor.
+  if (prosesLangkah == L_DRAIN &&
+      (millis() - langkahMulaiMs) < LIMBAH_DRAIN_GRACE_MS) return true;
+
+  // Jaring pengaman terakhir: hanya level sangat tinggi yang menghentikan
+  // proses. Level 85% hanya menjadi peringatan.
+  if (levelLimbahKritis()) {
+    char d[48];
+    snprintf(d, sizeof(d), "Limbah kritis %d%%, ruang habis", sensorPersen[4]);
+    safetyRaiseKonteks(6, d, "Kosongkan tangki limbah");
+    return false;
+  }
+  if (levelLimbahPenuh()) {
+    if (!prosesPeringatanLimbah) {
+      prosesPeringatanLimbah = true;
+      buzzerWarn();
+      dbg.print(F("[PROSES] Peringatan limbah "));
+      dbg.print(sensorPersen[4]);
+      dbg.println(F("%"));
+    }
+  }
   return true;
 }
 
 bool precheckLulus() {
   Preset &p = daftarPreset[presetTerpilih];
+  char d[48];
+  clampTankKeKapasitas();
+  sinkronTankDariSensor();
 
-  // Stepper wajib terkalibrasi. Pompa limbah TIDAK wajib: drain punya
-  // fallback waktu. Pompa sabun wajib bila preset memakai bilas sabun.
-  if (!pompaSiapSemua()) {
-    safetyRaise(9);
+  // Nampan harus kosong dan tidak ada pemulihan tertunda.
+  if (volumeWadah > 0) {
+    snprintf(d, sizeof(d), "Nampan masih %d ml", volumeWadah);
+    safetyRaiseKonteks(5, d, "Drain wadah dulu");
     return false;
   }
+  if (pemulihanTersedia) {
+    safetyRaiseKonteks(8, "Pemulihan belum diselesaikan", "Pilih drain/batalkan");
+    return false;
+  }
+  // Kalibrasi: sebutkan pompa yang bermasalah.
+  for (int i = 0; i < 3; i++) {
+    if (!pompaSiap(i)) {
+      snprintf(d, sizeof(d), "Pompa %s belum dikalibrasi", namaSumberLevel(i));
+      safetyRaiseKonteks(9, d, "Kalibrasi Motor");
+      return false;
+    }
+  }
   if (p.bilasSabun > 0 && kalibDcMlPerSec[0] <= 0.0f) {
-    safetyRaise(9);
+    safetyRaiseKonteks(9, "Pompa SABUN belum dikalibrasi", "Kalibrasi Motor");
     return false;
   }
   if (!sensorSuhuValid(2)) {
-    safetyRaise(3);
+    safetyRaiseKonteks(3, "Sensor suhu chamber tidak valid", "Cek sensor DS18B20");
     return false;
   }
-  // Sumber: sensor level wajib ada dan berisi.
-  for (int i = 0; i < 3; i++) {
-    if (levelFault(i)) { safetyRaise(3); return false; }
-    if (levelKering(i)) { safetyRaise(5); return false; }
-  }
-  if (p.bilasSabun > 0) {
-    if (levelFault(3)) { safetyRaise(3); return false; }
-    if (levelKering(3)) { safetyRaise(5); return false; }
-  }
-  // Limbah tidak boleh sudah penuh.
-  if (levelFault(4)) { safetyRaise(3); return false; }
-  if (levelBasah(4)) { safetyRaise(6); return false; }
 
-  // Pelacak tangki (dipakai bila pengguna sudah mengisi volume awal).
+  // Sensor level sumber.
+  int sumberAktif = (p.bilasSabun > 0) ? 4 : 3;
+  for (int i = 0; i < sumberAktif; i++) {
+    if (levelFault(i)) {
+      snprintf(d, sizeof(d), "Sensor %s FAULT (raw %d)",
+               namaSumberLevel(i), sensorRaw[i]);
+      safetyRaiseKonteks(3, d, "Cek wiring/kalibrasi sensor");
+      return false;
+    }
+    if (levelKering(i)) {
+      snprintf(d, sizeof(d), "Sensor %s kering, isi jerigen", namaSumberLevel(i));
+      safetyRaiseKonteks(5, d, "Isi + menu Tangki");
+      return false;
+    }
+  }
+  if (levelFault(4)) {
+    safetyRaiseKonteks(3, "Sensor LIMBAH FAULT", "Cek wiring/kalibrasi sensor");
+    return false;
+  }
+  if (levelLimbahPenuh()) {
+    snprintf(d, sizeof(d), "Limbah sudah penuh (%d%%)", sensorPersen[4]);
+    safetyRaiseKonteks(6, d, "Kosongkan tangki limbah");
+    return false;
+  }
+
+  // Kebutuhan seluruh proses vs sisa ledger tiap jerigen.
   long butuhHcl   = (long)p.siklus * p.mlHCl;
   long butuhH2O2  = (long)p.siklus * p.mlH2O2;
   long butuhH2O   = (long)p.siklus *
                     ((long)p.mlH2O + (long)p.bilasAir * p.bilasMl);
   long butuhSabun = (long)p.siklus * p.bilasSabun * p.bilasMl;
-  if (tankHclMl > 0 && tankHclMl < butuhHcl) { safetyRaise(5); return false; }
-  if (tankH2o2Ml > 0 && tankH2o2Ml < butuhH2O2) { safetyRaise(5); return false; }
-  if (tankH2oMl > 0 && tankH2oMl < butuhH2O) { safetyRaise(5); return false; }
-  if (tankSabunMl > 0 && tankSabunMl < butuhSabun) { safetyRaise(5); return false; }
 
+  if (butuhHcl > (long)pengaturan.kapHclMl) {
+    snprintf(d, sizeof(d), "HCl butuh %ld > kap %d", butuhHcl, pengaturan.kapHclMl);
+    safetyRaiseKonteks(5, d, "Kurangi siklus/volume");
+    return false;
+  }
+  if (tankHclMl < butuhHcl) {
+    snprintf(d, sizeof(d), "HCl butuh %ld, sisa %ld", butuhHcl, tankHclMl);
+    safetyRaiseKonteks(5, d, "Isi + menu Tangki");
+    return false;
+  }
+  if (butuhH2O2 > (long)pengaturan.kapH2o2Ml) {
+    snprintf(d, sizeof(d), "H2O2 butuh %ld > kap %d", butuhH2O2, pengaturan.kapH2o2Ml);
+    safetyRaiseKonteks(5, d, "Kurangi siklus/volume");
+    return false;
+  }
+  if (tankH2o2Ml < butuhH2O2) {
+    snprintf(d, sizeof(d), "H2O2 butuh %ld, sisa %ld", butuhH2O2, tankH2o2Ml);
+    safetyRaiseKonteks(5, d, "Isi + menu Tangki");
+    return false;
+  }
+  if (butuhH2O > (long)pengaturan.kapH2oMl) {
+    snprintf(d, sizeof(d), "H2O butuh %ld > kap %d", butuhH2O, pengaturan.kapH2oMl);
+    safetyRaiseKonteks(5, d, "Kurangi siklus/bilas");
+    return false;
+  }
+  if (tankH2oMl < butuhH2O) {
+    snprintf(d, sizeof(d), "H2O butuh %ld, sisa %ld", butuhH2O, tankH2oMl);
+    safetyRaiseKonteks(5, d, "Isi + menu Tangki");
+    return false;
+  }
+  if (butuhSabun > (long)pengaturan.kapSabunMl) {
+    snprintf(d, sizeof(d), "SABUN butuh %ld > kap %d", butuhSabun, pengaturan.kapSabunMl);
+    safetyRaiseKonteks(5, d, "Kurangi bilas/siklus");
+    return false;
+  }
+  if (tankSabunMl < butuhSabun) {
+    snprintf(d, sizeof(d), "SABUN butuh %ld, sisa %ld", butuhSabun, tankSabunMl);
+    safetyRaiseKonteks(5, d, "Isi + menu Tangki");
+    return false;
+  }
+
+  // Muat tembaga vs kapasitas larutan: peringatan dini, bukan blokir.
+  float cuGram = tembagaGram(p);
+  float cuKapasitas = (float)volumeTotal(p) * KAPASITAS_CU_G_PER_L / 1000.0f;
+  if (cuGram > cuKapasitas) {
+    dbg.print(F("[PROSES] Peringatan: tembaga "));
+    dbg.print(cuGram);
+    dbg.print(F(" g > kapasitas larutan "));
+    dbg.print(cuKapasitas);
+    dbg.print(F(" g, minimal kimia "));
+    dbg.print(kimiaMinMl(p));
+    dbg.println(F(" ml, perbesar volume"));
+  }
+
+  // Kapasitas limbah: total cairan + estimasi residu tiap drain.
   long totalCair = (long)p.siklus *
                    (volumeTotal(p) +
                     (long)(p.bilasSabun + p.bilasAir) * p.bilasMl);
-  if (tankLimbahMl + totalCair > TANGKI_MAKS_ML) {
-    safetyRaise(6);
+  long residu = (long)p.siklus * (1 + p.bilasSabun + p.bilasAir) *
+                DRAIN_RESIDU_ML;
+  long ruang = (long)pengaturan.kapLimbahMl - tankLimbahMl;
+  if (totalCair + residu > ruang) {
+    snprintf(d, sizeof(d), "Limbah perlu %ld, ruang %ld", totalCair + residu, ruang);
+    safetyRaiseKonteks(6, d, "Kosongkan tangki limbah");
     return false;
   }
   return true;
@@ -283,6 +585,7 @@ void prosesSelesaiFinal() {
   buzzerSelesai();
   hapusRunstate();
   simpanTank();
+  eventCatat(101, "SELESAI");
   perluGambar = true;
   dbg.println(F("[PROSES] Selesai"));
 }
@@ -292,10 +595,13 @@ void prosesSelesaiFinal() {
 void mulaiIsiSabun() {
   Preset &p = daftarPreset[presetTerpilih];
   unsigned long d = dcDosisMs(0, p.bilasMl);
-  if (d == 0) { safetyRaise(9); return; }
+  if (d == 0) {
+    safetyRaiseKonteks(9, "Pompa SABUN durasi 0", "Kalibrasi pompa sabun");
+    return;
+  }
   mulaiLangkah(L_ISI, d, d + PROSES_TIMEOUT_MARGIN_MS);
   pompaSabunSet(true);
-  volumeWadah += p.bilasMl;
+  tambahVolumeWadah(p.bilasMl);
   tankKurangi(3, p.bilasMl);
 }
 
@@ -304,9 +610,9 @@ void mulaiIsiAir() {
   unsigned long est = pompaPerkiraanMs(2, p.bilasMl);
   mulaiLangkah(L_ISI, 0, est ? est * 2UL + PROSES_TIMEOUT_MARGIN_MS : 0);
   if (!pompaMulai(2, p.bilasMl)) {
-    safetyRaise(9);
+    safetyRaiseKonteks(9, "Pompa AIR gagal start", "Cek selang/prime");
   } else {
-    volumeWadah += p.bilasMl;
+    tambahVolumeWadah(p.bilasMl);
     tankKurangi(2, p.bilasMl);
   }
 }
@@ -320,11 +626,11 @@ void mulaiSiklus() {
   unsigned long est = pompaPerkiraanMs(2, p.mlH2O);
   mulaiLangkah(L_DOSE_AIR, 0, est ? est * 2UL + PROSES_TIMEOUT_MARGIN_MS : 0);
   if (!pompaMulai(2, p.mlH2O)) {
-    safetyRaise(9);
+    safetyRaiseKonteks(9, "Pompa AIR gagal start", "Cek selang/prime");
   } else {
     // Dicatat saat mulai, bukan saat selesai: bila proses dibatalkan di
     // tengah dosing, volume wadah tetap diperhitungkan untuk drain.
-    volumeWadah += p.mlH2O;
+    tambahVolumeWadah(p.mlH2O);
     tankKurangi(2, p.mlH2O);
   }
   perluGambar = true;
@@ -401,6 +707,7 @@ void selesaiSiklus() {
 
 // ---------- api publik ----------
 void prosesMulai() {
+  if (otaAktif) return;   // jangan jalankan aktuator saat update firmware
   if (!safetyBolehAktuator()) {
     // UI menampilkan toast; proses tidak boleh jalan saat E-STOP/ERROR.
     return;
@@ -422,6 +729,8 @@ void prosesMulai() {
   prosesKonfirmasi = false;
   konfirmasiSel = 0;
   prosesPeringatanSuhu = false;
+  prosesPeringatanLevel = false;
+  prosesPeringatanLimbah = false;
   suhuWarnSudah = false;
   pemulihanAktif = false;
   prosesAkumMs = 0;
@@ -445,6 +754,7 @@ void prosesMulai() {
   dbg.print(prosesTotalDetik());
   dbg.println(F(" s)"));
   buzzerMulai();
+  eventCatat(100, p.nama);
   perluGambar = true;
 }
 
@@ -481,6 +791,8 @@ void prosesToggleJeda() {
     pompaJedaSemua();
     dcJedaSemua();
     jedaMulaiMs = millis();
+    jedaSel = 0;
+    buzzerJeda();
     dbg.println(F("[PROSES] Jeda (semua aktuator)"));
   } else {
     unsigned long delta = millis() - jedaMulaiMs;
@@ -488,6 +800,8 @@ void prosesToggleJeda() {
     if (langkahBatasMs) langkahBatasMs += delta;
     pompaLanjutSemua();
     dcLanjutSemua();
+    jedaSel = 0;
+    buzzerLanjut();
     dbg.println(F("[PROSES] Lanjut"));
   }
   perluGambar = true;
@@ -495,7 +809,14 @@ void prosesToggleJeda() {
 
 // Mulai drain wadah yang sedang berisi (dipakai cancel dan sisa proses).
 void mulaiDrainWadah() {
-  unsigned long ms = dcDrainMs(volumeWadah);
+  if (volumeWadah <= 0) return;
+  unsigned long ms = drainMsVolume(volumeWadah);
+  if (ms == 0) {
+    char d[48];
+    snprintf(d, sizeof(d), "Drain %d ml gagal: pompa limbah", volumeWadah);
+    safetyRaiseKonteks(9, d, "Kalibrasi pompa limbah");
+    return;
+  }
   prosesJalan = true;
   prosesJeda = false;
   prosesFase = FASE_DRAIN_BATAL;
@@ -505,6 +826,7 @@ void mulaiDrainWadah() {
   prosesTerakhirMs = millis();
   mulaiLangkah(L_DRAIN, ms, ms + PROSES_TIMEOUT_MARGIN_MS);
   pompaLimbahSet(true);
+  eventCatat(104, "DRAIN");
   dbg.print(F("[PROSES] Drain wadah "));
   dbg.print(volumeWadah);
   dbg.println(F(" ml"));
@@ -515,12 +837,15 @@ void mulaiDrainWadah() {
 void mulaiEvakuasiDarurat() {
   if (evakuasiAktif) return;
   if (volumeWadah <= 0) return;
-  // Jangan menyalakan pompa bila sensor menyatakan tangki limbah penuh.
-  if (safetyKode == 6 || levelBasah(4)) {
+  // Jangan menyalakan pompa bila sensor menyatakan tangki limbah penuh atau
+  // ruang ledger tidak cukup.
+  if (safetyKode == 6 || levelLimbahKritis() ||
+      tankLimbahMl + volumeWadah + DRAIN_RESIDU_ML > (long)pengaturan.kapLimbahMl) {
     dbg.println(F("[EVAKUASI] Dibatalkan: tangki limbah penuh"));
+    safetySalin(safetyAksi, sizeof(safetyAksi), "Kosongkan limbah lalu drain");
     return;
   }
-  unsigned long ms = dcDrainMs(volumeWadah);
+  unsigned long ms = drainMsVolume(volumeWadah);
   if (ms == 0) return;
 
   evakuasiMl       = volumeWadah;
@@ -557,10 +882,10 @@ void evakuasiUpdate() {
   dcStop(DC_AGI);
   dcStop(DC_SABUN);
 
-  if (levelBasah(4)) {
+  if (levelLimbahKritis()) {
     dcStop(DC_LIMBAH);
     evakuasiAktif = false;
-    dbg.println(F("[EVAKUASI] Stop: tangki limbah penuh"));
+    dbg.println(F("[EVAKUASI] Stop: tangki limbah kritis"));
     perluGambar = true;
     return;
   }
@@ -571,12 +896,14 @@ void evakuasiUpdate() {
   }
 
   dcStop(DC_LIMBAH);
-  tankTambahLimbah(evakuasiMl);
+  tankTambahLimbah(evakuasiMl + DRAIN_RESIDU_ML);
   volumeWadah  = 0;
   evakuasiMl   = 0;
   evakuasiAktif = false;
   simpanTank();
   hapusRunstate();
+  buzzerNotif();
+  eventCatat(105, "EVAKUASI");
   dbg.println(F("[EVAKUASI] Selesai"));
   perluGambar = true;
 }
@@ -604,9 +931,10 @@ void prosesBatalDarurat() {
   dcStopAllDarurat();
   dcJedaAktif = false;
   if (aktif) {
+    buzzerStopProses();
     // Jangan hapus runstate di sini: bila wadah masih berisi, runstate sudah
     // disimpan di atas agar boot berikutnya menawarkan drain.
-    simpanTank();
+    if (tankDataAda) simpanTank();
     // Bila error terjadi saat pemulihan, tawarkan pemulihan lagi setelah
     // pengguna membersihkan error, memakai volume wadah saat ini.
     if (pemulihanAktif) {
@@ -615,6 +943,7 @@ void prosesBatalDarurat() {
       pemulihanTersedia = true;
     }
     dbg.println(F("[PROSES] Dibatalkan darurat"));
+    eventCatat(103, "STOP DARURAT");
   }
   // E-stop/ERROR: nyalakan pompa limbah sampai cairan tersedot.
   if (safetyState != SAF_AMAN) mulaiEvakuasiDarurat();
@@ -623,6 +952,8 @@ void prosesBatalDarurat() {
 
 // Batal oleh pengguna: matikan semua motor lain, lalu LANGSUNG drain wadah.
 void prosesBatal() {
+  // Catat volume nyata sebelum pompa dihentikan.
+  sesuaikanVolumeAktual();
   bool adaIsi = volumeWadah > 0;
   pompaStopAllDarurat();
   dcStopAll();
@@ -634,6 +965,7 @@ void prosesBatal() {
   dialogBatal = false;
   prosesLangkah = LANGKAH_NONE;
   buzzerBatal();
+  eventCatat(102, "BATAL");
 
   if (adaIsi && safetyBolehAktuator()) {
     mulaiDrainWadah();
@@ -642,7 +974,7 @@ void prosesBatal() {
     prosesJalan = false;
     prosesFase = FASE_IDLE;
     prosesLangkah = LANGKAH_NONE;
-    simpanTank();
+    if (tankDataAda) simpanTank();
     dbg.print(F("[PROSES] Batal, volume wadah="));
     dbg.println(volumeWadah);
   }
@@ -684,16 +1016,81 @@ void prosesSetPemulihan(int fase, int langkah, int siklus, int volume, int prese
   pemulihanSiklus = siklus;
   pemulihanVolume = volume;
   pemulihanPreset = preset;
+  buzzerNotif();
+}
+
+// Batalkan total dari layar pemulihan: drain saja tanpa bilas, lalu IDLE.
+void prosesBatalPemulihan() {
+  if (pemulihanVolume <= 0) {
+    volumeWadah = 0;
+    pemulihanTersedia = false;
+    pemulihanAktif = false;
+    prosesJalan = false;
+    prosesFase = FASE_IDLE;
+    prosesLangkah = LANGKAH_NONE;
+    hapusRunstate();
+    perluGambar = true;
+    return;
+  }
+  if (!safetyBolehAktuator()) return;
+  volumeWadah = constrain(pemulihanVolume, 0, TANGKI_MAKS_ML);
+  pemulihanTersedia = false;
+  pemulihanAktif = false;
+  buzzerBatal();
+  mulaiDrainWadah();
+  perluGambar = true;
 }
 
 void prosesAbaikanPemulihan() {
-  // Abaikan = tidak menjalankan drain otomatis, tetapi volume wadah tetap
-  // dilacak agar proses berikutnya tidak dimulai di atas sisa cairan.
+  // Abaikan = hentikan proses tanpa menjalankan aktuator apa pun. Volume
+  // wadah tetap dilacak di RAM agar proses baru di sesi ini meminta drain,
+  // tetapi runstate dihapus supaya peringatan resume tidak muncul lagi.
+  pompaStopAllDarurat();
+  dcStopAll();
+  dcJedaAktif = false;
+  prosesJalan = false;
+  prosesJeda = false;
+  prosesTungguPcb = false;
+  prosesKonfirmasi = false;
+  dialogBatal = false;
+  dialogBatalMinta = false;
+  prosesFase = FASE_IDLE;
+  prosesLangkah = LANGKAH_NONE;
+  langkahBatasMs = 0;
   volumeWadah = constrain(pemulihanVolume, 0, TANGKI_MAKS_ML);
   pemulihanTersedia = false;
   pemulihanAktif = false;
   hapusRunstate();
+  buzzerStopProses();
   perluGambar = true;
+  dbg.println(F("[PROSES] Pemulihan diabaikan, proses dihentikan"));
+  eventCatat(107, "ABAIKAN");
+}
+
+// Abaikan dari layar jeda: hentikan proses tanpa drain, kembali ke menu.
+// Jika wadah masih berisi, runstate disimpan agar boot berikutnya tahu.
+void prosesAbaikanJeda() {
+  sesuaikanVolumeAktual();
+  bool adaIsi = volumeWadah > 0;
+  pompaStopAllDarurat();
+  dcStopAll();
+  dcJedaAktif = false;
+  prosesTungguPcb = false;
+  prosesKonfirmasi = false;
+  dialogBatal = false;
+  dialogBatalMinta = false;
+
+  if (adaIsi) simpanRunstateSekarang(); else hapusRunstate();
+  prosesJalan = false;
+  prosesJeda = false;
+  prosesFase = FASE_IDLE;
+  prosesLangkah = LANGKAH_NONE;
+  langkahBatasMs = 0;
+  if (tankDataAda) simpanTank();
+  buzzerStopProses();
+  perluGambar = true;
+  dbg.println(F("[PROSES] Jeda diabaikan, proses dihentikan"));
+  eventCatat(107, "ABAIKAN");
 }
 
 // Drain isi wadah, lalu satu bilas air + agitasi singkat + drain.
@@ -707,6 +1104,7 @@ void prosesMulaiPemulihan(bool drainBilas) {
   pemulihanAktif = true;
   pemulihanTersedia = false;
   pemulihanTahap = 1;
+  eventCatat(108, "PEMULIHAN");
   prosesFase = FASE_PEMULIHAN;
   prosesSiklus = pemulihanSiklus > 0 ? pemulihanSiklus : 1;
   prosesAkumMs = 0;
@@ -714,7 +1112,7 @@ void prosesMulaiPemulihan(bool drainBilas) {
   volumeWadah = constrain(pemulihanVolume, 0, TANGKI_MAKS_ML);
   prosesTotalMsEst = 0;
 
-  unsigned long ms = dcDrainMs(volumeWadah);
+  unsigned long ms = drainMsVolume(volumeWadah);
   if (volumeWadah > 0) {
     if (ms == 0) {
       // Ada isi wadah tetapi durasi drain tak bisa dihitung. Jangan lewati
@@ -722,7 +1120,7 @@ void prosesMulaiPemulihan(bool drainBilas) {
       dbg.println(F("[PROSES] Pemulihan ditolak: kalibrasi DC belum lengkap"));
       pemulihanAktif = false;
       pemulihanTersedia = true;   // tawarkan pemulihan lagi setelah error clear
-      safetyRaise(9);
+      safetyRaiseKonteks(9, "Drain pemulihan tanpa model", "Kalibrasi pompa limbah");
       return;
     }
     mulaiLangkah(L_DRAIN, ms, ms + PROSES_TIMEOUT_MARGIN_MS);
@@ -737,9 +1135,9 @@ void prosesMulaiPemulihan(bool drainBilas) {
     if (!pompaMulai(2, p.bilasMl)) {
       pemulihanAktif = false;
       pemulihanTersedia = true;
-      safetyRaise(9);
+      safetyRaiseKonteks(9, "Pompa AIR gagal start", "Cek selang/prime");
     } else {
-      volumeWadah += p.bilasMl;
+      tambahVolumeWadah(p.bilasMl);
       tankKurangi(2, p.bilasMl);
     }
   }
@@ -772,9 +1170,11 @@ void prosesUpdate() {
   if (!safetyBolehAktuator()) return;
 
   if (langkahTimeout()) {
-    dbg.print(F("[PROSES] Timeout "));
-    dbg.println(namaLangkah[prosesLangkah]);
-    safetyRaise(4);
+    char d[48];
+    snprintf(d, sizeof(d), "Timeout %s siklus %d",
+             namaLangkah[prosesLangkah], prosesSiklus);
+    dbg.println(F("[PROSES] Timeout"));
+    safetyRaiseKonteks(4, d, "Cek pompa/selang");
     return;
   }
 
@@ -805,9 +1205,9 @@ void prosesUpdate() {
             unsigned long est = pompaPerkiraanMs(1, p.mlH2O2);
             mulaiLangkah(L_DOSE_H2O2, 0, est ? est * 2UL + PROSES_TIMEOUT_MARGIN_MS : 0);
             if (!pompaMulai(1, p.mlH2O2)) {
-              safetyRaise(9);
+              safetyRaiseKonteks(9, "Pompa H2O2 gagal start", "Cek selang/prime");
             } else {
-              volumeWadah += p.mlH2O2;
+              tambahVolumeWadah(p.mlH2O2);
               tankKurangi(1, p.mlH2O2);
             }
           }
@@ -818,9 +1218,9 @@ void prosesUpdate() {
             unsigned long est = pompaPerkiraanMs(0, p.mlHCl);
             mulaiLangkah(L_DOSE_HCL, 0, est ? est * 2UL + PROSES_TIMEOUT_MARGIN_MS : 0);
             if (!pompaMulai(0, p.mlHCl)) {
-              safetyRaise(9);
+              safetyRaiseKonteks(9, "Pompa HCl gagal start", "Cek selang/prime");
             } else {
-              volumeWadah += p.mlHCl;
+              tambahVolumeWadah(p.mlHCl);
               tankKurangi(0, p.mlHCl);
             }
           }
@@ -829,7 +1229,8 @@ void prosesUpdate() {
           if (pompaAktif(0) && !cekLevelSumber(0)) break;
           if (pompaSelesai(0)) {
             agitasiSet(p.agitasiSpeed);
-            unsigned long durasi = (unsigned long)SKALA_UJI_CEPAT(p.agitasiDetik) * 1000UL;
+            unsigned long durasi =
+                (unsigned long)SKALA_UJI_CEPAT(agitasiDetikEfektif(p)) * 1000UL;
             mulaiLangkah(L_AGITASI, durasi, durasi + 10000UL);
           }
           break;
@@ -837,8 +1238,8 @@ void prosesUpdate() {
           if (langkahLewat()) {
             agitasiSet(0);
             if (volumeWadah > 0) {
-              unsigned long ms = dcDrainMs(volumeWadah);
-              if (ms == 0) { safetyRaise(9); break; }
+              unsigned long ms = drainMsVolume(volumeWadah);
+              if (ms == 0) { safetyRaiseKonteks(9, "Durasi drain 0 ms", "Cek model pompa limbah"); break; }
               if (!cekLevelLimbah()) break;
               mulaiLangkah(L_DRAIN, ms, ms + PROSES_TIMEOUT_MARGIN_MS);
               pompaLimbahSet(true);
@@ -854,8 +1255,8 @@ void prosesUpdate() {
           }
           if (langkahLewat()) {
             pompaLimbahSet(false);
-            tankTambahLimbah(volumeWadah);
-            volumeWadah = 0;
+            tankTambahLimbah(volumeWadah + DRAIN_RESIDU_ML);
+            kosongkanVolumeWadah();
             simpanTank();
             mulaiLangkah(L_DECIDE);
             mulaiBilasSiklus();
@@ -884,8 +1285,8 @@ void prosesUpdate() {
         case L_BILAS_AGITASI:
           if (langkahLewat()) {
             agitasiSet(0);
-            unsigned long ms = dcDrainMs(volumeWadah);
-            if (ms == 0) { safetyRaise(9); break; }
+            unsigned long ms = drainMsVolume(volumeWadah);
+            if (ms == 0) { safetyRaiseKonteks(9, "Durasi drain 0 ms", "Cek model pompa limbah"); break; }
             if (!cekLevelLimbah()) break;
             mulaiLangkah(L_DRAIN, ms, ms + PROSES_TIMEOUT_MARGIN_MS);
             pompaLimbahSet(true);
@@ -895,8 +1296,8 @@ void prosesUpdate() {
           if (!cekLevelLimbah()) { pompaLimbahSet(false); break; }
           if (langkahLewat()) {
             pompaLimbahSet(false);
-            tankTambahLimbah(volumeWadah);
-            volumeWadah = 0;
+            tankTambahLimbah(volumeWadah + DRAIN_RESIDU_ML);
+            kosongkanVolumeWadah();
             simpanTank();
             mulaiBilasBerikut();
           }
@@ -918,8 +1319,8 @@ void prosesUpdate() {
         case L_BILAS_AGITASI:
           if (langkahLewat()) {
             agitasiSet(0);
-            unsigned long ms = dcDrainMs(volumeWadah);
-            if (ms == 0) { safetyRaise(9); break; }
+            unsigned long ms = drainMsVolume(volumeWadah);
+            if (ms == 0) { safetyRaiseKonteks(9, "Durasi drain 0 ms", "Cek model pompa limbah"); break; }
             if (!cekLevelLimbah()) break;
             mulaiLangkah(L_DRAIN, ms, ms + PROSES_TIMEOUT_MARGIN_MS);
             pompaLimbahSet(true);
@@ -929,8 +1330,8 @@ void prosesUpdate() {
           if (!cekLevelLimbah()) { pompaLimbahSet(false); break; }
           if (langkahLewat()) {
             pompaLimbahSet(false);
-            tankTambahLimbah(volumeWadah);
-            volumeWadah = 0;
+            tankTambahLimbah(volumeWadah + DRAIN_RESIDU_ML);
+            kosongkanVolumeWadah();
             simpanTank();
             mulaiBilasBerikut();
           }
@@ -946,8 +1347,8 @@ void prosesUpdate() {
       }
       if (langkahLewat()) {
         pompaLimbahSet(false);
-        tankTambahLimbah(volumeWadah);
-        volumeWadah = 0;
+        tankTambahLimbah(volumeWadah + DRAIN_RESIDU_ML);
+        kosongkanVolumeWadah();
         simpanTank();
         prosesJalan = false;
         prosesFase = FASE_IDLE;
@@ -955,6 +1356,7 @@ void prosesUpdate() {
         prosesAkumMs = 0;
         prosesTotalMsEst = 0;
         hapusRunstate();
+        buzzerNotif();
         perluGambar = true;
         dbg.println(F("[PROSES] Drain batal selesai"));
       }
@@ -966,17 +1368,17 @@ void prosesUpdate() {
           if (!cekLevelLimbah()) { pompaLimbahSet(false); break; }
           if (langkahLewat()) {
             pompaLimbahSet(false);
-            tankTambahLimbah(volumeWadah);
-            volumeWadah = 0;
+            tankTambahLimbah(volumeWadah + DRAIN_RESIDU_ML);
+            kosongkanVolumeWadah();
             simpanTank();
             if (pemulihanTahap == 1) {
               pemulihanTahap = 2;
               unsigned long est = pompaPerkiraanMs(2, p.bilasMl);
               mulaiLangkah(L_ISI, 0, est ? est * 2UL + PROSES_TIMEOUT_MARGIN_MS : 0);
               if (!pompaMulai(2, p.bilasMl)) {
-                safetyRaise(9);
+                safetyRaiseKonteks(9, "Pompa AIR gagal start", "Cek selang/prime");
               } else {
-                volumeWadah += p.bilasMl;
+                tambahVolumeWadah(p.bilasMl);
                 tankKurangi(2, p.bilasMl);
               }
             } else {
@@ -1001,8 +1403,8 @@ void prosesUpdate() {
         case L_BILAS_AGITASI:
           if (langkahLewat()) {
             agitasiSet(0);
-            unsigned long ms = dcDrainMs(volumeWadah);
-            if (ms == 0) { safetyRaise(9); break; }
+            unsigned long ms = drainMsVolume(volumeWadah);
+            if (ms == 0) { safetyRaiseKonteks(9, "Durasi drain 0 ms", "Cek model pompa limbah"); break; }
             if (!cekLevelLimbah()) break;
             pemulihanTahap = 3;
             mulaiLangkah(L_DRAIN, ms, ms + PROSES_TIMEOUT_MARGIN_MS);

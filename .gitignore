@@ -1,13 +1,24 @@
-# Arduino / PlatformIO
+# Arduino / build output
 .build/
 .pio/
+build_ota/
+build/
 *.bin
 *.elf
+*.map
+*.hex
 
-# OS files
+# Local agent/session files
+.commandcode/
+
+# Kredensial lokal (JANGAN di-commit)
+secrets.h
+
+# OS
 .DS_Store
 Thumbs.db
 
 # IDE
 .vscode/
 .idea/
+*.swp

@@ -1,154 +1,132 @@
-# RELEASES — Daftar Versi & Panduan Rollback
+# RELEASES - Registry Versi dan Rollback
 
-Dokumen ini adalah **registri versi** repo `auto-etching-firmware`.
-Tujuannya: versi mana pun yang pernah dimiliki bisa ditemukan & dikembalikan
-dengan satu perintah.
+Registry versi repo `auto-etching-firmware`. Rilis yang disiapkan untuk
+push terbaru: **v1.2.0**. Tag lama yang sudah ada di Git: `v1.0.1`,
+`v1.0.0`, dan tag v0.x.
 
-Rujukan lain: `SUMMARY.md` (fitur) · `LOG.md` (changelog per versi) · `PROGRESS.md` (status)
+## 1. Daftar Versi
 
----
-
-## ⚠️ PENTING: Repo ini punya DUA LINEAGE
-
-| | **Lineage SAH (aktif)** | **Lineage LAMA (batal)** |
-|---|---|---|
-| Versi | **v0.5.0 → v1.0.1** | v0.5.0 → v0.8.3 |
-| Berkas inti | `auto-etching-firmware.ino` + `dcmotor.h`, `buzzer.h`, `motor.h` | `oled_pcb_baruuu.ino` + `aktuator.h` |
-| Sumber | branch `main` + **git tag** | folder `backup/` (**tanpa tag**) |
-| Status | ✅ jalan, teruji fisik | ❌ **rusak & dibatalkan** (tidak pernah di-commit ke `main`) |
-
-> Nomor versi **v0.5.0–v0.5.1 muncul di kedua lineage**. Yang terdaftar di bawah
-> memakai versi lineage **SAH**. Snapshot lineage lama tetap ada di `backup/`
-> untuk keperluan arsip, **jangan** di-flash.
-
----
-
-## 1. Lineage SAH — Versi yang Bisa Di-rollback (pakai git tag)
-
-| Versi | Tanggal | Git tag | Isi utama |
+| Versi | Tanggal | Tag | Ringkasan |
 |---|---|---|---|
-| **v1.0.1** | 2026-11-09 | `v1.0.1` | **Siklus penuh berulang + evakuasi cairan** — satu siklus penuh = dosing air/H2O2/HCl + agitasi + drain + bilas sabun `bilasSabun`× + bilas air `bilasAir`×, diulang sebanyak `siklus` (bilas dihitung per siklus); kalibrasi DC baru: run pertama tiap sesi pulse pendek (sabun 5 s, limbah 3 s), run berikutnya target 100 ml, model dikoreksi langsung `r = hasil / detik perintah` (c = 0), LULUS butuh ≥3 run; drain memakai fallback 10 ml/detik + margin bila limbah belum dikalibrasi; cancel proses mematikan motor lain lalu langsung drain; E-stop/ERROR mengevakuasi cairan lewat pompa limbah dan menahan reset sampai evakuasi selesai; UI kalibrasi DC/konfirmasi siklus/overlay safety diperbarui |
-| **v1.0.0** | 2026-11-05 | `v1.0.0` | **Mesin standalone lengkap** — preset v2 dengan siklus/bilas/konfirmasi; state machine baru (dosing berurutan, agitasi, drain, bilas sabun/air) dengan timeout dan pelacak volume; precheck tangki + peringatan sisa; pemulihan setelah listrik padam (`runstate`) tanpa aksi otomatis; modul keselamatan `safety.h` (E-stop interrupt/latch, E01–E10, watchdog 15 s); kalibrasi model `langkah = a·ml + b` (stepper) dan `ml = r·detik + c` (DC) dengan titik uji + verifikasi; UI proses/pengaturan/tangki/info baru; dokumentasi di `DOKUMENTASI.md` |
-| **v0.6.6** | 2026-10-30 | `v0.6.6` | **Verifikasi hasil kalibrasi** — baris ke-7 **Uji hasil** pada halaman kalibrasi stepper & DC: ENTER mendosis ulang target ml memakai kalibrasi tersimpan (ramp sama seperti START), hasil ukur diisi di **Hasil**, lalu ENTER menilai **LULUS** (stepper ≤5%, DC ≤10%) atau **GAGAL**; saat LULUS kalibrasi tidak diubah; saat GAGAL, ENTER kedua di baris Hasil mengoreksi `cal = calLama × hasil / target` lalu meminta uji ulang; mengubah Target/Hasil membatalkan status lama; ENTER di Hasil tanpa run baru ditolak agar tidak terkoreksi dua kali; `FW_VERSI`→v0.6.6 |
-| **v0.6.5** | 2026-10-30 | `v0.6.5` | **Kalibrasi stepper hanya menghitung rotasi di RPM target** — pompa tetap diramp dari 0 (aman untuk pump head), tetapi posisi mulai dihitung setelah kecepatan aktual ≥98% RPM target; langkah target (`target ml / kalibrasi`) dihitung dari titik itu, lalu pompa diramp turun; ramp up/down tidak masuk perhitungan ml/rotasi; progres kalibrasi 0% dan label `RAMP...` selama ramp up; timeout 60 s → toast `Gagal capai RPM`; `FW_VERSI`→v0.6.5 |
-| **v0.6.4** | 2026-10-30 | `v0.6.4` | **Uji kalibrasi target ml per motor** — pengguna memasukkan target ml, START menjalankan pompa dengan kalibrasi sekarang memakai jalur ramp yang sama seperti Test Motor, lalu hasil ukur nyata diisi di baris **Hasil**; ENTER menghitung **offset** `(hasil − target) / target` dan kalibrasi ulang `cal = calLama × hasil / target` (stepper ml/rotasi, DC ml/detik), disimpan ke NVS; halaman kalibrasi stepper & DC menjadi **6 baris** scrollable (START/STOP, RPM/Duty, Target, Hasil, Offset, hasil kalibrasi); uji DC memakai durasi **tanpa margin** agar tidak bias 10%; `FW_VERSI`→v0.6.4 |
-| **v0.6.3** | 2026-10-29 | `v0.6.3` | **Test Motor disamakan dengan sketch `test/test-motor`** — `pompaTestMulai()` memakai `applySpeedAcceleration()` setelah `runForward()` (urutan sama dengan `setRPM()` sketch); RPM live langsung diterapkan; `pompaRpmSekarang()` membaca **kecepatan aktual** dari queue pulsa; UI menampilkan `target/aktual` (mis. `400/400`) dan redraw 250 ms saat berjalan, sehingga terlihat motor berhenti menaikkan RPM tepat di target; `st` sketch uji mencetak RPM aktual; `FW_VERSI`→v0.6.3 |
-| **v0.6.2** | 2026-10-29 | `v0.6.2` | **`PUMP_STEP_PER_REV` 6400 → 3200 (DRV8825 1/16)** — diperbaiki setelah pompa terasa berputar 2x lebih cepat dari RPM target; kini sama dengan sketch `test/test-motor` (`STEPS_PER_REV = 3200`); `PUMP_ACCEL_HZ2` otomatis menjadi **1000 langkah/s²** (= 18,75 rpm/detik, sama dengan `accel = 1000` di sketch); NVS `pompa` **v3** — data v2 dimigrasi otomatis dengan `mlPerRev / 2` (kalibrasi v2 mengira 10 rotasi = 6400×10 langkah, padahal fisik 20 rotasi); `FW_VERSI`→v0.6.2 |
-| **v0.6.1** | 2026-10-29 | `v0.6.1` | **Ramp stepper disamakan dengan sketch `test/test-motor`** — akselerasi 1.000 langkah/s² pada 3.200 langkah/putaran = **18,75 rpm/detik**, ditulis sebagai `PUMP_ACCEL_RPM_PER_SEC` agar tidak bergantung microstep; 0→400 rpm ±21,3 s, 0→500 rpm ±26,7 s, deselerasi (`stopMove`) memakai laju sama; `pompaPerkiraanMs()` dihitung ulang dengan profil trapezoid/triangular agar timeout dosing tetap wajar; `FW_VERSI`→v0.6.1 |
-| **v0.6.0** | 2026-10-29 | `v0.6.0` | **Ramp semua motor** — stepper akselerasi 50.000 langkah/s² (start & stop), DC/agitasi ramp duty non-blocking `DC_RAMP_PCT_PER_SEC` 100 %/s; **Test Motor** jadi 7 baris scroll (3 stepper + sabun + limbah + agitasi) dengan ubah RPM/duty/SPD live; **kalibrasi stepper baru**: 10 rotasi penuh, hasil ukur 0,1 ml (step 0,1/0,5/1 ml), ramp-aware; **kalibrasi DC baru**: 10 detik pada duty target → ml/detik + margin 10%; **agitasi 3 level** SPD1/SPD2/SPD3 (tanpa ml); NVS `pompa` **v2** (kalibrasi lama di-reset ke default); `FW_VERSI`→v0.6.0 |
-| **v0.5.4** | 2026-10-28 | `v0.5.4` | Pompa stepper kini **ramp naik saat start** dan **ramp turun saat stop** (`stopMove()`), `PUMP_ACCEL_HZ2` 1.000.000 → **50.000** (0→500 rpm ±1,07 s); E-stop/timeout/stall tetap `forceStop()`; jeda menghitung sisa langkah setelah motor diam; `FW_VERSI`→v0.5.4 |
-| **v0.5.3** | 2026-10-28 | `v0.5.3` | Menu Kalibrasi → Motor + **Test Motor**: halaman baru untuk menyalakan pompa HCl/H₂O₂/Air **kontinu** (START → STOP) satu per satu atau **ketiga sekaligus**; default RPM tetap 500; `FW_VERSI`→v0.5.3 |
-| **v0.5.2** | 2026-10-28 | `v0.5.2` | Pompa stepper **DRV8825 1/32** (6400 langkah/putaran) dikendalikan **berbasis RPM 400–700** (default 500, kelipatan 100); pulsa via **FastAccelStepper** (MCPWM/PCNT) menggantikan `loop()`; kalibrasi baru **20 rotasi → ml/rotasi** dengan NVS key `pompa`; dosing selesai berbasis status pompa + timeout `2× estimasi + 10 s`; jeda melanjutkan sisa langkah; sketch uji `test/stepper-rpm/`; `FW_VERSI`→v0.5.2 |
-| **v0.5.1** | 2026-10-16 | `v0.5.1` | Exhaust fan dilepas dari TB6612FNG → **langsung 12V, selalu menyala**; GPIO 18 jadi bebas; halaman Kalibrasi Kipas dihapus; `kalibDuty[7]`→`[5]`; `FW_VERSI`→v0.5.1; **sketch uji baru** `test/tb6612fng/`; `PROCESS.md` + `PROGRESS.md` ditulis; `LOG.md` & `SUMMARY.md` diperbarui; lineage lama diarsipkan |
-| **v0.5.0** | 2026-10-13/14 | `v0.5.0` | Baseline lineage modular: menu OLED 6 tombol, preset CRUD + NVS (CRC32), 3 pompa stepper non-blocking, 3 motor DC PWM, proses 5 fase, 5 sensor level touch (MA-8), kalibrasi level/suhu/udara/Motor, DS18B20 ×3 (non-blocking), MQ-135 ppm, E-stop, buzzer non-blocking, kompensasi baris atas OLED |
+| **v1.2.0** | 2026-11-11 | `v1.2.0` (dibuat saat push) | Preset v3, PRECHECK seluruh proses, drain berbasis volume, opsi jeda/pemulihan, error spesifik, IoT MQTT TLS, OTA HTTP, menu Status IoT, diagnosa WiFi, dashboard web self-hosted `webapp/` (preset, pilih preset, konfirmasi PCB, clear E-stop terkondisi, hasil kalibrasi, panel collapsible) |
+| v1.1.0 | 2026-11-10 | - | Rasio kimia ml/persen, waktu etching otomatis dari tembaga, kapasitas jerigen, tebal Cu dalam oz |
+| v1.0.1 | 2026-11-09 | `v1.0.1` | Siklus penuh berulang, kalibrasi DC pulse, evakuasi cairan saat cancel/E-stop |
+| v1.0.0 | 2026-11-05 | `v1.0.0` | Mesin standalone lengkap: siklus, error E01-E10, watchdog, pemulihan, kalibrasi model |
+| v0.6.6 | 2026-10-30 | `v0.6.6` | Verifikasi hasil kalibrasi LULUS/GAGAL |
+| v0.6.5 | 2026-10-30 | `v0.6.5` | Kalibrasi stepper hanya menghitung rotasi di RPM target |
+| v0.6.4 | 2026-10-30 | `v0.6.4` | Uji kalibrasi target ml |
+| v0.6.3 | 2026-10-29 | `v0.6.3` | Test Motor menampilkan RPM aktual |
+| v0.6.2 | 2026-10-29 | `v0.6.2` | Step/rev 3200 (DRV8825 1/16) |
+| v0.6.1 | 2026-10-29 | `v0.6.1` | Ramp stepper 18,75 rpm/detik |
+| v0.6.0 | 2026-10-29 | `v0.6.0` | Ramp semua motor, Test Motor 7 baris |
+| v0.5.4 | 2026-10-28 | `v0.5.4` | Ramp naik/turun stepper |
+| v0.5.3 | 2026-10-28 | `v0.5.3` | Halaman Test Motor |
+| v0.5.2 | 2026-10-28 | `v0.5.2` | Pompa stepper RPM 400-700 |
+| v0.5.1 | 2026-10-16 | `v0.5.1` | Exhaust fan langsung 12 V |
+| v0.5.0 | 2026-10-13 | `v0.5.0` | Baseline modular |
 
-Detail perubahan tiap versi: **`LOG.md`**.
+Detail perubahan: [`LOG.md`](./LOG.md). Versi lama tidak disimpan sebagai
+folder salinan; gunakan Git tag.
 
----
-
-## 2. Lineage LAMA — Versi yang Dimiliki (arsip, tidak dipakai)
-
-Seluruh versi berikut **pernah dimiliki** dan tersimpan sebagai snapshot di
-folder `backup/`. Semuanya **❌ DIBATALKAN** — arsitektur `aktuator.h` tidak
-pernah diuji fisik dan tidak pernah masuk branch `main`.
-
-| Versi | Snapshot | Status |
-|---|---|---|
-| v0.8.3 | — (hanya di `LOG.md`) | ❌ batal |
-| v0.8.2 | `backup/v0.8.2_2026-10-12/` | ❌ batal |
-| v0.8.1 | `backup/v0.8.1_2026-10-12/` | ❌ batal |
-| v0.8.0 | `backup/v0.8.0_2026-10-12/` | ❌ batal |
-| v0.7.1 | `backup/v0.7.1_2026-10-12/` | ❌ batal |
-| v0.7.0 | `backup/v0.7.0_2026-10-12/` | ❌ batal |
-| v0.6.1 | `backup/v0.6.1_2026-10-12/` | ❌ batal |
-| v0.6.0 | `backup/v0.6.0_2026-10-12/` | ❌ batal |
-| v0.5.9 | `backup/v0.5.9_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.8 | `backup/v0.5.8_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.7 | `backup/v0.5.7_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.6 | `backup/v0.5.6_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.5 | `backup/v0.5.5_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.4 | `backup/v0.5.4_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.3 | `backup/v0.5.3_2026-10-12/` | ❌ batal (lineage lama) |
-| v0.5.2 | `backup/v0.5.2_2026-10-12/` | ❌ batal (lineage lama, **bukan** v0.5.2 di tabel §1) |
-| v0.5.1 | `backup/v0.5.1_2026-10-12/` | ❌ batal (lineage lama, **bukan** v0.5.1 di tabel §1) |
-| v0.5.0 | `backup/v0.5.0_2026-10-12/` | ❌ batal (lineage lama, **bukan** v0.5.0 di tabel §1) |
-
-> **Perhatian nama sama:** `backup/v0.5.0_2026-10-12/` **bukan** firmware
-> yang berjalan hari ini. Yang berjalan adalah hasil `git checkout v0.5.0`.
-
----
-
-## 3. Cara Rollback
-
-### 3.1 Melihat versi yang tersedia
+## 2. Build Rilis v1.2.0
 
 ```bash
-git tag -l                    # tag versi lineage SAH
-git log --oneline --decorate  # riwayat + posisi tag
+~/DevBox/bin/arduino-cli compile \
+  --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=min_spiffs" \
+  --libraries /home/raihanP/Arduino/libraries \
+  --output-dir build_ota .
 ```
 
-### 3.2 Melihat isi sebuah versi (tanpa mengubah apa pun)
+Hasil build:
+
+```text
+Flash : 1.245.906 byte (63% dari 1.966.080)
+RAM   : 78.252 byte (23%)
+```
+
+Flash USB pertama:
 
 ```bash
-git show v0.5.0:config.h | grep FW_VERSI
-git diff v0.5.0 v0.5.1 --stat
+~/DevBox/bin/arduino-cli upload \
+  -p /dev/ttyACM0 \
+  --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=min_spiffs" \
+  .
 ```
 
-### 3.3 Kembali ke versi lama (untuk di-flash ulang)
+OTA setelah firmware berjalan:
 
 ```bash
-#_opsi 1 — detach HEAD ke versi lama
-git checkout v0.5.0
-# ... upload ke ESP32 dari Arduino IDE ...
-git checkout main               # kembali ke versi terbaru
-
-#_opsi 2 — buat branch agar versi lama bisa di protested
-git switch -c legacy/v0.5.0 v0.5.0
-
-#_opsi 3 — batalkan semua perubahan lokal, kembali ke v0.5.0
-git reset --hard v0.5.0
+curl -X POST \
+  --data-binary @build_ota/auto-etching-firmware.ino.bin \
+  -H "X-OTA-Password: <OTA_PASSWORD>" \
+  http://<IP_ALAT>:3232/update
 ```
 
-> ⚠️ `git reset --hard` **menghapus semua perubahan lokal yang belum di-commit**.
-> `git checkout v0.5.0` lebih aman karena tidak menghapus apa pun.
-
-### 3.4 Mengembalikan registry versi (kalau `RELEASES.md` hilang / rusak)
+## 3. Rollback
 
 ```bash
-git checkout v0.5.1 -- RELEASES.md
+git tag -l
+git log --oneline --decorate
+git show v1.0.1:config.h | grep FW_VERSI
+git checkout v1.0.1      # lihat/flash versi lama
+git checkout main        # kembali ke versi terbaru
 ```
 
-### 3.5 Melihat snapshot lineage lama (arsip — jangan di-flash)
+Untuk membuat branch dari versi lama:
 
 ```bash
-less backup/v0.8.2_2026-10-12/config.h
+git switch -c legacy/v1.0.1 v1.0.1
 ```
 
----
+Jangan memakai `git reset --hard` pada perubahan lokal yang belum
+di-commit. `git checkout` lebih aman.
 
-## 4. Cara Flash ke ESP32-S3
+## 4. Prosedur Tag Rilis
 
-| Setting | Nilai |
-|---|---|
-| Board | **ESP32S3 Dev Module** |
-| Upload speed | 921600 (turunkan ke 115200 bila upload gagal) |
-| Flash size | 8 MB (partition default) |
-| Port | `/dev/ttyACM0` atau `/dev/ttyUSB0` (cek `dmesg \| tail`) |
+Jalankan setelah build dan pengujian selesai:
 
-> ⚠️ **Data preset & kalibrasi tersimpan di NVS-flash** dan **tidak hilang**
-> saat firmware di-flash ulang. Kalau preset tiba-tiba tidak muncul atau
-> berubah, delete flash: `ESP32: Erase Flash` lalu upload ulang.
+```bash
+# 1. Pastikan versi di config.h dan dokumentasi sudah v1.2.0
+grep FW_VERSI config.h
 
----
+# 2. Commit seluruh perubahan
+git add -A
+git commit -m "v1.2.0: preset v3, IoT MQTT, OTA, status IoT"
 
-## 5. Aturan Maintainer
+# 3. Buat annotated tag
+git tag -a v1.2.0 -m "v1.2.0: preset v3, IoT MQTT, OTA, status IoT"
 
-1. **Setiap versi yang Navegat = 1 git tag** dengan format `vX.Y.Z`, tanpa prefix lain.
-2. **Update 3 berkas berikut setiap versi**: `config.h` (`FW_VERSI`), `LOG.md` (entri baru), `RELEASES.md` (tabel §1).
-3. **Backup snapshot** dibuat di `backup/vX.Y.Z_tanggal/` **sebelum** perubahan besar.
-4. Nomor versi **tidak pernah dipakai ulang** dalam lineage yang sama.
-5. Rilis yang dibatalkan ditandai `❌` di tabel, tidak dihapus — supaya jejaknya jelas.
+# 4. Push branch dan tag
+git push origin main
+git push origin v1.2.0
+```
 
----
+Cek hasil:
 
-*Terakhir diperbarui: 2026-10-28 — saat v0.5.4 (lineage SAH) dibuat.*
+```bash
+git describe --tags --always
+git show v1.2.0 --stat
+```
+
+## 5. Checklist Rilis
+
+- [ ] `FW_VERSI` di `config.h` sesuai versi.
+- [ ] `LOG.md` berisi entri versi baru.
+- [ ] `RELEASES.md` dan `README.md` menyebut versi baru.
+- [ ] Compile bersih dengan FQBN dan library yang didokumentasikan.
+- [ ] Tidak ada file build (`build_ota/`, `*.bin`, `*.elf`, `*.map`) ikut commit.
+- [ ] `secrets.h` tidak ikut commit; hanya `secrets.example.h` yang dilacak.
+- [ ] Tidak ada kredensial produksi di repo publik.
+- [ ] Uji minimal: boot, menu, preset, kalibrasi, proses air, E-stop,
+      WiFi/NTP/TLS/MQTT, OTA saat IDLE.
+- [ ] `git status` bersih setelah commit.
+- [ ] Tag dan branch di-push bersama.
+
+## 6. Aturan Maintainer
+
+1. Satu rilis = satu tag `vX.Y.Z`; nomor tidak dipakai ulang.
+2. Setiap rilis memperbarui `config.h`, `LOG.md`, `RELEASES.md`, dan
+   `README.md` bila fitur berubah.
+3. Jangan menyimpan salinan firmware lama di repo; gunakan Git tag.
+4. Jangan push build artifact atau file lokal `.commandcode/`.
+5. Rilis yang belum diuji hardware harus ditandai jelas di catatan rilis.

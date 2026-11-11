@@ -1,127 +1,183 @@
 # Auto Etching Firmware
 
-Firmware untuk **mesin etching PCB otomatis** berbasis **ESP32-S3 DevKitC**.
-Dosing HCl/H₂O₂/H₂O (stepper peristaltik), agitasi, draining, rinsing, dan rinsing
-dengan air sabun — dikendalikan lewat **OLED 128×64 + 6 tombol** (PCF8574).
+Firmware mesin etching PCB otomatis berbasis **ESP32-S3 N16R8**, dengan
+layar OLED 128x64, 6 tombol melalui PCF8574, tiga pompa peristaltik
+DRV8825, tiga motor DC TB6612FNG, lima sensor level non-contact, tiga
+sensor suhu DS18B20, sensor udara MQ-135, dan E-stop.
 
-> **Lineage repo:** versi yang berjalan berasal dari lineage modular
-> (`auto-etching-firmware.ino` + `dcmotor.h`/`buzzer.h`/`motor.h`).
-> Lineage lama (`aktuator.h`, v0.5.0–v0.8.3) **rusak & dibatalkan**, snapshotnya
-> ada di `backup/`. Penjelasan lengkap di bagian atas [`LOG.md`](./LOG.md).
->
-> **v1.0.1:** prosedur kalibrasi, daftar error E01–E10, dan parameter default
-> ada di [`DOKUMENTASI.md`](./DOKUMENTASI.md).
+Versi aktif: **v1.2.0**
 
-## Fitur Utama
+Build terakhir: **1.245.906 byte flash (63% dari 1.966.080)**, RAM global
+**78.252 byte (23%)**.
 
-- **Menu OLED 6 tombol** — preset, konfigurasi, level cairan, kalibrasi, pengaturan, tangki, info
-- **Preset CRUD (maks 10)** — v2 dengan siklus/bilas/konfirmasi; NVS ber-versi + CRC32, auto-reject bila korup
-- **Proses etching non-blocking** — precheck → siklus penuh (dosing berurutan → agitasi → drain → bilas sabun/air) diulang sesuai `siklus` → selesai
-- **Dosing 3 pompa peristaltik satu per satu** (DRV8825 1/16 = 3200 langkah/putaran, **400–700 rpm**, ml → langkah, non-blocking)
-- **Kecepatan pompa berbasis RPM** — default 500 rpm, dapat diubah 400/500/600/700 per pompa
-- **Kalibrasi pompa stepper** — target tetap 100 ml: priming 10–15 dtk, START memakai model saat ini (atau base 6400 langkah/ml), konfirmasi gelas kosong, hasil ukur dikoreksi `a = langkah/hasil`, minimal 3 run dengan status LULUS (≤5%)/ULANGI
-- **Kalibrasi pompa DC 2 tahap** — run pertama tiap sesi **pulse pendek** (sabun 5 s / limbah 3 s), lalu target **100 ml**; model dikoreksi langsung `r = hasil / detik` (c = 0), LULUS setelah ≥3 run dengan error ≤10%; margin dosing 10%, drain 25% (fallback 10 ml/detik bila limbah belum dikalibrasi)
-- **Agitasi 3 level** — SPD1/SPD2/SPD3 dalam %, tanpa kalibrasi ml
-- **3 aktuator DC via TB6612FNG PWM** — motor agitasi, pompa air sabun, pompa limbah
-- **5 sensor level non-contact** (strip nikel + `touchRead`, moving average, histeresis + FAULT)
-- **Sensor suhu DS18B20 ×3** pada satu bus 1-Wire, konversi non-blocking
-- **Sensor udara MQ-135** dengan divider analog & konversi ppm
-- **Kalibrasi** — model stepper/DC, agitasi (SPD1–3), sensor level 0%/100%, suhu (offset), udara (acuan)
-- **Keselamatan** — E-stop GPIO 8 (interrupt + latch), tabel error E01–E10, watchdog 15 s, blokir aktuator saat fault, **evakuasi cairan lewat pompa limbah** saat E-stop/ERROR dan cancel proses
-- **Pelacak tangki & pemulihan** — sisa HCl/H₂O₂/H₂O/sabun/limbah, precheck kebutuhan penuh, `runstate` untuk drain & bilas setelah listrik padam
-- **Buzzer non-blocking** — nada boot, klik, mulai, batal, selesai, peringatan, error
-- **Exhaust fan** disambung langsung ke 12V, menyala terus (tidak dikendalikan firmware)
+## Fitur
+
+- **Preset v3 (maks. 10)** - 19 field, rasio kimia dalam persen atau ml,
+  waktu etching otomatis dari tebal tembaga dan laju etch, siklus serta
+  bilas per siklus.
+- **Proses berulang** - dosing HCl/H2O2/H2O, agitasi, drain, bilas sabun,
+  bilas air, lalu siklus berikutnya.
+- **PRECHECK menyeluruh** - kebutuhan seluruh proses dihitung per jerigen
+  dan kapasitas limbah sebelum aktuator menyala.
+- **Drain berbasis volume** - ledger volume nampan, residu, purge, dan
+  laju drain minimum; cancel/E-stop tidak mengulang volume penuh.
+- **Pause / cancel / recovery** - opsi lanjut, batalkan + drain, atau
+  hentikan tanpa drain; `runstate` tersimpan di NVS.
+- **Keselamatan** - E-stop latch, tabel error E01-E10, watchdog 15 detik,
+  evakuasi cairan, dan pesan fault yang menyebut item serta angkanya.
+- **Kalibrasi lengkap** - stepper, pompa DC, agitasi, level, suhu, MQ-135,
+  dan diagnostik E-stop.
+- **IoT** - WiFi, MQTT TLS 8883, NTP, LWT, remote command/config, event log,
+  dan halaman **Status IoT** di OLED.
+- **Dashboard self-hosted** - konfigurasi/pilih preset, konfirmasi PCB,
+  clear E-stop terkondisi, hasil kalibrasi, dan panel kiri collapsible.
+- **OTA HTTP** - `POST /update` port 3232, hanya saat IDLE dan safety AMAN.
+- **Non-blocking** - proses, sensor, motor, buzzer, dan UI berbasis `millis()`.
+
+## Menu Utama
+
+| Menu | Fungsi |
+|---|---|
+| Pilih Preset | Pilih, mulai, jeda, lanjut, batal |
+| Konfigurasi Preset | Tambah, duplikat, hapus, edit 19 field |
+| Level Cairan | Status dan kalibrasi 0%/100% lima sensor |
+| Kalibrasi | Motor, sensor, suhu, udara, E-stop |
+| Pengaturan | Ambang suhu, margin drain, kapasitas tangki, IoT |
+| Isi Ulang Tangki | Isi volume awal sumber dan limbah |
+| Status IoT | WiFi, IP/RSSI, MQTT, broker/TLS, NTP, OTA, heap |
+| Info/Status | Versi, suhu, level, MQ-135, alasan reset |
+
+Tombol: **ATAS/BAWAH** navigasi, **KIRI/KANAN** ubah nilai,
+**ENTER** pilih/konfirmasi, **BACK** kembali (tahan 1 detik ke menu utama).
+
+## Hardware
+
+| Fungsi | GPIO | Catatan |
+|---|---|---|
+| I2C SDA / SCL | 4 / 5 | OLED 0x3C + PCF8574 0x20 |
+| Sensor level HCl / H2O2 / H2O / sabun / limbah | 11 / 12 / 13 / 14 / 3 | `touchRead` non-contact |
+| Stepper HCl SLP/STEP/DIR | 1 / 2 / 42 | DRV8825 1/16, 3200 langkah/putaran |
+| Stepper H2O2 SLP/STEP/DIR | 41 / 40 / 39 | DRV8825 1/16 |
+| Stepper H2O SLP/STEP/DIR | 38 / 47 / 21 | DRV8825 1/16 |
+| TB6612FNG PWA/PWB driver 1 | 15 / 16 | agitasi / pompa sabun |
+| TB6612FNG PWA driver 2 | 17 | pompa limbah |
+| Buzzer | 6 | pasif, LEDC |
+| E-stop | 8 | `INPUT_PULLUP`, LOW = stop |
+| MQ-135 | 9 | analog |
+| DS18B20 | 10 | 1-Wire, 3 sensor |
+| Exhaust fan | - | langsung 12 V, selalu menyala |
 
 ## Struktur Project
 
-| File | Deskripsi |
-|------|-----------|
-| `auto-etching-firmware.ino` | Setup/loop utama, navigasi tombol, helper konfigurasi |
-| `config.h` | Pin map, konstanta global, `FW_VERSI` |
-| `dbg.h` | Helper log debug (`[PROSES]`, `[POMPA]`, …) |
-| `input.h` | Pembacaan 6 tombol PCF8574 + debounce |
-| `data.h` | Struct `Preset`, enum halaman, state global |
-| `presetops.h` | CRUD preset, kalkulasi ml, validasi |
-| `sensor.h` | Sensor level touch, DS18B20, MQ-135 |
-| `storage.h` | NVS (Preferences) + checksum untuk preset & kalibrasi |
-| `motor.h` | Driver stepper pompa peristaltik via FastAccelStepper (MCPWM/PCNT) |
-| `dcmotor.h` | Driver TB6612FNG (agitasi, pompa sabun, pompa limbah) |
-| `buzzer.h` | Buzzer pasif non-blocking (LEDC) + daftar melodi |
-| `safety.h` | E-stop latch, tabel error E01–E10, blokir aktuator |
-| `process.h` | State machine proses, precheck, siklus, drain, pemulihan |
-| `ui.h` | Rendering OLED: semua halaman, dialog, toast, animasi |
-| `fontmini.h` | Data font mini untuk OLED |
-| `test/` | Sketch uji mandiri per modul (`test/test-motor/`, `test/stepper-rpm/`, `test/tb6612fng/`) |
-| `backup/` | Snapshot versi lama (**lineage batal** — jangan di-flash) |
-
-## Releases — Daftar Versi
-
-Registri versi lengkap + panduan rollback ada di **[`RELEASES.md`](./RELEASES.md)**.
-
-| Versi | Tanggal | Git tag | Ringkasan |
-|---|---|---|---|
-| **v1.0.1** | 2026-11-09 | `v1.0.1` | **Siklus berulang + evakuasi cairan** — satu siklus penuh = dosing + etching + drain + bilas sabun/air, diulang sesuai `siklus` (bilas dihitung per siklus); kalibrasi DC baru memakai pulse pendek pada run pertama lalu target 100 ml dengan koreksi langsung `r = hasil / detik`; drain punya fallback 10 ml/detik + margin; cancel proses langsung menyalakan pompa limbah, E-stop/ERROR mengevakuasi cairan dan menahan reset sampai selesai |
-| **v1.0.0** | 2026-11-04 | `v1.0.0` | **Mesin standalone lengkap** — preset v2 (siklus, konfirmasi, bilas sabun/air), mesin proses dengan dosing berurutan + timeout, pelacak volume tangki & precheck, pemulihan setelah listrik padam (`runstate`), modul keselamatan E01–E10 + watchdog, kalibrasi model `langkah = a·ml + b` dan `ml = r·detik + c` dengan titik uji, UI proses/pengaturan/tangki/info baru, tahan BACK 1 detik; IoT/MQTT dijadwalkan v1.1.0 |
-| **v0.6.6** | 2026-10-30 | `v0.6.6` | **Verifikasi hasil kalibrasi di layar** — halaman kalibrasi stepper & DC menjadi 7 baris dengan baris **Uji hasil**: ENTER menjalankan dosis ulang memakai kalibrasi tersimpan (ramp sama seperti START), pengguna mengisi **Hasil**, lalu ENTER menilai **LULUS** (stepper ≤5%, DC ≤10%) atau **GAGAL**; kalibrasi tidak diubah saat LULUS; bila GAGAL, ENTER kedua di baris Hasil mengoreksi `cal = calLama × hasil/target` lalu minta uji ulang; mengubah Target/Hasil membatalkan status lama; `FW_VERSI`→v0.6.6 |
-| **v0.6.5** | 2026-10-30 | `v0.6.5` | **Kalibrasi stepper menghitung rotasi hanya saat RPM target** — ramp up/down tetap berjalan untuk keamanan pump head tetapi tidak dihitung; posisi awal dicatat saat kecepatan aktual ≥98% target, lalu langkah target dihitung dari titik itu dan dihentikan dengan ramp turun; progres 0% + label `RAMP...` selama ramp; timeout 60 s → `Gagal capai RPM`; `FW_VERSI`→v0.6.5 |
-| **v0.6.4** | 2026-10-30 | `v0.6.4` | **Uji kalibrasi target ml per motor** — masukkan target ml, START (ramp sama seperti Test Motor), ukur hasil nyata, isi **Hasil**, ENTER menghitung **offset** + kalibrasi ulang (`cal = calLama × hasil / target`); halaman stepper & DC jadi 6 baris (START/STOP, RPM/Duty, Target, Hasil, Offset, ml/rotasi atau ml/detik); uji DC tanpa margin; `FW_VERSI`→v0.6.4 |
-| **v0.6.3** | 2026-10-29 | `v0.6.3` | **Test Motor = sketch `test/test-motor`**: start memakai `applySpeedAcceleration()` seperti sketch, RPM live langsung dipakai ramp; baris HCl/H2O2/Air menampilkan **target/aktual** (mis. `400/400`) sehingga terlihat kecepatan berhenti di target; `st` di sketch uji juga mencetak RPM aktual; `FW_VERSI`→v0.6.3 |
-| **v0.6.2** | 2026-10-29 | `v0.6.2` | **Step/rev 6400 → 3200 (DRV8825 1/16)** agar RPM sesuai target dan sama dengan sketch `test/test-motor`; akselerasi menjadi 1000 langkah/s² (= 18,75 rpm/detik); NVS `pompa` **v3** dengan migrasi otomatis `mlPerRev / 2`; `FW_VERSI`→v0.6.2 |
-| **v0.6.1** | 2026-10-29 | `v0.6.1` | Ramp stepper disamakan dengan sketch `test/test-motor`: akselerasi **18,75 rpm/detik** (0→500 rpm ±26,7 s, 0→400 rpm ±21,3 s), dipakai juga saat deselerasi; estimasi durasi dosing dibuat akurat (trapezoid/triangular) agar timeout tidak berlebihan; `FW_VERSI`→v0.6.1 |
-| **v0.6.0** | 2026-10-29 | `v0.6.0` | **Ramp semua motor** (stepper akselerasi, DC ramp duty non-blocking); Test Motor mencakup 7 baris (3 stepper + 2 DC + agitasi) dengan scroll; kalibrasi stepper **10 rotasi** (ramp-aware, hasil 0,1 ml); kalibrasi DC **10 detik → ml/detik** + margin 10%; agitasi jadi **SPD1–3**; NVS `pompa` v2 |
-| **v0.5.4** | 2026-10-28 | `v0.5.4` | Pompa stepper ramp naik saat start & ramp turun saat stop (`stopMove`, akselerasi 50.000); E-stop/timeout/stall tetap potong seketika |
-| **v0.5.3** | 2026-10-28 | `v0.5.3` | Halaman **Test Motor** di Kalibrasi → Motor: START/STOP kontinu per pompa atau ketiga pompa sekaligus; default RPM 500 |
-| **v0.5.2** | 2026-10-28 | `v0.5.2` | Pompa stepper DRV8825 1/32 berbasis RPM 400–700 (default 500), kalibrasi 20 rotasi + NVS, dosing selesai berbasis pompa, FastAccelStepper |
-| **v0.5.1** | 2026-10-16 | `v0.5.1` | Exhaust fan dilepas dari TB6612FNG → langsung 12V; GPIO 18 bebas; sketch uji `test/tb6612fng/`; `PROCESS.md` + `PROGRESS.md` |
-| **v0.5.0** | 2026-10-13/14 | `v0.5.0` | Baseline lineage modular: menu, preset, dosing, sensor, kalibrasi, E-stop |
-
-Versi lineage lama (v0.5.0–v0.8.3, arsitektur `aktuator.h`) **dibatalkan** — ada di `backup/`.
-
-Rollback cepat:
-
-```bash
-git tag -l                              # lihat semua versi
-git checkout v0.5.0                     # kembali ke versi lama (aman, tidak hapus file)
-git checkout main                        # kembali ke versi terbaru
+```text
+auto-etching-firmware/
+├── auto-etching-firmware.ino   # setup/loop, menu, handler tombol
+├── config.h                    # pin, konstanta, FW_VERSI
+├── data.h                      # struct, enum, state global
+├── dbg.h                       # log Serial
+├── input.h                     # PCF8574 + debounce
+├── presetops.h                 # CRUD preset, model waktu, validasi
+├── sensor.h                    # level, suhu, MQ-135
+├── storage.h                   # NVS, checksum, migrasi
+├── motor.h                     # stepper FastAccelStepper
+├── dcmotor.h                   # TB6612FNG, kalibrasi DC
+├── buzzer.h                    # tone non-blocking
+├── safety.h                    # E-stop, E01-E10, safety context
+├── process.h                   # state machine proses
+├── ui.h                        # render OLED semua halaman
+├── api.h                       # command API, snapshot, event log
+├── net.h                       # WiFi/MQTT/NTP/topik/command queue
+├── net_ca.h                    # CA ISRG Root X2
+├── ota.h                       # OTA HTTP
+├── fontmini.h                  # font OLED
+├── partitions.csv              # layout 4 MB min_spiffs (dual app)
+├── secrets.example.h           # template kredensial (placeholder)
+├── secrets.h                   # kredensial lokal, di-ignore Git
+├── webapp/                     # dashboard web self-hosted
+│   ├── server/                 # Fastify + MQTT bridge + auth/audit
+│   ├── web/                    # React/Vite dashboard
+│   ├── deploy/                 # systemd + reverse proxy contoh
+│   └── README.md
+├── README.md
+├── DOKUMENTASI.md
+├── IOT-API.md
+├── PANDUAN-TEST-IOT.md
+├── LOG.md
+├── RELEASES.md
+└── GUIDE.md
 ```
 
-## Dokumentasi Lain
+## Dokumentasi
 
 | Dokumen | Isi |
 |---|---|
-| [`DOKUMENTASI.md`](./DOKUMENTASI.md) | **v1.0.1** — cara pakai, kalibrasi, daftar error E01–E10, parameter default |
-| [`SUMMARY.md`](./SUMMARY.md) | Ringkasan firmware, fitur, pin map |
-| [`PROCESS.md`](./PROCESS.md) | Rencana detail 5 modul proses (UI, Dosing, Etching, Draining & Rinsing, Emergency Stop) + cara kerja tiap fase + tabel GPIO |
-| [`PROGRESS.md`](./PROGRESS.md) | Checklist status implementasi per fitur |
-| [`RELEASES.md`](./RELEASES.md) | Registri versi & panduan rollback |
-| [`LOG.md`](./LOG.md) | Changelog tiap versi |
-| [`GUIDE.md`](./GUIDE.md) | Panduan pemilik repo & kontributor |
-| `etching-otomatis.md` | Rencana awal (**usang** — sudah dianotasi) |
-| `water-level-sensor-plan.md` | Rencana sensor level non-contact |
+| [DOKUMENTASI.md](./DOKUMENTASI.md) | Manual pemakaian, pin map, preset, kalibrasi, error, NVS, checklist uji |
+| [IOT-API.md](./IOT-API.md) | Command Serial/MQTT, topik, payload, remote config, event, OTA |
+| [PANDUAN-TEST-IOT.md](./PANDUAN-TEST-IOT.md) | Langkah uji WiFi, NTP, TLS, MQTT, event, OTA, hardware |
+| [LOG.md](./LOG.md) | Changelog rilis |
+| [RELEASES.md](./RELEASES.md) | Registry versi, rollback, prosedur tag rilis |
+| [GUIDE.md](./GUIDE.md) | Panduan pemilik repo dan contributor |
+| [webapp/README.md](./webapp/README.md) | Setup, keamanan, dan deployment dashboard self-hosted |
+| [webapp/ARSITEKTUR-DAN-PROSES.md](./webapp/ARSITEKTUR-DAN-PROSES.md) | Arsitektur web, alur data, deployment 24/7, dan jalur belajar web development |
 
-## Library yang Dibutuhkan
+## Build dan Flash
 
-| Library | Versi diuji | Catatan |
-|---|---|---|
-| Adafruit GFX Library | 1.12.x | OLED |
-| Adafruit SSD1306 | 2.5.x | OLED |
-| OneWire + DallasTemperature | 2.3.x / 4.0.x | DS18B20 |
-| **FastAccelStepper** | **2.0.1** | Pulses stepper 400–700 rpm (MCPWM/PCNT ESP32-S3) |
+Prasyarat library Arduino:
 
-> FastAccelStepper wajib diinstal dari Library Manager Arduino IDE
-> (cari “FastAccelStepper” oleh Jochen Kiemes).
+- Adafruit GFX Library dan Adafruit SSD1306
+- OneWire dan DallasTemperature
+- FastAccelStepper
+- ESP32MQTTClient
+- ArduinoJson
 
-## Flash ke ESP32-S3
+Compile:
 
-| Setting | Nilai |
-|---|---|
-| Board | **ESP32S3 Dev Module** |
-| Upload speed | 921600 (turunkan ke 115200 bila gagal) |
-| Port | `/dev/ttyACM0` atau `/dev/ttyUSB0` |
+```bash
+~/DevBox/bin/arduino-cli compile \
+  --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=min_spiffs" \
+  --libraries /home/raihanP/Arduino/libraries \
+  --output-dir build_ota .
+```
 
-> Data preset & kalibrasi ada di NVS-flash, **tidak hilang** saat flash ulang.
-> Menghapus flash (`ESP32: Erase Flash`) hanya bila preset korup/berubah sendiri.
+Upload USB pertama (tabel partisi berubah):
 
-## License
+```bash
+~/DevBox/bin/arduino-cli upload \
+  -p /dev/ttyACM0 \
+  --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=min_spiffs" \
+  .
+```
+
+Board: **ESP32S3 Dev Module**, upload 921600 (turunkan ke 115200 bila gagal).
+Layout partisi: **min_spiffs 4 MB**, dual app ±1,9 MB. File
+`partitions.csv` di folder sketch dipakai otomatis. Flash 4 MB aman; board
+N16R8 16 MB tetap berjalan dengan layout ini.
+
+OTA setelah firmware berjalan:
+
+```bash
+curl -X POST \
+  --data-binary @build_ota/auto-etching-firmware.ino.bin \
+  -H "X-OTA-Password: <OTA_PASSWORD>" \
+  http://<IP_ALAT>:3232/update
+```
+
+## Catatan Keamanan
+
+- Kredensial WiFi, broker, dan password OTA ada di `secrets.h` lokal yang
+  di-ignore Git. Jangan commit file itu; clone baru menyalin
+  `secrets.example.h` lalu mengisi nilainya.
+- Dashboard web menyimpan kredensial broker di `webapp/server/.env` lokal
+  (di-ignore Git); browser tidak pernah menerimanya.
+- Kredensial tetap terbaca dari firmware/NVS di perangkat; gunakan repo
+  private, rotasi kredensial bila pernah bocor, dan flash encryption bila
+  perlindungan fisik diperlukan.
+- E-stop fisik tetap wajib; `clear` E-stop dari dashboard hanya bisa setelah
+  tombol fisik dilepas dan evakuasi selesai. Error non-E-stop tetap lokal.
+- Uji dengan air sebelum memakai HCl/H2O2. Gunakan APD dan ventilasi.
+- Data preset, kalibrasi, tangki, dan `runstate` tersimpan di NVS dan tidak
+  hilang saat flash ulang.
+
+## Lisensi
 
 Property of PCB Express. All rights reserved.
