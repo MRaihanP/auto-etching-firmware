@@ -6,8 +6,8 @@ ada. Ditulis untuk orang yang belum mendalami web development.
 
 Versi acuan:
 
-- Firmware: **v1.2.0**
-- Dashboard: **v1.0.0**
+- Firmware: **v1.3.0**
+- Dashboard: **v1.3.0**
 - Tanggal rilis: **2026-11-11**
 - Repo: `https://github.com/MRaihanP/auto-etching-firmware`
 
@@ -295,7 +295,26 @@ Command tidak dikirim langsung oleh browser ke MQTT.
 - Firmware memvalidasi, menyimpan ke NVS, lalu publish ulang `presets`.
 - Server menerima daftar baru dan mengirim snapshot ke browser.
 
-### 6.6 E-stop clear
+### 6.6 OTA dari dashboard
+
+```text
+Browser Settings → pilih/drop file .bin
+  → POST /api/ota (raw binary + CSRF)
+    → server cek admin, IDLE, safety AMAN
+    → server ambil IP alat dari status MQTT
+    → server POST http://<IP_ALAT>:3232/update
+        header X-OTA-Password: <OTA_PASS> (hanya server)
+    → alat Update.write + reboot
+    → status MQTT baru membawa ver/build
+    → Settings otomatis menampilkan versi firmware baru
+```
+
+- Browser tidak memegang password OTA.
+- Server harus berada di jaringan yang bisa menjangkau port 3232 alat.
+- IP alat dibatasi ke LAN privat untuk mengurangi SSRF.
+- File yang dipilih harus `.bin` hasil compile Arduino.
+
+### 6.7 E-stop clear
 
 - E-stop fisik ditekan → firmware latch `ESTOP`.
 - Status berisi `safety.state=1`, `pin_high`, `clear_remote`.
@@ -431,6 +450,11 @@ MQTT_PASS=<MQTT_PASSWORD>
 MQTT_BASE=pelarut
 DEVICE_ID=
 MQTT_CA_PATH=
+
+OTA_PORT=3232
+OTA_PASS=<OTA_PASSWORD>
+OTA_MAX_MB=3
+OTA_TIMEOUT_MS=30000
 
 ADMIN_USER=admin
 ADMIN_PASSWORD=<ADMIN_PASSWORD>

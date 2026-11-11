@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <WiFi.h>
 #include <ArduinoJson.h>
 #include "config.h"
 #include "data.h"
@@ -176,6 +177,12 @@ void apiBuatStatusJson(char* out, size_t n) {
   doc["ok"] = true;
   doc["cmd"] = "status";
   doc["ver"] = s.versi;
+  doc["build"] = __DATE__ " " __TIME__;
+  char ipbuf[16];
+  IPAddress ipa = WiFi.localIP();
+  snprintf(ipbuf, sizeof(ipbuf), "%u.%u.%u.%u", ipa[0], ipa[1], ipa[2], ipa[3]);
+  doc["ip"] = ipbuf;
+  doc["rssi"] = WiFi.RSSI();
   doc["uptime"] = s.uptimeMs;
   doc["epoch"] = (uint32_t)time(nullptr);
   doc["reset"] = s.resetReason;

@@ -25,6 +25,9 @@ asset semuanya lokal.
 - Clear E-stop dari dashboard hanya setelah tombol fisik dilepas dan evakuasi selesai.
 - Hasil kalibrasi stepper, DC, agitasi, level, suhu, MQ-135 + tanggal terakhir.
 - Config tank/setting (admin, IDLE-only); Settings berisi versi/repo/info.
+- **OTA dari Settings**: drag/drop atau pilih file `.bin` hasil compile Arduino;
+  server meneruskannya ke alat dan versi firmware di Settings diperbarui
+  otomatis setelah alat reboot dan status MQTT baru masuk.
 - ACK correlation, timeout, rate limit, audit.
 - Status stale/offline; kontrol dinonaktifkan saat data tidak valid.
 - WebSocket push; PWA installable; layout desktop/mobile; panel kiri bisa minimize.
@@ -97,6 +100,10 @@ mengontrol alat; gunakan dashboard normal tanpa parameter demo.
 | `MQTT_BASE` | Default `pelarut` |
 | `DEVICE_ID` | Kosongkan untuk auto-detect dari topik status |
 | `MQTT_CA_PATH` | Opsional CA PEM bila sistem tidak memercayai chain broker |
+| `OTA_PORT` | Port OTA alat, default 3232 |
+| `OTA_PASS` | Password OTA firmware; hanya di server |
+| `OTA_MAX_MB` | Batas ukuran file OTA |
+| `OTA_TIMEOUT_MS` | Timeout upload OTA |
 | `DB_PATH` | SQLite lokal |
 | `ADMIN_USER`, `ADMIN_PASSWORD` | Dipakai `pnpm seed` |
 
