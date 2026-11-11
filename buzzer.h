@@ -35,30 +35,50 @@ const Note N_KEY[]    = {{2093, 20}};
 const Note N_WARN[]   = {{1760, 90}, {0, 60}, {1760, 90}};
 const Note N_ERROR[]  = {{523, 220}, {0, 60}, {392, 220}, {0, 60}, {262, 400}};
 
+// Pola tambahan agar pengguna bisa membedakan kejadian.
+const Note N_NOTIF[]  = {{1760, 60}, {0, 40}, {1760, 60}};
+const Note N_PAUSE[]  = {{1319, 120}, {1047, 180}};
+const Note N_RESUME[] = {{1047, 120}, {1319, 180}};
+const Note N_STOP[]   = {{523, 250}, {0, 60}, {523, 250}};
+
 // ================= SCHEDULER =================
+// Prioritas: ERROR 5 > STOP/CANCEL 4 > PAUSE/RESUME/WARN/DONE 3 >
+//            NOTIF/START 2 > KEY/BOOT 1.
 const Note* melodi     = nullptr;
 int        melodiJumlah = 0;
 int        melodiIndex  = 0;
+int        melodiPrioritasAktif = 0;
 unsigned long melodiNextMs = 0;
 
-void buzzerPutar(const Note* notes, int jumlah) {
+void buzzerPutarPrioritas(const Note* notes, int jumlah, int prioritas) {
   if (jumlah <= 0) { buzzerOff(); melodi = nullptr; return; }
+  if (melodi != nullptr && prioritas < melodiPrioritasAktif) return;
   melodi = notes; melodiJumlah = jumlah; melodiIndex = 0;
+  melodiPrioritasAktif = prioritas;
   buzzerNada(notes[0].freq);
   melodiNextMs = millis() + notes[0].ms;
 }
 
-void buzzerKlik()    { buzzerPutar(N_KEY,    1); }
-void buzzerBoot()    { buzzerPutar(N_BOOT,   3); }
-void buzzerMulai()   { buzzerPutar(N_START,  2); }
-void buzzerBatal()   { buzzerPutar(N_CANCEL, 3); }
-void buzzerSelesai() { buzzerPutar(N_DONE,   4); }
-void buzzerWarn()    { buzzerPutar(N_WARN,   3); }
-void buzzerError()   { buzzerPutar(N_ERROR,  5); }
+void buzzerPutar(const Note* notes, int jumlah) {
+  buzzerPutarPrioritas(notes, jumlah, 2);
+}
+
+void buzzerKlik()    { buzzerPutarPrioritas(N_KEY,    1, 1); }
+void buzzerBoot()    { buzzerPutarPrioritas(N_BOOT,   3, 1); }
+void buzzerMulai()   { buzzerPutarPrioritas(N_START,  2, 2); }
+void buzzerNotif()   { buzzerPutarPrioritas(N_NOTIF,  3, 2); }
+void buzzerJeda()    { buzzerPutarPrioritas(N_PAUSE,  2, 3); }
+void buzzerLanjut()  { buzzerPutarPrioritas(N_RESUME, 2, 3); }
+void buzzerBatal()   { buzzerPutarPrioritas(N_CANCEL, 3, 4); }
+void buzzerStopProses() { buzzerPutarPrioritas(N_STOP, 3, 4); }
+void buzzerSelesai() { buzzerPutarPrioritas(N_DONE,   4, 3); }
+void buzzerWarn()    { buzzerPutarPrioritas(N_WARN,   3, 3); }
+void buzzerError()   { buzzerPutarPrioritas(N_ERROR,  5, 5); }
 
 void buzzerStop() {
   melodi = nullptr;
   melodiJumlah = 0;
+  melodiPrioritasAktif = 0;
   buzzerOff();
 }
 

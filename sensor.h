@@ -24,12 +24,31 @@ const char* namaSensor[JUMLAH_SENSOR] = {
   "HCl", "H2O2", "H2O", "Sabun", "Limbah"
 };
 
+// Nilai cadangan bila sensor belum pernah dikalibrasi.
+#define KALIB_DEF_KOSONG  113000
+#define KALIB_DEF_PENUH   156000
+
 bool sensorOk = true;
 int  sensorRaw[JUMLAH_SENSOR];          // nilai mentah (moving average)
 int  sensorPersen[JUMLAH_SENSOR];       // level dalam persen 0-100
 int  sensorKalibKosong[JUMLAH_SENSOR];  // nilai saat 0% (kosong)
 int  sensorKalibPenuh[JUMLAH_SENSOR];   // nilai saat 100% (penuh)
 bool sensorFault[JUMLAH_SENSOR];        // nilai di luar rentang wajar
+bool sensorKalibSimpan[JUMLAH_SENSOR] = { false, false, false, false, false };  // kalibrasi tersimpan di NVS
+// Waktu (millis) saat persen limbah mulai >= LIMBAH_PENUH_PCT; 0 = belum.
+unsigned long sensorLimbahPenuhMs = 0;
+// Timer level kritis (>= LIMBAH_KRITIS_PCT) untuk jaring pengaman terakhir.
+unsigned long sensorLimbahKritisMs = 0;
+
+// Pasangan 0%/100% layak dipakai (100% harus lebih besar dari 0%).
+bool sensorKalibLayak(int i) { return sensorKalibPenuh[i] > sensorKalibKosong[i]; }
+
+// Tandai sensor yang kalibrasinya sudah diisi user (bukan nilai cadangan).
+void sensorKalibTandai() {
+  for (int i = 0; i < JUMLAH_SENSOR; i++)
+    sensorKalibSimpan[i] = sensorKalibLayak(i) &&
+        !(sensorKalibKosong[i] == KALIB_DEF_KOSONG && sensorKalibPenuh[i] == KALIB_DEF_PENUH);
+}
 
 // Status digital hasil histeresis + debounce.
 bool sensorBasah[JUMLAH_SENSOR] = { false, false, false, false, false };
@@ -51,8 +70,8 @@ bool sensorInit() {
     sensorRaw[i]       = 0;
     sensorPersen[i]    = 0;
     // Nilai awal hanya cadangan; kalibrasi NVS menimpanya bila ada.
-    sensorKalibKosong[i] = 113000;
-    sensorKalibPenuh[i]  = 156000;
+    sensorKalibKosong[i] = KALIB_DEF_KOSONG;
+    sensorKalibPenuh[i]  = KALIB_DEF_PENUH;
     sensorFault[i]     = false;
     sensorBasah[i]     = false;
     sensorHit[i]       = 0;
@@ -149,14 +168,45 @@ void sensorUpdate() {
     }
     sensorUpdateStatus(i);
     sensorAdaptasiBaseline(i, now);
+
+    // Timer "penuh" khusus limbah. Histeresis 85% -> 75% agar bacaan yang
+    // berkedip di sekitar ambang tidak mereset hitungan.
+    if (i == 4) {
+      if (sensorFault[i] || sensorPersen[i] < LIMBAH_PENUH_OFF_PCT)
+        sensorLimbahPenuhMs = 0;
+      else if (sensorPersen[i] >= LIMBAH_PENUH_PCT && sensorLimbahPenuhMs == 0)
+        sensorLimbahPenuhMs = now;
+
+      if (sensorFault[i] || sensorPersen[i] < LIMBAH_KRITIS_OFF_PCT)
+        sensorLimbahKritisMs = 0;
+      else if (sensorPersen[i] >= LIMBAH_KRITIS_PCT && sensorLimbahKritisMs == 0)
+        sensorLimbahKritisMs = now;
+    }
   }
-  if (berubah && (halaman == HAL_LEVEL || halaman == HAL_INFO)) perluGambar = true;
+  if (berubah) {
+    sensorDataBerubah = true;
+    if (halaman == HAL_LEVEL || halaman == HAL_INFO) perluGambar = true;
+  }
 }
 
 // Status untuk logika proses.
 bool levelBasah(int i) { return (i >= 0 && i < JUMLAH_SENSOR) ? sensorBasah[i] : false; }
 bool levelKering(int i) { return (i >= 0 && i < JUMLAH_SENSOR) ? !sensorBasah[i] : false; }
 bool levelFault(int i) { return (i >= 0 && i < JUMLAH_SENSOR) ? sensorFault[i] : true; }
+
+// Penuh khusus tangki limbah: persen tinggi harus bertahan LIMBAH_PENUH_MS.
+// Transien saat pompa drain menyala (percikan/foam) tidak dianggap penuh.
+bool levelLimbahPenuh() {
+  if (sensorFault[4] || sensorLimbahPenuhMs == 0) return false;
+  return (millis() - sensorLimbahPenuhMs) >= LIMBAH_PENUH_MS;
+}
+
+// Level kritis: jaring pengaman terakhir di tengah proses. Threshold lebih
+// tinggi dan lebih lama agar percikan/foam tidak menghentikan proses.
+bool levelLimbahKritis() {
+  if (sensorFault[4] || sensorLimbahKritisMs == 0) return false;
+  return (millis() - sensorLimbahKritisMs) >= LIMBAH_KRITIS_MS;
+}
 
 void sensorSetKosong(int i) {
   sensorKalibKosong[i] = sensorRaw[i];
@@ -180,10 +230,11 @@ void levelMasuk() {
 OneWire ds18Bus(PIN_DS18B20);
 DallasTemperature ds18(&ds18Bus);
 
+// Urutan slot: 1 = Suhu Motor, 2 = Suhu Komponen, 3 = Suhu Chamber.
 DeviceAddress sensorAddress[3] = {
-  { 0x28, 0xB8, 0xEF, 0x87, 0x3A, 0x25, 0x02, 0x64 },
-  { 0x28, 0x80, 0x77, 0x48, 0x3A, 0x25, 0x02, 0x02 },
-  { 0x28, 0x8E, 0xFD, 0x23, 0x39, 0x25, 0x02, 0x87 }
+  { 0x28, 0xB8, 0xEF, 0x87, 0x3A, 0x25, 0x02, 0x64 },   // SuhuMotor
+  { 0x28, 0x80, 0x77, 0x48, 0x3A, 0x25, 0x02, 0x02 },   // SuhuKomponen
+  { 0x28, 0x8E, 0xFD, 0x23, 0x39, 0x25, 0x02, 0x87 }    // SuhuChamber
 };
 
 // address terpilih per blok (1..3, index 0 = sensorAddress[0])
@@ -192,64 +243,173 @@ int kalibSuhuAddr[JUMLAH_SUHU] = { 1, 2, 3 };
 // offset kalibrasi per blok (x10 °C)
 float suhuOffsetX10[JUMLAH_SUHU] = { 0, 0, 0 };
 
+// v1.0.2: pembacaan suhu ditulis ulang agar tahan gangguan.
+//  - Konversi ditunggu lewat timer (SUHU_KONVERSI_MS), tidak bergantung pada
+//    isConversionComplete() yang bisa tidak pernah true bila bus bermasalah.
+//  - Bila semua sensor gagal berturut-turut, bus di-scan ulang otomatis
+//    (sebelumnya: gagal saat boot = tidak pernah dicoba lagi).
+//  - Satu kegagalan baca tidak langsung jadi FAULT (butuh SUHU_GAGAL_MAKS).
+//  - Log serial menampilkan alamat yang ditemukan dan level idle bus.
+#define SUHU_KONVERSI_MS     800UL    // 12-bit: maks 750 ms
+#define SUHU_GAGAL_MAKS      3
+#define SUHU_SCAN_ULANG_MS   10000UL
+
 bool ds18Siap = false;
-bool sensorSuhuFault[JUMLAH_SUHU] = { false, false, false };
+bool sensorSuhuAda[3] = { false, false, false };
+bool sensorSuhuFault[JUMLAH_SUHU] = { true, true, true };
+int  sensorSuhuGagal[JUMLAH_SUHU] = { SUHU_GAGAL_MAKS, SUHU_GAGAL_MAKS, SUHU_GAGAL_MAKS };
 float sensorSuhuCache[JUMLAH_SUHU] = { -127.0f, -127.0f, -127.0f };
 
-void sensorSuhuInit() {
-  analogReadResolution(12);                // ADC MQ-135 12-bit (0..4095)
+unsigned long sensorSuhuMs = 0;       // waktu permintaan konversi terakhir
+bool          ds18Menunggu = false;   // konversi sedang berjalan
+unsigned long ds18ScanMs   = 0;
+int           ds18GagalSiklus = 0;
+bool suhuDataBaru = false;
+int  ds18Jumlah = 0;          // perangkat yang ditemukan di bus saat scan terakhir
+bool ds18IdleHigh = true;     // level idle bus saat scan terakhir
+
+static void suhuCetakAddr(const uint8_t* a) {
+  char b[20];
+  snprintf(b, sizeof(b), "%02X%02X%02X%02X%02X%02X%02X%02X",
+           a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+  dbg.print(b);
+}
+
+// Scan bus 1-Wire dan laporkan hasilnya ke serial.
+void sensorSuhuScan() {
   ds18.begin();
-  for (int s = 0; s < 3; s++) ds18.setResolution(sensorAddress[s], 12);
-  ds18.setWaitForConversion(false);       // konversi di latar belakang
+  ds18.setWaitForConversion(false);      // konversi di latar belakang
   int jumlah = ds18.getDeviceCount();
-  ds18Siap = (jumlah >= 1);
-  dbg.print(F("[SUHU] DS18B20 ditemukan: "));
-  dbg.print(jumlah);
-  dbg.println(ds18Siap ? F(" sensor") : F(" (tidak ada)"));
-  for (int s = 0; s < 3; s++) {
-    bool ketemu = false;
-    for (int i = 0; i < jumlah; i++) {
-      DeviceAddress a;
-      if (!ds18.getAddress(a, i)) continue;
-      if (memcmp(a, sensorAddress[s], 8) == 0) { ketemu = true; break; }
-    }
-    if (!ketemu) dbg.print(F("[SUHU] Sensor tidak ditemukan (slot ")), dbg.println(s + 1);
+
+  pinMode(PIN_DS18B20, INPUT);
+  bool idleHigh = (digitalRead(PIN_DS18B20) == HIGH);
+  ds18Jumlah = jumlah;
+  ds18IdleHigh = idleHigh;
+
+  dbg.print(F("[SUHU] GPIO"));
+  dbg.print((int)PIN_DS18B20);
+  dbg.print(F(" idle="));
+  dbg.print(idleHigh ? F("HIGH") : F("LOW (cek pull-up 4.7k ke 3V3)"));
+  dbg.print(F(" perangkat="));
+  dbg.println(jumlah);
+
+  for (int i = 0; i < jumlah; i++) {
+    DeviceAddress a;
+    if (!ds18.getAddress(a, i)) continue;
+    dbg.print(F("[SUHU]   bus["));
+    dbg.print(i);
+    dbg.print(F("] = "));
+    suhuCetakAddr(a);
+    dbg.println();
   }
-  if (ds18Siap) ds18.requestTemperatures();
+
+  int hadir = 0;
+  for (int s = 0; s < 3; s++) {
+    sensorSuhuAda[s] = ds18.isConnected(sensorAddress[s]);
+    if (sensorSuhuAda[s]) {
+      ds18.setResolution(sensorAddress[s], 12);
+      hadir++;
+    } else {
+      dbg.print(F("[SUHU] Slot "));
+      dbg.print(s + 1);
+      dbg.print(F(" tidak ditemukan: "));
+      suhuCetakAddr(sensorAddress[s]);
+      dbg.println();
+    }
+  }
+  ds18Siap = (hadir >= 1);
+  dbg.print(F("[SUHU] Sensor sesuai address: "));
+  dbg.print(hadir);
+  dbg.println(F("/3"));
 }
 
 void sensorSuhuRequest() {
-  if (!ds18Siap) return;
-  ds18.requestTemperatures();          // tidak memblokir
+  ds18.requestTemperatures();            // tidak memblokir (waitForConversion=false)
+  sensorSuhuMs = millis();
+  ds18Menunggu = true;
 }
 
-unsigned long sensorSuhuMs = 0;
-bool suhuDataBaru = false;
+void sensorSuhuInit() {
+  analogReadResolution(12);              // ADC MQ-135 12-bit (0..4095)
+  sensorSuhuScan();
+  ds18ScanMs = millis();
+  if (ds18Siap) sensorSuhuRequest();
+}
 
-// Panggil tiap loop(): minta konversi baru lalu tandai data baru saat selesai.
-// Sejak v1.0.0 juga memperbarui cache + status FAULT tiap blok.
+// Panggil tiap loop(). Siklus: request -> tunggu 800 ms -> baca -> jeda
+// sampai INTERVAL_SUHU_MS -> request lagi.
 void sensorSuhuUpdate() {
+  unsigned long now = millis();
+
   if (!ds18Siap) {
     for (int i = 0; i < JUMLAH_SUHU; i++) {
       sensorSuhuFault[i] = true;
       sensorSuhuCache[i] = -127.0f;
+      sensorSuhuGagal[i] = SUHU_GAGAL_MAKS;
+    }
+    if (now - ds18ScanMs >= SUHU_SCAN_ULANG_MS) {
+      ds18ScanMs = now;
+      sensorSuhuScan();
+      if (ds18Siap) { ds18GagalSiklus = 0; sensorSuhuRequest(); }
     }
     return;
   }
-  if (!ds18.isConversionComplete()) return;   // konversi lama masih jalan
-  unsigned long now = millis();
-  if (now - sensorSuhuMs < INTERVAL_SUHU_MS) return;
-  sensorSuhuMs = now;
 
+  if (!ds18Menunggu) {
+    if (now - sensorSuhuMs >= INTERVAL_SUHU_MS) sensorSuhuRequest();
+    return;
+  }
+  if (now - sensorSuhuMs < SUHU_KONVERSI_MS) return;
+  ds18Menunggu = false;
+
+  int jumlahOk = 0;
   for (int i = 0; i < JUMLAH_SUHU; i++) {
     int slot = constrain(kalibSuhuAddr[i], 1, 3) - 1;
     float t = ds18.getTempC(sensorAddress[slot]);
-    sensorSuhuCache[i] = t;
-    sensorSuhuFault[i] = (t <= -100.0f);
+    bool valid = (t > -100.0f && t < 125.0f && t != 85.0f);   // 85.0 = nilai reset
+    if (valid) {
+      sensorSuhuCache[i] = t;
+      sensorSuhuGagal[i] = 0;
+      sensorSuhuFault[i] = false;
+      jumlahOk++;
+    } else {
+      if (sensorSuhuGagal[i] < SUHU_GAGAL_MAKS) sensorSuhuGagal[i]++;
+      if (sensorSuhuGagal[i] == SUHU_GAGAL_MAKS && !sensorSuhuFault[i]) {
+        dbg.print(F("[SUHU] Blok "));
+        dbg.print(i + 1);
+        dbg.println(F(" gagal dibaca"));
+      }
+      if (sensorSuhuGagal[i] >= SUHU_GAGAL_MAKS) {
+        sensorSuhuCache[i] = -127.0f;
+        sensorSuhuFault[i] = true;
+      }
+    }
   }
-  sensorSuhuRequest();
+
+  // Semua gagal beberapa siklus -> anggap bus bermasalah, scan ulang.
+  if (jumlahOk == 0) {
+    if (++ds18GagalSiklus >= SUHU_GAGAL_MAKS) {
+      dbg.println(F("[SUHU] Semua sensor gagal, scan ulang bus"));
+      ds18Siap = false;
+      ds18ScanMs = now - SUHU_SCAN_ULANG_MS;   // scan segera di panggilan berikut
+    }
+  } else {
+    ds18GagalSiklus = 0;
+  }
+
   suhuDataBaru = true;
   sensorSuhuSiapTampilFlag = true;
+}
+
+// Teks status singkat (maks 5 huruf) untuk layar saat suhu tidak terbaca:
+//   BUS?  = tidak ada perangkat di bus (cek pull-up 4.7k, DATA, GND, 3V3)
+//   ADDR? = ada perangkat tapi alamatnya tidak cocok dengan 3 alamat firmware
+//   BACA? = alamat cocok tapi pembacaan gagal (CRC/kabel/noise)
+const char* sensorSuhuStatusTeks() {
+  if (ds18Jumlah == 0) return "BUS?";
+  bool cocok = sensorSuhuAda[0] || sensorSuhuAda[1] || sensorSuhuAda[2];
+  if (!cocok) return "ADDR?";
+  return "BACA?";
 }
 
 // true tepat setelah konversi selesai; pemicu redraw UI.

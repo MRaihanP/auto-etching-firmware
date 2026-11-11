@@ -19,6 +19,16 @@ enum SafetyState { SAF_AMAN = 0, SAF_ESTOP = 1, SAF_ERROR = 2 };
 SafetyState safetyState = SAF_AMAN;
 int         safetyKode  = 0;
 const char* safetyPesan = "";
+// Detail spesifik agar pengguna tahu penyebab dan tindakannya.
+char        safetyDetail[48] = "";
+char        safetyAksi[32]   = "";
+
+void safetySalin(char* dst, size_t n, const char* src) {
+  if (dst == nullptr || n == 0) return;
+  if (src == nullptr) { dst[0] = '\0'; return; }
+  strncpy(dst, src, n - 1);
+  dst[n - 1] = '\0';
+}
 
 volatile bool safetyIsrFlag = false;
 unsigned long safetyIsrMs = 0;
@@ -27,6 +37,7 @@ bool          safetyTombolDitekan = false;
 
 // Didefinisikan di process.h; dipanggil sekali saat transisi darurat.
 void prosesBatalDarurat();
+void sesuaikanVolumeAktual();
 // Evakuasi cairan lewat pompa limbah saat E-stop/ERROR (process.h).
 extern bool evakuasiAktif;
 
@@ -74,6 +85,8 @@ void safetyInit() {
 }
 
 void safetyMatikanAktuator() {
+  // Catat volume dosis/drain nyata sebelum pompa dihentikan.
+  sesuaikanVolumeAktual();
   pompaStopAllDarurat();
   dcStopAllDarurat();
   kalibDcFase = KDC_IDLE;
@@ -89,30 +102,55 @@ void safetyDarurat(int kode, const char* pesan) {
   safetyState = SAF_ESTOP;
   safetyKode = kode;
   safetyPesan = pesan;
+  safetySalin(safetyDetail, sizeof(safetyDetail), "Tombol darurat ditekan");
+  safetySalin(safetyAksi, sizeof(safetyAksi), "Lepas tombol, lalu ENTER");
   safetyTombolDitekan = true;
   safetyMatikanAktuator();
   buzzerError();
   perluGambar = true;
   dbg.print(F("[SAFETY] E-STOP: "));
   dbg.println(pesan);
+  eventCatat(1, "ESTOP");
 }
 
-void safetyRaise(int kode) {
+void safetyRaiseKonteks(int kode, const char* detail, const char* aksi) {
   if (safetyState != SAF_AMAN) return;
   const SafetyFaultInfo& f = safetyInfo(kode);
   safetyState = SAF_ERROR;
   safetyKode = kode;
   safetyPesan = f.pesan;
+  safetySalin(safetyDetail, sizeof(safetyDetail), detail);
+  safetySalin(safetyAksi, sizeof(safetyAksi), aksi);
   safetyMatikanAktuator();
   buzzerError();
   perluGambar = true;
   dbg.print(F("[SAFETY] ERROR "));
   dbg.print(f.nama);
   dbg.print(F(": "));
-  dbg.println(f.pesan);
+  if (detail != nullptr && detail[0]) {
+    dbg.print(detail);
+    dbg.print(F(" | "));
+  }
+  dbg.print(safetyPesan);
+  if (aksi != nullptr && aksi[0]) {
+    dbg.print(F(" | aksi: "));
+    dbg.print(aksi);
+  }
+  dbg.println();
+  eventCatat((uint16_t)kode, (detail != nullptr && detail[0]) ? detail : f.nama);
 }
 
+void safetyRaise(int kode) { safetyRaiseKonteks(kode, "", ""); }
+
 bool safetyBolehAktuator() { return safetyState == SAF_AMAN; }
+
+// Clear dari dashboard hanya untuk E-stop, setelah tombol fisik dilepas
+// dan evakuasi cairan selesai. Error non-E-stop tetap harus lokal.
+bool safetyClearRemoteBoleh() {
+  return safetyState == SAF_ESTOP &&
+         digitalRead(PIN_ESTOP) == HIGH &&
+         !evakuasiAktif;
+}
 
 // ENTER di layar E-STOP/ERROR. E-stop hanya bisa dilepas bila tombol fisik
 // sudah tidak ditekan.
@@ -130,6 +168,8 @@ bool safetyKonfirmasi() {
   safetyState = SAF_AMAN;
   safetyKode = 0;
   safetyPesan = "";
+  safetyDetail[0] = '\0';
+  safetyAksi[0] = '\0';
   safetyIsrFlag = false;
   perluGambar = true;
   dbg.println(F("[SAFETY] State kembali AMAN"));

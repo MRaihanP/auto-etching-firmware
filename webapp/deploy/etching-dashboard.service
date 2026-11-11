@@ -1,0 +1,23 @@
+[Unit]
+Description=Etching Dashboard (self-hosted)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=etching
+Group=etching
+WorkingDirectory=/opt/etching-webapp/server
+EnvironmentFile=/etc/etching-dashboard.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/etching-dashboard
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

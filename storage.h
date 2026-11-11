@@ -10,13 +10,31 @@
 
 // Semua data disimpan sebagai SATU blob (satu key) + versi + checksum.
 // v2 (v1.0.0): Preset v2 (siklus/bilas), tanpa totalDetik.
-#define FORMAT_VERSI 2
+// v3 (v1.1.0): Preset v3 (mode rasio ml/persen, model waktu etching).
+#define FORMAT_VERSI 3
+#define FORMAT_VERSI_PRESET_V2   2
 #define FORMAT_VERSI_PRESET_LAMA 1
 
 struct DataSimpan {
   uint32_t versi;
   uint32_t jumlah;
   Preset   p[MAKS_PRESET];
+  uint32_t crc;
+};
+
+// Layout v2 (v1.0.0) untuk migrasi. JANGAN diubah.
+struct PresetV2 {
+  char  nama[12];
+  int   pcbPanjang, pcbLebar;
+  int   persenHCl, persenH2O2, persenH2O;
+  int   mlHCl, mlH2O2, mlH2O;
+  int   agitasiDetik, agitasiSpeed;
+  int   siklus, bilasSabun, bilasAir, bilasMl, bilasDetik, konfirmasiSiklus;
+};
+struct DataSimpanV2 {
+  uint32_t versi;
+  uint32_t jumlah;
+  PresetV2 p[MAKS_PRESET];
   uint32_t crc;
 };
 
@@ -63,6 +81,16 @@ bool simpanPreset() {
   return ok;
 }
 
+// Field baru v3. Migrasi memakai mode manual agar perilaku preset lama
+// TIDAK berubah sampai pengguna mengaktifkan mode otomatis.
+void isiDefaultV3(Preset& b) {
+  b.modeRasio     = 0;
+  b.isiTembagaPct = 40;
+  b.tebalTembagaUm = 35;
+  b.lajuEtchX10    = ETCH_LAJU_DEFAULT_X10;
+  b.modeWaktu      = 0;
+}
+
 // Preset v1 -> v2. Nilai baru memakai default aman; preset pengguna TIDAK
 // direset. agitasiDetik lama 4..10 s semantiknya berubah (kini per siklus),
 // jadi nilai < 30 diangkat ke 300 s dan dicatat untuk ditinjau pengguna.
@@ -87,12 +115,39 @@ void migrasiPresetV1(const PresetV1& a, Preset& b) {
   b.bilasMl = 100;
   b.bilasDetik = 20;
   b.konfirmasiSiklus = 0;
+  isiDefaultV3(b);
+}
+
+// Preset v2 -> v3.
+void migrasiPresetV2(const PresetV2& a, Preset& b) {
+  memset(&b, 0, sizeof(b));
+  memcpy(b.nama, a.nama, sizeof(b.nama));
+  b.nama[sizeof(b.nama) - 1] = '\0';
+  b.pcbPanjang = a.pcbPanjang;
+  b.pcbLebar   = a.pcbLebar;
+  b.persenHCl  = a.persenHCl;
+  b.persenH2O2 = a.persenH2O2;
+  b.persenH2O  = a.persenH2O;
+  b.mlHCl      = a.mlHCl;
+  b.mlH2O2     = a.mlH2O2;
+  b.mlH2O      = a.mlH2O;
+  b.agitasiDetik = a.agitasiDetik;
+  b.agitasiSpeed = a.agitasiSpeed;
+  b.siklus = a.siklus;
+  b.bilasSabun = a.bilasSabun;
+  b.bilasAir = a.bilasAir;
+  b.bilasMl = a.bilasMl;
+  b.bilasDetik = a.bilasDetik;
+  b.konfirmasiSiklus = a.konfirmasiSiklus;
+  isiDefaultV3(b);
 }
 
 void muatPreset() {
   DataSimpan d;
+  DataSimpanV2 lama2;
   DataSimpanV1 lama;
   bool ada = false, valid = false, migrasi = false;
+  const char* pesanMigrasi = "";
 
   if (prefs.begin(PREF_NS, false)) {
     size_t len = prefs.getBytesLength("cfg");
@@ -105,6 +160,19 @@ void muatPreset() {
               (d.jumlah <= MAKS_PRESET);
       for (uint32_t i = 0; valid && i < d.jumlah; i++)
         if (!validasiPreset(d.p[i])) valid = false;
+    } else if (len == sizeof(DataSimpanV2)) {
+      prefs.getBytes("cfg", &lama2, sizeof(lama2));
+      bool crcOk = (lama2.crc == hitungCrc((const uint8_t*)&lama2, sizeof(lama2) - sizeof(lama2.crc)));
+      if (crcOk && lama2.versi == FORMAT_VERSI_PRESET_V2 && lama2.jumlah <= MAKS_PRESET) {
+        jumlahPreset = lama2.jumlah;
+        for (uint32_t i = 0; i < lama2.jumlah; i++) {
+          migrasiPresetV2(lama2.p[i], daftarPreset[i]);
+          daftarPreset[i].agitasiSpeed = constrain(daftarPreset[i].agitasiSpeed, 1, 3);
+        }
+        migrasi = true;
+        valid = true;
+        pesanMigrasi = "[STORE] Migrasi preset v2 -> v3 (mode waktu manual)";
+      }
     } else if (len == sizeof(DataSimpanV1)) {
       prefs.getBytes("cfg", &lama, sizeof(lama));
       bool crcOk = (lama.crc == hitungCrc((const uint8_t*)&lama, sizeof(lama) - sizeof(lama.crc)));
@@ -116,6 +184,7 @@ void muatPreset() {
         }
         migrasi = true;
         valid = true;
+        pesanMigrasi = "[STORE] Migrasi preset v1 -> v3";
       }
     }
     prefs.end();
@@ -131,7 +200,7 @@ void muatPreset() {
     dbg.print(jumlahPreset);
     dbg.println(F(" preset"));
   } else if (migrasi) {
-    dbg.println(F("[STORE] Migrasi preset v1 -> v2"));
+    dbg.println(pesanMigrasi);
     dbg.println(F("[STORE] agitasiDetik lama < 30 s diangkat ke 300 s, tinjau ulang"));
     simpanPreset();
   } else {
@@ -152,6 +221,8 @@ struct DataKalib {
   uint32_t crc;
 };
 
+void kalibTandaiWaktu(int idx);
+
 bool simpanKalib() {
   DataKalib d;
   memset(&d, 0, sizeof(d));
@@ -168,27 +239,39 @@ bool simpanKalib() {
     prefs.end();
   }
   dbg.println(ok ? F("[STORE] Simpan kalibrasi: OK") : F("[STORE] Simpan kalibrasi: GAGAL"));
+  if (ok) {
+    sensorKalibTandai();
+    kalibTandaiWaktu(6);
+  }
   return ok;
 }
 
 void muatKalib() {
+  // v1.0.3: validasi PER SENSOR. Sebelumnya satu sensor tidak valid membuat
+  // SEMUA sensor kembali ke nilai cadangan (level jadi 30-45% tanpa sebab).
   DataKalib d;
-  bool valid = false;
+  bool blobOk = false;
   if (prefs.begin(PREF_NS, false)) {
     if (prefs.getBytesLength("kal") == sizeof(d)) {
       prefs.getBytes("kal", &d, sizeof(d));
-      valid = (d.versi == FORMAT_VERSI_KALIB) &&
-              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
-      for (int i = 0; valid && i < JUMLAH_SENSOR; i++)
-        if (d.kosong[i] <= 0 || d.penuh[i] <= 0 || d.penuh[i] <= d.kosong[i]) valid = false;
+      blobOk = (d.versi == FORMAT_VERSI_KALIB) &&
+               (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
     }
     prefs.end();
   }
   for (int i = 0; i < JUMLAH_SENSOR; i++) {
-    sensorKalibKosong[i] = valid ? d.kosong[i] : 113000;
-    sensorKalibPenuh[i]  = valid ? d.penuh[i]  : 156000;
+    bool ok = blobOk && d.kosong[i] > 0 && d.penuh[i] > d.kosong[i];
+    sensorKalibKosong[i] = ok ? d.kosong[i] : KALIB_DEF_KOSONG;
+    sensorKalibPenuh[i]  = ok ? d.penuh[i]  : KALIB_DEF_PENUH;
+    dbg.print(F("[STORE] Kalib level "));
+    dbg.print(namaSensor[i]);
+    dbg.print(ok ? F(" dimuat 0%=") : F(" DEFAULT 0%="));
+    dbg.print(sensorKalibKosong[i]);
+    dbg.print(F(" 100%="));
+    dbg.println(sensorKalibPenuh[i]);
   }
-  dbg.println(valid ? F("[STORE] Kalibrasi dimuat") : F("[STORE] Kalibrasi belum ada (default)"));
+  sensorKalibTandai();
+  dbg.println(blobOk ? F("[STORE] Kalibrasi level: data NVS ada") : F("[STORE] Kalibrasi level belum ada (default)"));
 }
 
 // ================= KALIBRASI POMPA & MOTOR =================
@@ -355,6 +438,54 @@ void muatPompa() {
   }
 }
 
+// ================= TIMESTAMP KALIBRASI (kalts) =================
+// Key terpisah agar format "pompa" tidak perlu dimigrasi. Epoch 0 berarti
+// kalibrasi belum pernah disimpan atau NTP belum sinkron saat menyimpan.
+#define FORMAT_VERSI_KALTS 1
+
+struct DataKalibTs {
+  uint32_t versi;
+  uint32_t epoch[9];   // 0-2 stepper, 3-4 DC, 5 agitasi, 6 level, 7 suhu, 8 MQ
+  uint32_t crc;
+};
+
+bool simpanKalibTs() {
+  DataKalibTs d;
+  memset(&d, 0, sizeof(d));
+  d.versi = FORMAT_VERSI_KALTS;
+  for (int i = 0; i < 9; i++) d.epoch[i] = kalibEpoch[i];
+  d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
+  bool ok = false;
+  if (prefs.begin(PREF_NS, false)) {
+    ok = (prefs.putBytes("kalts", &d, sizeof(d)) == sizeof(d));
+    prefs.end();
+  }
+  return ok;
+}
+
+void muatKalibTs() {
+  DataKalibTs d;
+  bool valid = false;
+  if (prefs.begin(PREF_NS, true)) {
+    if (prefs.getBytesLength("kalts") == sizeof(d)) {
+      prefs.getBytes("kalts", &d, sizeof(d));
+      valid = (d.versi == FORMAT_VERSI_KALTS) &&
+              (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
+    }
+    prefs.end();
+  }
+  for (int i = 0; i < 9; i++) {
+    kalibEpoch[i] = valid ? d.epoch[i] : 0;
+  }
+}
+
+void kalibTandaiWaktu(int idx) {
+  if (idx < 0 || idx >= 9) return;
+  uint32_t now = (uint32_t)time(nullptr);
+  kalibEpoch[idx] = (now > 1700000000UL) ? now : 0;
+  simpanKalibTs();
+}
+
 // ================= KALIBRASI SUHU & UDARA (kal2) =================
 #define FORMAT_VERSI_KAL2 1
 
@@ -385,6 +516,10 @@ bool simpanKal2() {
     prefs.end();
   }
   dbg.println(ok ? F("[STORE] Simpan kal2: OK") : F("[STORE] Simpan kal2: GAGAL"));
+  if (ok) {
+    kalibTandaiWaktu(7);
+    kalibTandaiWaktu(8);
+  }
   return ok;
 }
 
@@ -413,9 +548,27 @@ void muatKal2() {
 }
 
 // ================= PENGATURAN GLOBAL (set) =================
-#define FORMAT_VERSI_SET 1
+// v2 (v1.1.1): tambah kapasitas jerigen/tangki.
+#define FORMAT_VERSI_SET 2
 
 struct DataSet {
+  uint32_t versi;
+  int32_t tempPeringatanX10;
+  int32_t tempBahayaX10;
+  int32_t drainMarginPct;
+  int32_t levelStabilMs;
+  int32_t mqAktif;
+  int32_t iotEnabled;
+  int32_t kapHclMl;
+  int32_t kapH2o2Ml;
+  int32_t kapH2oMl;
+  int32_t kapSabunMl;
+  int32_t kapLimbahMl;
+  uint32_t crc;
+};
+
+// Layout v1 untuk migrasi. JANGAN diubah.
+struct DataSetV1 {
   uint32_t versi;
   int32_t tempPeringatanX10;
   int32_t tempBahayaX10;
@@ -436,6 +589,11 @@ bool simpanSet() {
   d.levelStabilMs     = pengaturan.levelStabilMs;
   d.mqAktif           = pengaturan.mqAktif;
   d.iotEnabled        = pengaturan.iotEnabled;
+  d.kapHclMl          = pengaturan.kapHclMl;
+  d.kapH2o2Ml         = pengaturan.kapH2o2Ml;
+  d.kapH2oMl          = pengaturan.kapH2oMl;
+  d.kapSabunMl        = pengaturan.kapSabunMl;
+  d.kapLimbahMl       = pengaturan.kapLimbahMl;
   d.crc = hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc));
 
   bool ok = false;
@@ -449,25 +607,41 @@ bool simpanSet() {
 
 void muatSet() {
   DataSet d;
+  DataSetV1 lama;
   bool valid = false;
+  bool v1 = false;
   if (prefs.begin(PREF_NS, false)) {
-    if (prefs.getBytesLength("set") == sizeof(d)) {
+    size_t len = prefs.getBytesLength("set");
+    if (len == sizeof(d)) {
       prefs.getBytes("set", &d, sizeof(d));
       valid = (d.versi == FORMAT_VERSI_SET) &&
               (d.crc == hitungCrc((const uint8_t*)&d, sizeof(d) - sizeof(d.crc)));
+    } else if (len == sizeof(lama)) {
+      prefs.getBytes("set", &lama, sizeof(lama));
+      valid = (lama.versi == 1) &&
+              (lama.crc == hitungCrc((const uint8_t*)&lama, sizeof(lama) - sizeof(lama.crc)));
+      v1 = valid;
     }
     prefs.end();
   }
   if (valid) {
-    pengaturan.tempPeringatanX10 = constrain((int)d.tempPeringatanX10, 200, 1000);
-    pengaturan.tempBahayaX10     = constrain((int)d.tempBahayaX10, 300, 1200);
+    pengaturan.tempPeringatanX10 = constrain((int)(v1 ? lama.tempPeringatanX10 : d.tempPeringatanX10), 200, 1000);
+    pengaturan.tempBahayaX10     = constrain((int)(v1 ? lama.tempBahayaX10 : d.tempBahayaX10), 300, 1200);
     // Jaga urutan: peringatan harus selalu di bawah bahaya.
     if (pengaturan.tempPeringatanX10 >= pengaturan.tempBahayaX10)
       pengaturan.tempPeringatanX10 = pengaturan.tempBahayaX10 - 50;
-    pengaturan.drainMarginPct    = constrain((int)d.drainMarginPct, 0, 100);
-    pengaturan.levelStabilMs     = constrain((int)d.levelStabilMs, 1000, 60000);
-    pengaturan.mqAktif           = d.mqAktif ? 1 : 0;
-    pengaturan.iotEnabled        = d.iotEnabled ? 1 : 0;
+    pengaturan.drainMarginPct    = constrain((int)(v1 ? lama.drainMarginPct : d.drainMarginPct), 0, 100);
+    pengaturan.levelStabilMs     = constrain((int)(v1 ? lama.levelStabilMs : d.levelStabilMs), 1000, 60000);
+    pengaturan.mqAktif           = (v1 ? lama.mqAktif : d.mqAktif) ? 1 : 0;
+    pengaturan.iotEnabled        = (v1 ? lama.iotEnabled : d.iotEnabled) ? 1 : 0;
+    if (!v1) {
+      pengaturan.kapHclMl    = constrain((int)d.kapHclMl, 100, 10000);
+      pengaturan.kapH2o2Ml   = constrain((int)d.kapH2o2Ml, 100, 10000);
+      pengaturan.kapH2oMl    = constrain((int)d.kapH2oMl, 100, 10000);
+      pengaturan.kapSabunMl  = constrain((int)d.kapSabunMl, 100, 10000);
+      pengaturan.kapLimbahMl = constrain((int)d.kapLimbahMl, 100, 50000);
+    }
+    if (v1) simpanSet();   // tulis ulang sebagai v2 dengan kapasitas default
   }
   dbg.println(valid ? F("[STORE] Pengaturan dimuat") : F("[STORE] Pengaturan belum ada (default)"));
 }
@@ -482,6 +656,13 @@ struct DataTank {
 };
 
 bool simpanTank() {
+  tankHclMl    = constrain(tankHclMl,    0L, (long)pengaturan.kapHclMl);
+  tankH2o2Ml   = constrain(tankH2o2Ml,   0L, (long)pengaturan.kapH2o2Ml);
+  tankH2oMl    = constrain(tankH2oMl,    0L, (long)pengaturan.kapH2oMl);
+  tankSabunMl  = constrain(tankSabunMl,  0L, (long)pengaturan.kapSabunMl);
+  tankLimbahMl = constrain(tankLimbahMl, 0L, (long)pengaturan.kapLimbahMl);
+  tankDataAda  = true;
+
   DataTank d;
   memset(&d, 0, sizeof(d));
   d.versi = FORMAT_VERSI_TANK;
@@ -503,7 +684,7 @@ bool simpanTank() {
 void muatTank() {
   DataTank d;
   bool valid = false;
-  if (prefs.begin(PREF_NS, false)) {
+  if (prefs.begin(PREF_NS, true)) {
     if (prefs.getBytesLength("tank") == sizeof(d)) {
       prefs.getBytes("tank", &d, sizeof(d));
       valid = (d.versi == FORMAT_VERSI_TANK) &&
@@ -511,14 +692,18 @@ void muatTank() {
     }
     prefs.end();
   }
+  tankHclMl = tankH2o2Ml = tankH2oMl = tankSabunMl = tankLimbahMl = 0;
+  tankDataAda = valid;
   if (valid) {
-    tankHclMl    = d.hcl;
-    tankH2o2Ml   = d.h2o2;
-    tankH2oMl    = d.h2o;
-    tankSabunMl  = d.sabun;
-    tankLimbahMl = d.limbah;
+    tankHclMl    = constrain((long)d.hcl,    0L, (long)pengaturan.kapHclMl);
+    tankH2o2Ml   = constrain((long)d.h2o2,   0L, (long)pengaturan.kapH2o2Ml);
+    tankH2oMl    = constrain((long)d.h2o,    0L, (long)pengaturan.kapH2oMl);
+    tankSabunMl  = constrain((long)d.sabun,  0L, (long)pengaturan.kapSabunMl);
+    tankLimbahMl = constrain((long)d.limbah, 0L, (long)pengaturan.kapLimbahMl);
+    dbg.println(F("[STORE] Data tangki dimuat"));
+  } else {
+    dbg.println(F("[STORE] Data tangki belum ada: isi lewat menu Tangki"));
   }
-  dbg.println(valid ? F("[STORE] Data tangki dimuat") : F("[STORE] Data tangki belum ada"));
 }
 
 // ================= RUNSTATE (pemulihan setelah mati listrik) =================

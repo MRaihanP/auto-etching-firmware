@@ -1,237 +1,121 @@
-# Panduan Repository — Auto Etching Firmware
+# Panduan Repository
 
-Panduan ini mencakup dua peran: **Pemilik Repository** dan **Contributor**. Pastikan Anda membagi bagian yang sesuai dengan peran Anda.
+Panduan untuk pemilik repo dan contributor. Semua perubahan masuk melalui
+Pull Request; `main` harus selalu dapat di-compile.
 
----
+## 1. Struktur Repo
 
-## Daftar Isi
-
-- [Bagian A: Untuk Pemilik Repository](#bagian-a-untuk-pemilik-repository)
-- [Bagian B: Untuk Contributor](#bagian-b-untuk-contributor)
-- [Struktur Repository](#struktur-repository)
-- [Checklist Sebelum Merge](#checklist-sebelum-merge)
-
----
-
-## Bagian A: Untuk Pemilik Repository
-
-Pemilik repository memiliki tanggung jawab utama menjaga kualitas dan stabilitas kode utama (branch `main`). Semua perubahan yang masuk ke `main` harus diverifikasi oleh pemilik.
-
-### A1. Setup Repository (Sudah Dilakukan)
-
-Repository sudah dikonfigurasi dengan:
-
-- Remote: `https://github.com/MRaihanP/auto-etching-firmware.git`
-- Branch utama: `main`
-- Folder project: `/home/raihanP/DevBox/Projects/firmware/arduino/auto-etching-firmware`
-
-### A2. Workflow Pemilik Repository
-
-```
-1. Terima Pull Request dari Contributor
-2. Review code secara teliti (baca diff, cek logika, cek konflik)
-3. Test compile di Arduino IDE / PlatformIO
-4. Jika ada masalah → Request changes di PR (beri komentar perbaikan)
-5. Jika sudah OK → Approve & Merge PR ke main
-6. Update LOG.md dan SUMMARY.md jika ada perubahan signifikan
-7. Update version di config.h jika perlu
-8. Push ke GitHub
-```
-
-### A3. Review Pull Request
-
-Saat menerima Pull Request, pemilik wajib:
-
-- [ ] Membaca deskripsi PR dengan jelas
-- [ ] Review setiap file yang diubah (jangan hanya lihat jumlah changed files)
-- [ ] Cek tidak ada hardcoded value, debug print, atau kode testing yang tertinggal
-- [ ] Cek kompatibilitas dengan struktur folder saat ini
-- [ ] Test compile di Arduino IDE / PlatformIO
-- [ ] Cek tidak ada file yang salah tempat (mis: .ino di luar root)
-- [ ] Beri approve hanya jika semua checklist lolos
-
-### A4. Menggunakan GitHub CLI (Opsional)
-
-Jika `gh` CLI terinstall:
-
-```bash
-# Lihat daftar PR yang open
-gh pr list
-
-# Review PR tertentu
-gh pr review <PR_NUMBER> --approve --comment "LGTM, approved"
-
-# Merge PR
-gh pr merge <PR_NUMBER> --squash
-```
-
----
-
-## Bagian B: Untuk Contributor
-
-Contributor adalah pihak yang ingin memperbaiki, mengupdate, atau menambahkan fitur ke repository ini. **DILARANG KERAS push langsung ke branch `main`**.
-
-### B1. Aturan Utama untuk Contributor
-
-> **PENTING**: Semua perubahan HARUS melalui proses Pull Request. Contributor TIDAK BOLEH melakukan push langsung ke `main`. Jika ditemukan pelanggaran, PR akan di-reject.
-
-### B2. Workflow Contributor (Wajib Ikuti)
-
-#### Langkah 1: Fork Repository
-
-```bash
-# Fork repo lewat GitHub web UI, lalu clone fork Anda
-git clone https://github.com/<USERNAME_ANDA>/auto-etching-firmware.git
-cd auto-etching-firmware
-
-# Tambahkan upstream (repo utama)
-git remote add upstream https://github.com/MRaihanP/auto-etching-firmware.git
-
-# Fetch latest dari upstream
-git fetch upstream
-
-# Sync fork dengan upstream
-git checkout main
-git merge upstream/main
-git push origin main
-```
-
-#### Langkah 2: Buat Branch Baru
-
-```bash
-# Buat branch baru untuk perubahan Anda
-git checkout -b fix/nama-perbaikan
-# atau
-git checkout -b feature/nama-fitur
-```
-
-**Aturan penamaan branch:**
-- `fix/` — untuk perbaikan bug
-- `feature/` — untuk fitur baru
-- `refactor/` — untuk refactoring kode
-- `docs/` — untuk perubahan dokumentasi
-
-#### Langkah 3: Lakukan Perubahan
-
-- Edit file yang diperlukan
-- Pastikan tidak merusak struktur folder yang ada
-- Commit dengan message yang jelas:
-
-```bash
-git add .
-git commit -m "fix: deskripsi singkat perbaikan"
-```
-
-#### Langkah 4: Push Branch ke Fork
-
-```bash
-git push origin fix/nama-perbaikan
-```
-
-#### Langkah 5: Buat Pull Request
-
-1. Buka GitHub web UI
-2. Pilih fork Anda → branch yang baru di-push
-3. Klik **"Compare & pull request"**
-4. Isi deskripsi PR:
-
-```
-## Deskripsi
-[Jelaskan perubahan yang dilakukan]
-
-## Jenis Perubahan
-- [ ] Bug fix
-- [ ] Fitur baru
-- [ ] Refactoring
-- [ ] Dokumentasi
-
-## Testing
-[ ] Sudah test compile di Arduino IDE / PlatformIO
-[ ] Sudah test di hardware (jika berlaku)
-
-## Checklist
-- [ ] Tidak ada debug print yang tertinggal
-- [ ] Tidak ada hardcoded value yang salah
-- [ ] Kode mengikuti struktur folder yang ada
-```
-
-#### Langkah 6: Tunggu Review Pemilik Repository
-
-- Pemilik repository akan review PR Anda
-- Jika ada komentar/request changes → perbaiki dan push lagi ke branch yang sama
-- Jika sudah di-approve → pemilik akan merge ke `main`
-
-### B3. Jika Ada Konflik (Conflict)
-
-```bash
-# Fetch latest dari upstream
-git fetch upstream
-
-# Rebase branch Anda ke upstream/main
-git rebase upstream/main
-
-# Selesaikan konflik, lalu:
-git add .
-git rebase --continue
-
-# Force push ke fork Anda
-git push origin fix/nama-perbaikan --force
-```
-
----
-
-## Struktur Repository
-
-```
+```text
 auto-etching-firmware/
-├── auto-etching-firmware.ino   # File utama firmware
-├── config.h                    # Konfigurasi & pin definition
-├── data.h                      # Data & constant
-├── dbg.h                       # Debug helper
-├── input.h                     # Input handling (button, sensor)
-├── sensor.h                    # Sensor reading & processing
-├── process.h                   # Proses etching state machine
-├── presetops.h                 # Operasi preset (timer, agitasi)
-├── aktuator.h                  # Aktuator (motor, pump, buzzer)
-├── motor.h                     # Motor DC control
-├── dcmotor.h                   # DC Motor driver
-├── buzzer.h                    # Buzzer non-blocking
-├── ui.h                        # OLED UI & display
-├── storage.h                   # EEPROM/Preferences storage
-├── fontmini.h                  # Font data untuk OLED
-├── README.md                   # Project overview
-├── GUIDE.md                    # Panduan ini
-├── SUMMARY.md                  # Ringkasan versi saat ini
-├── LOG.md                      # Changelog / log perubahan
-├── etching-otomatis.md         # Dokumentasi proses etching
-├── Dokumen Perancangan Alat Etching PCB.pdf  # Dokumen perancangan
-├── .gitignore                  # File yang di-ignore Git
-└── backup/                     # Backup versi-versi sebelumnya
-    ├── v0.5.0_2026-10-12/
-    ├── v0.5.1_2026-10-12/
-    ├── ...
-    └── v0.8.2_2026-10-12/
+├── auto-etching-firmware.ino
+├── config.h
+├── data.h
+├── dbg.h
+├── input.h
+├── presetops.h
+├── sensor.h
+├── storage.h
+├── motor.h
+├── dcmotor.h
+├── buzzer.h
+├── safety.h
+├── process.h
+├── ui.h
+├── api.h
+├── net.h
+├── net_ca.h
+├── ota.h
+├── fontmini.h
+├── partitions.csv
+├── secrets.example.h
+├── secrets.h              # lokal, di-ignore Git
+├── webapp/                # dashboard self-hosted (server + web)
+├── README.md
+├── DOKUMENTASI.md
+├── IOT-API.md
+├── PANDUAN-TEST-IOT.md
+├── LOG.md
+├── RELEASES.md
+└── GUIDE.md
 ```
 
----
+Tidak ada folder arsip atau sketch pilot di repo. Versi lama diambil dari
+Git tag.
 
-## Checklist Sebelum Merge (Untuk Pemilik Repository)
+## 2. Prasyarat Development
 
-Sebuah Pull Request hanya boleh di-merge ke `main` jika:
+- Arduino CLI / Arduino IDE dengan core ESP32 3.3.x.
+- Library: Adafruit GFX, Adafruit SSD1306, OneWire, DallasTemperature,
+  FastAccelStepper, ESP32MQTTClient, ArduinoJson.
+- Board: ESP32S3 Dev Module, `CDCOnBoot=cdc`, `PartitionScheme=min_spiffs`.
+- Kredensial: salin `secrets.example.h` menjadi `secrets.h` di mesin lokal
+  dan isi nilainya. `secrets.h` di-ignore Git dan tidak boleh di-commit.
 
-- [ ] Deskripsi PR jelas dan lengkap
-- [ ] Jenis perubahan sudah disebutkan (bug fix / fitur / dll)
-- [ ] Sudah di-test compile di Arduino IDE / PlatformIO
-- [ ] Tidak ada debug print (`Serial.println`) yang tertinggal
-- [ ] Tidak ada file yang salah tempat
-- [ ] Kode mengikuti struktur folder yang ada
-- [ ] Tidak ada konflik dengan `main`
-- [ ] `LOG.md` dan `SUMMARY.md` sudah diupdate jika ada perubahan signifikan
-- [ ] Version di `config.h` sudah di-bump jika perlu
-- [ ] Pemilik repository sudah menyetujui (approve)
+Compile:
 
----
+```bash
+~/DevBox/bin/arduino-cli compile \
+  --fqbn "esp32:esp32:esp32s3:CDCOnBoot=cdc,PartitionScheme=min_spiffs" \
+  --libraries /home/raihanP/Arduino/libraries \
+  --output-dir build_ota .
+```
 
-## Halaman README
+## 3. Workflow Contributor
 
-README berisi overview singkat project. Lihat `README.md` untuk detail lebih lanjut.
+1. Fork repository dan clone.
+2. Buat branch: `fix/...`, `feature/...`, `docs/...`, atau `refactor/...`.
+3. Edit kode dan dokumentasi terkait.
+4. Compile sebelum commit.
+5. Commit dengan pesan jelas, lalu push ke fork.
+6. Buka Pull Request ke `main`.
+
+Aturan:
+
+- Jangan push langsung ke `main`.
+- Jangan commit `build_ota/`, `*.bin`, `*.elf`, `*.map`, atau `.commandcode/`.
+- Perubahan yang mengubah perilaku harus memperbarui `LOG.md`,
+  `DOKUMENTASI.md`, dan/atau `IOT-API.md`.
+- Perubahan hardware/pin harus memperbarui `README.md` dan
+  `DOKUMENTASI.md`.
+- Jangan menambahkan kredensial produksi ke repo publik.
+
+## 4. Review Pull Request
+
+- [ ] Deskripsi dan tujuan jelas.
+- [ ] Compile bersih dengan FQBN yang didokumentasikan.
+- [ ] Tidak ada debug sementara atau kode mati.
+- [ ] Tidak ada akses aktuator langsung dari callback jaringan.
+- [ ] Error/safety tetap ditangani di `safety.h`/`process.h`.
+- [ ] Dokumentasi dan versi diperbarui bila perlu.
+- [ ] Tidak ada file build/rahasia yang ikut.
+
+## 5. Rilis
+
+Prosedur lengkap ada di [`RELEASES.md`](./RELEASES.md). Ringkasnya:
+
+1. Bump `FW_VERSI` di `config.h`.
+2. Update `LOG.md`, `RELEASES.md`, dan `README.md`.
+3. Compile dan uji minimal (boot, menu, proses air, E-stop, WiFi/MQTT, OTA).
+4. Commit.
+5. Buat annotated tag `vX.Y.Z`.
+6. Push branch dan tag.
+
+## 6. Dokumentasi
+
+| Dokumen | Tanggung jawab |
+|---|---|
+| `README.md` | Ringkasan fitur, struktur, build cepat |
+| `DOKUMENTASI.md` | Manual pengguna, kalibrasi, error, NVS |
+| `IOT-API.md` | Serial/MQTT, topik, payload, remote config |
+| `PANDUAN-TEST-IOT.md` | Prosedur uji jaringan dan OTA |
+| `LOG.md` | Changelog per rilis |
+| `RELEASES.md` | Registry versi, rollback, tag |
+| `GUIDE.md` | Alur kerja repo |
+
+## 7. Catatan Keamanan
+
+- E-stop dan clear fault wajib bekerja lokal.
+- Jangan menguji dengan HCl/H2O2 tanpa ventilasi dan APD.
+- Uji dengan air sebelum larutan asli.
+- Kredensial WiFi/MQTT/OTA ada di `secrets.h` lokal yang di-ignore Git.
+  Jangan commit file itu atau build yang memuat kredensial asli.

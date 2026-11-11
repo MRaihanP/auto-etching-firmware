@@ -65,7 +65,7 @@ bool pompaBisaGerak(int idx) {
 
 // RPM aktual yang sedang dibangkitkan (dibaca dari queue pulsa, bukan target).
 // Dipakai halaman Test Motor untuk membuktikan motor benar-benar berhenti
-// menaikkan kecepatan setelah mencapai target, persis sketch test/test-motor.
+// menaikkan kecepatan setelah mencapai target, sama seperti sketch uji motor.
 float pompaRpmSekarang(int idx) {
   if (!pompaBisaGerak(idx)) return 0.0f;
   FastAccelStepper* s = pompaStepper[idx];
@@ -224,7 +224,7 @@ bool pompaJalanLangkah(int idx, long langkah) {
     dbg.println(idx);
     return false;
   }
-  // Sama seperti sketch test/test-motor: commit speed+acceleration setelah
+  // Sama seperti sketch uji motor: commit speed+acceleration setelah
   // perintah gerak, supaya ramp memakai target terbaru.
   s->applySpeedAcceleration();
 
@@ -329,7 +329,7 @@ bool pompaTestMulai(int idx) {
     dbg.println(idx);
     return false;
   }
-  // Sama seperti sketch test/test-motor: commit speed+acceleration ke ramp
+  // Sama seperti sketch uji motor: commit speed+acceleration ke ramp
   // generator setelah start, supaya target langsung dipakai dan motor
   // berhenti menaikkan RPM tepat di target (bukan terus naik).
   s->applySpeedAcceleration();

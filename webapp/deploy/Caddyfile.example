@@ -1,0 +1,8 @@
+# Ganti dashboard.example.com dengan domain/IP yang dipakai.
+# Caddy menangani TLS otomatis untuk domain publik; untuk LAN gunakan
+# certificate internal/self-signed sesuai kebutuhan.
+
+dashboard.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8080
+}
