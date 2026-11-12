@@ -16,7 +16,13 @@ import {
   listAudit,
   verifyPassword,
 } from './db.js';
-import { clearSessionCookie, requireAuth, requireCsrf, setSessionCookie } from './auth.js';
+import {
+  clearSessionCookie,
+  getSessionFromRequest,
+  requireAuth,
+  requireCsrf,
+  setSessionCookie,
+} from './auth.js';
 import { MqttBridge } from './mqtt.js';
 
 const app = Fastify({
@@ -174,15 +180,16 @@ app.post(
   },
 );
 
-app.get('/api/me', { preHandler: requireAuth() }, async (req) => ({
-  ok: true,
-  user: {
-    id: req.user!.id,
-    username: req.user!.username,
-    role: req.user!.role,
-  },
-  csrf: req.user!.csrf,
-}));
+app.get('/api/me', async (req) => {
+  const user = getSessionFromRequest(req);
+  if (!user) return { ok: false, authenticated: false };
+  return {
+    ok: true,
+    authenticated: true,
+    user: { id: user.id, username: user.username, role: user.role },
+    csrf: user.csrf,
+  };
+});
 
 app.get('/api/status', { preHandler: requireAuth() }, async (req) => {
   const device = (req.query as { device?: string })?.device;
@@ -267,6 +274,9 @@ app.post(
       );
       const ack = await Promise.race([commandPromise, timeout]);
       audit(req.user!, `command:${parsed.data.cmd}`, parsed.data, JSON.stringify(ack), clientIp(req));
+      if (!ack.ok) {
+        return reply.code(409).send({ ok: false, error: ack.msg || 'command ditolak alat', ack });
+      }
       return reply.send({ ok: true, ack });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'command gagal';
@@ -311,6 +321,9 @@ app.post(
     try {
       const ack = await bridge.command('config', { payload });
       audit(req.user!, 'config', body, JSON.stringify(ack), clientIp(req));
+      if (!ack.ok) {
+        return reply.code(409).send({ ok: false, error: ack.msg || 'config ditolak alat', ack });
+      }
       return reply.send({ ok: true, ack });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'config gagal';

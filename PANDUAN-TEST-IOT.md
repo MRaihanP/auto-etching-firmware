@@ -46,7 +46,7 @@ Catatan:
 Buka Serial Monitor **115200**. Yang diharapkan:
 
 ```text
-[BOOT] Menu_OLED_6Button v1.3.0
+[BOOT] Menu_OLED_6Button v1.3.1
 [NET] Config belum ada -> default
 [NET] Konfigurasi MQTT ke mqtt.loggerindonesia.com:8883
 [NET] Sinkron NTP...

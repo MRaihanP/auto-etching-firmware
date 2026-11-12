@@ -6,8 +6,8 @@ ada. Ditulis untuk orang yang belum mendalami web development.
 
 Versi acuan:
 
-- Firmware: **v1.3.0**
-- Dashboard: **v1.3.0**
+- Firmware: **v1.3.1**
+- Dashboard: **v1.3.1**
 - Tanggal rilis: **2026-11-11**
 - Repo: `https://github.com/MRaihanP/auto-etching-firmware`
 

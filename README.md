@@ -5,10 +5,10 @@ layar OLED 128x64, 6 tombol melalui PCF8574, tiga pompa peristaltik
 DRV8825, tiga motor DC TB6612FNG, lima sensor level non-contact, tiga
 sensor suhu DS18B20, sensor udara MQ-135, dan E-stop.
 
-Versi aktif: **v1.3.0**
+Versi aktif: **v1.3.1**
 
-Build terakhir: **1.246.234 byte flash (63% dari 1.966.080)**, RAM global
-**78.252 byte (23%)**.
+Build terakhir: **1.246.654 byte flash (63% dari 1.966.080)**, RAM global
+**78.260 byte (23%)**.
 
 ## Fitur
 
@@ -103,8 +103,10 @@ auto-etching-firmware/
 │   └── README.md
 ├── README.md
 ├── DOKUMENTASI.md
+├── DEPLOYMENT.md
 ├── IOT-API.md
 ├── PANDUAN-TEST-IOT.md
+├── LICENSE
 ├── LOG.md
 ├── RELEASES.md
 └── GUIDE.md
@@ -122,6 +124,8 @@ auto-etching-firmware/
 | [GUIDE.md](./GUIDE.md) | Panduan pemilik repo dan contributor |
 | [webapp/README.md](./webapp/README.md) | Setup, keamanan, dan deployment dashboard self-hosted |
 | [webapp/ARSITEKTUR-DAN-PROSES.md](./webapp/ARSITEKTUR-DAN-PROSES.md) | Arsitektur web, alur data, deployment 24/7, dan jalur belajar web development |
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | File lokal yang tidak di-push dan daftar kredensial yang harus diisi saat deploy |
+| [LICENSE](./LICENSE) | MIT License |
 
 ## Build dan Flash
 
@@ -183,4 +187,4 @@ curl -X POST \
 
 ## Lisensi
 
-Property of PCB Express. All rights reserved.
+[MIT License](./LICENSE) — Copyright (c) 2026 PCB Express.

@@ -1,14 +1,19 @@
 # RELEASES - Registry Versi dan Rollback
 
 Registry versi repo `auto-etching-firmware`. Rilis yang disiapkan untuk
-push terbaru: **v1.3.0**. Tag lama yang sudah ada di Git: `v1.2.0`,
-`v1.0.1`, `v1.0.0`, dan tag v0.x.
+push terbaru: **v1.3.1**. Tag lama yang sudah ada di Git: `v1.3.0`,
+`v1.2.0`, `v1.0.1`, `v1.0.0`, dan tag v0.x.
+
+> Rilis v1.3.1 hanya menyediakan source. Binary firmware tidak disertakan
+> karena hasil compile mengandung `secrets.h` (WiFi/MQTT/OTA). Build ulang
+> dengan `secrets.h` milik pengguna.
 
 ## 1. Daftar Versi
 
 | Versi | Tanggal | Tag | Ringkasan |
 |---|---|---|---|
-| **v1.3.0** | 2026-11-11 | `v1.3.0` (rilis ini) | OTA upload `.bin` dari Settings, status `ip`/`build`/`rssi`, versi firmware otomatis setelah OTA, halaman Preset & Kalibrasi lengkap, Settings info/versi/repo, panel kiri hover, nama Auto Etching V1, header firmware dipindah ke `src/` |
+| **v1.3.1** | 2026-11-11 | `v1.3.1` (rilis ini) | Sinkron tangki otomatis saat IDLE, perbaikan ACK timeout/ID command, `/api/me` 200 untuk sesi kosong, Vite LAN, sidebar sticky, DEPLOYMENT + MIT; release source-only tanpa binary firmware berisi kredensial |
+| **v1.3.0** | 2026-11-11 | `v1.3.0` | OTA upload `.bin` dari Settings, status `ip`/`build`/`rssi`, versi firmware otomatis setelah OTA, halaman Preset & Kalibrasi lengkap, Settings info/versi/repo, panel kiri hover, nama Auto Etching V1, header firmware dipindah ke `src/` |
 | **v1.2.0** | 2026-11-11 | `v1.2.0` | Preset v3, PRECHECK seluruh proses, drain berbasis volume, opsi jeda/pemulihan, error spesifik, IoT MQTT TLS, OTA HTTP, menu Status IoT, diagnosa WiFi, dashboard web self-hosted `webapp/` |
 | v1.1.0 | 2026-11-10 | - | Rasio kimia ml/persen, waktu etching otomatis dari tembaga, kapasitas jerigen, tebal Cu dalam oz |
 | v1.0.1 | 2026-11-09 | `v1.0.1` | Siklus penuh berulang, kalibrasi DC pulse, evakuasi cairan saat cancel/E-stop |
@@ -29,7 +34,7 @@ push terbaru: **v1.3.0**. Tag lama yang sudah ada di Git: `v1.2.0`,
 Detail perubahan: [`LOG.md`](./LOG.md). Versi lama tidak disimpan sebagai
 folder salinan; gunakan Git tag.
 
-## 2. Build Rilis v1.3.0
+## 2. Build Rilis v1.3.1
 
 ```bash
 ~/DevBox/bin/arduino-cli compile \
@@ -41,8 +46,8 @@ folder salinan; gunakan Git tag.
 Hasil build:
 
 ```text
-Flash : 1.246.234 byte (63% dari 1.966.080)
-RAM   : 78.252 byte (23%)
+Flash : 1.246.654 byte (63% dari 1.966.080)
+RAM   : 78.260 byte (23%)
 ```
 
 Flash USB pertama:
@@ -87,26 +92,26 @@ di-commit. `git checkout` lebih aman.
 Jalankan setelah build dan pengujian selesai:
 
 ```bash
-# 1. Pastikan versi di src/config.h dan dokumentasi sudah v1.3.0
+# 1. Pastikan versi di src/config.h dan dokumentasi sudah v1.3.1
 grep FW_VERSI src/config.h
 
 # 2. Commit seluruh perubahan
 git add -A
-git commit -m "v1.3.0: OTA dashboard, kalibrasi lengkap, src headers"
+git commit -m "v1.3.1: auto tank sync, ACK fix, deployment docs, MIT"
 
 # 3. Buat annotated tag
-git tag -a v1.3.0 -m "v1.3.0: OTA dashboard, kalibrasi lengkap, src headers"
+git tag -a v1.3.1 -m "v1.3.1: auto tank sync, ACK fix, deployment docs, MIT"
 
 # 4. Push branch dan tag
 git push origin main
-git push origin v1.3.0
+git push origin v1.3.1
 ```
 
 Cek hasil:
 
 ```bash
 git describe --tags --always
-git show v1.3.0 --stat
+git show v1.3.1 --stat
 ```
 
 ## 5. Checklist Rilis

@@ -6,6 +6,13 @@ export interface MeResponse {
   csrf: string;
 }
 
+interface MeProbeResponse {
+  ok: boolean;
+  authenticated?: boolean;
+  user?: User;
+  csrf?: string;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -58,9 +65,12 @@ export async function login(username: string, password: string): Promise<MeRespo
 }
 
 export async function me(): Promise<MeResponse> {
-  const result = await request<MeResponse>('/api/me');
+  const result = await request<MeProbeResponse>('/api/me');
+  if (!result.authenticated || !result.user || !result.csrf) {
+    throw new ApiError(401, 'login diperlukan');
+  }
   setCsrf(result.csrf);
-  return result;
+  return { ok: true, user: result.user, csrf: result.csrf };
 }
 
 export async function logout(): Promise<void> {

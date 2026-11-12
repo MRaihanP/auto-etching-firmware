@@ -3,6 +3,27 @@
 Format: `[tanggal] vX.Y.Z - ringkasan`. Rilis terbaru berada di atas.
 Registry versi, rollback, dan prosedur tag ada di [`RELEASES.md`](./RELEASES.md).
 
+## [2026-11-11] v1.3.1 - Sinkron tangki otomatis, perbaikan ACK, dan deployment
+
+- **Sinkron tangki otomatis**: saat alat IDLE dan safety AMAN, ledger tangki
+  diperbarui tiap 2 detik dari sensor terkalibrasi
+  (`kapasitas x persen / 100`). Isi ulang manual langsung terlihat di web.
+  Tidak berjalan saat proses/jeda/WAIT_PCB/pemulihan/evakuasi atau edit Tangki.
+- **ACK command**: ID command server diperpendek menjadi 16 karakter agar
+  cocok dengan buffer firmware (sebelumnya UUID 36 karakter terpotong;
+  menyebabkan ACK timeout/502).
+- `/api/me` mengembalikan 200 saat belum login (bukan 401) dan boot React
+  tidak berjalan ganda di StrictMode.
+- Vite dev server listen `0.0.0.0:5173` agar bisa dibuka dari HP di LAN.
+- Sidebar desktop sticky; konten utama saja yang scroll.
+- Tambah `DEPLOYMENT.md` (file lokal + daftar kredensial tanpa nilai) dan
+  `LICENSE` MIT.
+- Release source-only: binary firmware tidak disertakan karena hasil compile
+  mengandung `secrets.h`.
+
+**Build v1.3.1:** 1.246.654 byte flash (63% dari 1.966.080), RAM 78.260 byte
+(23%). Lisensi MIT.
+
 ## [2026-11-11] v1.3.0 - OTA dari dashboard, kalibrasi lengkap, dan struktur src
 
 - **OTA dari webapp**: Settings -> OTA Firmware menerima file `.bin` hasil
