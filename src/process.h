@@ -147,6 +147,53 @@ void sinkronTankDariSensor() {
   }
 }
 
+// Sinkronisasi berkelanjutan saat alat IDLE. Ini membuat isi ulang tangki
+// manual (tanpa menu apa pun) langsung tercermin di ledger dan status web.
+// Tidak berjalan saat proses/jeda/WAIT_PCB/pemulihan/evakuasi atau safety aktif.
+void sinkronTankOtomatisDariSensor() {
+  static unsigned long terakhir = 0;
+  if (millis() - terakhir < 2000UL) return;
+  terakhir = millis();
+
+  if (prosesJalan || prosesJeda || prosesTungguPcb || pemulihanTersedia ||
+      evakuasiAktif || safetyState != SAF_AMAN || halaman == HAL_TANK_EDIT) {
+    return;
+  }
+
+  long* t[5] = { &tankHclMl, &tankH2o2Ml, &tankH2oMl,
+                 &tankSabunMl, &tankLimbahMl };
+  bool berubah = false;
+  for (int i = 0; i < 5; i++) {
+    if (!sensorKalibSimpan[i] || levelFault(i)) continue;
+    long kap = (long)kapasitasTank(i);
+    if (kap <= 0) continue;
+
+    int pct = constrain(sensorPersen[i], 0, 100);
+    long est = kap * (long)pct / 100L;
+    long beda = est - *t[i];
+    if (beda < 0) beda = -beda;
+    long ambang = kap * 3L / 100L;
+    if (ambang < 30L) ambang = 30L;
+    if (beda < ambang) continue;
+
+    *t[i] = est;
+    berubah = true;
+    dbg.print(F("[TANK] Auto sinkron "));
+    dbg.print(namaSumberLevel(i));
+    dbg.print(F(" = "));
+    dbg.print(est);
+    dbg.print(F(" ml (sensor "));
+    dbg.print(pct);
+    dbg.println(F("%)"));
+  }
+
+  if (berubah) {
+    tankDataAda = true;
+    simpanTank();
+    eventCatat(106, "TANK AUTO");
+  }
+}
+
 // Peringatan pasca-precheck: sumber kering/limbah hampir penuh hanya
 // menandai UI, tidak menghentikan proses.
 void setPeringatanLevel(int idx, bool kering) {

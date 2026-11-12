@@ -1,6 +1,6 @@
 # IOT-API — Fondasi Command, Status, dan Event
 
-Dokumen ini menjelaskan command API firmware v1.3.0. Transport yang tersedia:
+Dokumen ini menjelaskan command API firmware v1.3.1. Transport yang tersedia:
 **Serial non-blocking** (115200 baud, satu perintah per baris) dan
 **MQTT** (`net.h`, TLS 8883). Keduanya memakai dispatcher yang sama dan
 mengirim `StatusSnapshot`; tidak boleh mengakses aktuator langsung.
@@ -63,7 +63,7 @@ tank 0 900
 {
   "ok": true,
   "cmd": "status",
-  "ver": "v1.3.0",
+  "ver": "v1.3.1",
   "uptime": 123456,
   "reset": "PWRON",
   "fase": 3,

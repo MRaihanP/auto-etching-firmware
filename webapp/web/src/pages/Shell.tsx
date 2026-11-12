@@ -62,7 +62,7 @@ export default function Shell({ user }: { user: User }) {
         onMouseEnter={() => setCollapsed(false)}
         onMouseLeave={() => setCollapsed(true)}
         className={cn(
-          'hidden shrink-0 border-r border-line bg-panel/60 p-3 transition-all duration-200 lg:flex lg:flex-col',
+          'hidden shrink-0 border-r border-line bg-panel/60 p-3 transition-all duration-200 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:self-start',
           collapsed ? 'w-16' : 'w-64',
         )}
       >

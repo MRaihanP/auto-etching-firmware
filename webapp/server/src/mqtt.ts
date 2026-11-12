@@ -303,7 +303,9 @@ export class MqttBridge {
     const target = this.active || config.deviceId;
     if (!target) throw new Error('device belum terdeteksi');
 
-    const id = crypto.randomUUID();
+    // Firmware menyimpan id command di buffer 24 byte (23 karakter).
+    // Jangan memakai UUID 36 karakter; ACK akan terpotong dan timeout.
+    const id = crypto.randomBytes(8).toString('hex');
     const payload = JSON.stringify({ id, cmd, ...extra });
     const topic = `${config.mqttBase}/${target}/cmd`;
 

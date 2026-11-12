@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { connectWs } from './api';
 import { isDemoMode } from './demo';
@@ -18,7 +18,11 @@ export default function App() {
   const addEvent = useApp((state) => state.addEvent);
   const setConnection = useApp((state) => state.setConnection);
 
+  const booted = useRef(false);
   useEffect(() => {
+    // React StrictMode menjalankan effect dua kali di development.
+    if (booted.current) return;
+    booted.current = true;
     void boot();
   }, [boot]);
 

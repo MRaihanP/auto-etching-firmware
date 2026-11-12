@@ -1,4 +1,4 @@
-# Dokumentasi Firmware v1.3.0
+# Dokumentasi Firmware v1.3.1
 
 Manual ini menjelaskan hardware, build, menu, preset, alur proses, kalibrasi,
 error, penyimpanan NVS, IoT, dan checklist pengujian. Untuk protokol
@@ -271,9 +271,17 @@ dan ruang limbah.
 - Sumber kurang: **E05**, pesan menyebut item dan angka, misalnya
   `HCl: butuh 240, sisa 100`.
 - Limbah tidak cukup: **E06**, misalnya `Limbah perlu 1980, ruang 800`.
-- Jika ledger masih 0 tetapi sensor terkalibrasi >=55%, firmware mengisi
-  ledger dari `kapasitas x persen / 100` sebagai estimasi. Nilai pasti tetap
-  diisi lewat menu Tangki (ENTER = penuh, BACK = kosong).
+- Saat alat **IDLE** dan safety AMAN, firmware menyinkronkan ledger setiap
+  2 detik dari sensor level terkalibrasi:
+  `volume = kapasitas x persen / 100`. Jadi isi ulang manual langsung
+  tercermin di layar Tangki dan web tanpa membuka menu.
+- Sinkronisasi otomatis berhenti saat proses/jeda/WAIT_PCB/pemulihan/evakuasi.
+  Selama proses, ledger dosing/drain tetap menjadi acuan.
+- Ambang perubahan 3% kapasitas (minimum 30 ml) agar noise sensor tidak
+  menulis NVS terus-menerus. Sensor harus terkalibrasi dan tidak FAULT.
+- Nilai sensor adalah estimasi (sensor titik), bukan pengukuran volume linier.
+  Menu Tangki tetap bisa dipakai untuk nilai pasti (ENTER = penuh,
+  BACK = kosong).
 
 ## 9. Error dan Tindakan
 
@@ -347,7 +355,7 @@ diminimize (default expand).
 
 Dengan air, bukan larutan asli:
 
-- [ ] Boot normal, versi v1.3.0, tidak reset berulang.
+- [ ] Boot normal, versi v1.3.1, tidak reset berulang.
 - [ ] Semua menu terbuka; preset edit bertahan setelah restart.
 - [ ] Kalibrasi stepper/DC lulus minimal 3 run.
 - [ ] Test Motor: semua motor start/stop dengan ramp.

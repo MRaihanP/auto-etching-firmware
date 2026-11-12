@@ -1440,6 +1440,7 @@ void loop() {
   }
 
   prosesUpdate();                            // logika proses, tidak tergantung render
+  sinkronTankOtomatisDariSensor();           // isi ulang manual -> web saat IDLE
   evakuasiUpdate();                          // pompa limbah saat E-stop/ERROR
   motorUpdate();                             // stepper non-blocking
   dcmotorUpdate();                           // ramp duty DC/agitasi non-blocking

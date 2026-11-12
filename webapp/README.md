@@ -6,6 +6,8 @@ yang berjalan sendiri.
 
 Panduan arsitektur, deployment 24/7, keamanan, dan jalur belajar web
 development ada di **[ARSITEKTUR-DAN-PROSES.md](./ARSITEKTUR-DAN-PROSES.md)**.
+Daftar file lokal/kredensial ada di **[../DEPLOYMENT.md](../DEPLOYMENT.md)**.
+Lisensi: [MIT](../LICENSE).
 
 ```text
 Browser --HTTPS/WebSocket--> Dashboard server --MQTT TLS 8883--> Broker --> Alat
@@ -60,8 +62,23 @@ Buka `http://localhost:8080`. Admin pertama dan password dibuat oleh
 Mode development (server + Vite):
 
 ```bash
+cd webapp
 pnpm dev
 # buka http://localhost:5173
+```
+
+`pnpm --dir web dev` hanya menjalankan Vite/frontend. Backend harus berjalan
+di port `8080`; jalankan `pnpm dev` dari `webapp` atau dua terminal:
+
+```bash
+pnpm --dir server dev
+pnpm --dir web dev
+```
+
+Cek backend:
+
+```bash
+curl http://127.0.0.1:8080/api/health
 ```
 
 ## Preview UI Saja (tanpa MQTT/server)
